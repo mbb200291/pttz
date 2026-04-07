@@ -4,15 +4,29 @@
 
 import { useArticle } from "../hooks/useArticle";
 import { PushThread } from "./PushThread";
+import type { ArticleData } from "../hooks/useArticle";
 
 interface ArticleProps {
   boardName: string;
   articleIndex: number;
   onBack: () => void;
+  mockArticle?: ArticleData | null;
+  mockLoading?: boolean;
 }
 
-export function Article({ boardName, articleIndex, onBack }: ArticleProps) {
-  const { article, loading } = useArticle(boardName, articleIndex);
+export function Article({
+  boardName,
+  articleIndex,
+  onBack,
+  mockArticle,
+  mockLoading,
+}: ArticleProps) {
+  const { article: liveArticle, loading: liveLoading } = useArticle(
+    boardName,
+    articleIndex,
+  );
+  const article = mockArticle ?? liveArticle;
+  const loading = mockLoading ?? liveLoading;
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100">
@@ -46,7 +60,9 @@ export function Article({ boardName, articleIndex, onBack }: ArticleProps) {
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-400">
                 <span>
                   作者{" "}
-                  <span className="text-sky-300 font-medium">{article.author}</span>
+                  <span className="text-sky-300 font-medium">
+                    {article.author}
+                  </span>
                 </span>
                 <span>看板 {article.board}</span>
                 <span>{article.date}</span>

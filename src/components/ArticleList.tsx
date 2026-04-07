@@ -10,6 +10,9 @@ interface ArticleListProps {
   boardName: string;
   onSelectArticle: (index: number) => void;
   onBack: () => void;
+  mockArticles?: ArticleSummary[];
+  mockLoading?: boolean;
+  onMockLoadMore?: () => void;
 }
 
 function PushCountBadge({ count }: { count: string }) {
@@ -46,7 +49,9 @@ function ArticleRow({
       }`}
     >
       <PushCountBadge count={article.pushCount} />
-      <span className="text-xs text-gray-500 w-10 shrink-0">{article.date}</span>
+      <span className="text-xs text-gray-500 w-10 shrink-0">
+        {article.date}
+      </span>
       <span
         className={`flex-1 text-sm truncate ${
           isRe ? "text-gray-400" : "text-gray-100"
@@ -61,8 +66,22 @@ function ArticleRow({
   );
 }
 
-export function ArticleList({ boardName, onSelectArticle, onBack }: ArticleListProps) {
-  const { articles, loading, loadMore } = useBoard(boardName);
+export function ArticleList({
+  boardName,
+  onSelectArticle,
+  onBack,
+  mockArticles,
+  mockLoading,
+  onMockLoadMore,
+}: ArticleListProps) {
+  const {
+    articles: liveArticles,
+    loading: liveLoading,
+    loadMore,
+  } = useBoard(boardName);
+  const articles = mockArticles ?? liveArticles;
+  const loading = mockLoading ?? liveLoading;
+  const handleLoadMore = onMockLoadMore ?? loadMore;
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // 無限捲動：到底時自動載入更多
@@ -70,14 +89,14 @@ export function ArticleList({ boardName, onSelectArticle, onBack }: ArticleListP
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && !loading) {
-          loadMore();
+          handleLoadMore();
         }
       },
       { threshold: 0.1 },
     );
     if (bottomRef.current) observer.observe(bottomRef.current);
     return () => observer.disconnect();
-  }, [loading, loadMore]);
+  }, [loading, handleLoadMore]);
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100">
@@ -113,7 +132,7 @@ export function ArticleList({ boardName, onSelectArticle, onBack }: ArticleListP
           <span className="text-gray-600 text-sm">正在連線至 PTT…</span>
         ) : (
           <button
-            onClick={loadMore}
+            onClick={handleLoadMore}
             className="text-sky-400 text-sm hover:text-sky-300"
           >
             載入更多

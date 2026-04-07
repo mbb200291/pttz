@@ -7,7 +7,12 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { usePttSocketStore } from "./usePttSocket";
 import { parsePushLine, splitArticleBody } from "../lib/ptt/parser";
-import { aggregatePushes, calcArticleScore, type AggregatedPush } from "../lib/ptt/pushAggregator";
+import { detectState } from "../lib/ptt/session";
+import {
+  aggregatePushes,
+  calcArticleScore,
+  type AggregatedPush,
+} from "../lib/ptt/pushAggregator";
 
 export interface ArticleData {
   title: string;
@@ -49,7 +54,10 @@ export function useArticle(
       const line = headerLines.find((l) => l.includes(key));
       if (!line) return "";
       const idx = line.indexOf(key);
-      return line.slice(idx + key.length).trim().split(/\s{2,}/)[0];
+      return line
+        .slice(idx + key.length)
+        .trim()
+        .split(/\s{2,}/)[0];
     };
     const author = getField("作者");
     const title = getField("標題");
@@ -69,6 +77,14 @@ export function useArticle(
   useEffect(() => {
     if (pttState !== "ready" || !boardName || articleIndex <= 0) return;
 
+    const { recentBuffer } = usePttSocketStore.getState();
+    const { state } = detectState(recentBuffer);
+    if (state !== "article_list") {
+      setError("目前不在文章列表，暫時無法開啟文章");
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setArticle(null);
     setError(null);
@@ -76,10 +92,8 @@ export function useArticle(
     doneRef.current = false;
     usePttSocketStore.getState().clearBuffer();
 
-    // 進看板後按下文章編號 + Enter 開啟
-    client?.enqueue("\x1b\x1b", 150);
-    client?.enqueue(`s ${boardName}\r`, 300);
-    client?.enqueue(`${articleIndex}\r`, 400);
+    // 在文章列表按下文章編號 + Enter 開啟
+    client?.enqueue(`${articleIndex}\r`, 250);
 
     const unsubscribe = usePttSocketStore.subscribe((state) => {
       if (doneRef.current) return;

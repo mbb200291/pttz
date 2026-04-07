@@ -7,7 +7,12 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { usePttSocketStore } from "./usePttSocket";
-import { parseArticleLine, stripAnsi, type ArticleSummary } from "../lib/ptt/parser";
+import {
+  parseArticleLine,
+  stripAnsi,
+  type ArticleSummary,
+} from "../lib/ptt/parser";
+import { detectState } from "../lib/ptt/session";
 
 export interface UseBoardReturn {
   articles: ArticleSummary[];
@@ -49,7 +54,10 @@ export function useBoard(boardName: string): UseBoardReturn {
       (state) => state.recentBuffer,
       (buf) => {
         if (timerRef.current) clearTimeout(timerRef.current);
-        timerRef.current = setTimeout(() => parseAndSet(buf), LINE_BUFFER_TIMEOUT);
+        timerRef.current = setTimeout(
+          () => parseAndSet(buf),
+          LINE_BUFFER_TIMEOUT,
+        );
       },
     );
 
@@ -62,18 +70,40 @@ export function useBoard(boardName: string): UseBoardReturn {
   // 進入看板（等 PTT ready 才導航）
   useEffect(() => {
     if (pttState !== "ready" || !boardName) return;
+
+    const { recentBuffer } = usePttSocketStore.getState();
+    const { state } = detectState(recentBuffer);
+
+    // 只在可預期畫面送出「進入看板」指令，避免誤觸
+    const canEnterBoard =
+      state === "main_menu" ||
+      state === "board_list" ||
+      state === "article_list";
+
+    if (!canEnterBoard) {
+      setError("目前畫面尚未就緒，暫時無法進入看板");
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
+    setError(null);
     setArticles([]);
     rawRef.current = "";
     usePttSocketStore.getState().clearBuffer();
-    client?.enqueue("\x1b\x1b", 150); // ESC ESC 回主選單
-    client?.enqueue(`s ${boardName}\r`, 300);
+    client?.enqueue(`s ${boardName}\r`, 250);
   }, [pttState, boardName, client]);
 
   const loadMore = useCallback(() => {
     if (!client || loading) return;
+
+    const { recentBuffer } = usePttSocketStore.getState();
+    const { state } = detectState(recentBuffer);
+    if (state !== "article_list") return;
+
     setLoading(true);
-    client.enqueue("y", 200); // 在看板列表按 y 往上翻頁（前一頁）
+    // 使用 PageUp 控制碼翻頁，避免送出 y 誤觸 yes/reply 類互動
+    client.enqueue("\x1b[5~", 200);
   }, [client, loading]);
 
   return { articles, loading, error, loadMore };

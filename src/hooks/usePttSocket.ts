@@ -19,10 +19,12 @@ import { stripAnsi } from "../lib/ptt/parser";
 export type PttState =
   | "idle"
   | "connecting"
-  | "need_login"     // PTT 顯示登入提示，等待使用者輸入
-  | "logging_in"     // 已送出帳號，等待密碼提示
-  | "waiting_auth"   // 已送出密碼，等待 PTT 驗證結果
-  | "ready"          // 主功能表，可以瀏覽看板
+  | "need_login" // PTT 顯示登入提示，等待使用者輸入
+  | "logging_in" // 已送出帳號，等待密碼提示
+  | "waiting_auth" // 已送出密碼，等待 PTT 驗證結果
+  | "duplicate_login" // 偵測到重複登入，等待使用者決策
+  | "guest_overload" // guest 人數已滿，等待使用者重試或改一般登入
+  | "ready" // 主功能表，可以瀏覽看板
   | "closed"
   | "error";
 
@@ -50,22 +52,26 @@ const BUFFER_LIMIT = 8000;
 
 export const usePttSocketStore = create<PttSocketStore>()(
   subscribeWithSelector((set) => ({
-  client: null,
-  wsStatus: "idle",
-  pttState: "idle",
-  credentials: null,
-  recentBuffer: "",
-  setClient: (c) => set({ client: c }),
-  setWsStatus: (s) => set({ wsStatus: s }),
-  setPttState: (s) => set({ pttState: s }),
-  setCredentials: (c) => set({ credentials: c }),
-  appendBuffer: (text) =>
-    set((state) => {
-      const next = state.recentBuffer + text;
-      return { recentBuffer: next.length > BUFFER_LIMIT ? next.slice(-BUFFER_LIMIT) : next };
-    }),
-  clearBuffer: () => set({ recentBuffer: "" }),
-})));
+    client: null,
+    wsStatus: "idle",
+    pttState: "idle",
+    credentials: null,
+    recentBuffer: "",
+    setClient: (c) => set({ client: c }),
+    setWsStatus: (s) => set({ wsStatus: s }),
+    setPttState: (s) => set({ pttState: s }),
+    setCredentials: (c) => set({ credentials: c }),
+    appendBuffer: (text) =>
+      set((state) => {
+        const next = state.recentBuffer + text;
+        return {
+          recentBuffer:
+            next.length > BUFFER_LIMIT ? next.slice(-BUFFER_LIMIT) : next,
+        };
+      }),
+    clearBuffer: () => set({ recentBuffer: "" }),
+  })),
+);
 
 // ─── Module-level singleton ───────────────────────────────────────────────────
 // 防止 React 18 StrictMode double-mount 造成 WS 在 CONNECTING 時被 close
@@ -74,13 +80,16 @@ let _client: PttClient | null = null;
 // ─── PTT session state detection ─────────────────────────────────────────────
 
 function detectAndRespond(buf: string): void {
-  const { client, credentials, pttState, setPttState } = usePttSocketStore.getState();
+  const { client, credentials, pttState, setPttState } =
+    usePttSocketStore.getState();
   if (!client) return;
 
   // 只看最近 3000 字，去掉 ANSI
   const recent = stripAnsi(buf.slice(-3000));
 
-  console.log(`[PTT] state=${pttState} tail=${JSON.stringify(recent.slice(-200))}`);
+  console.log(
+    `[PTT] state=${pttState} tail=${JSON.stringify(recent.slice(-200))}`,
+  );
 
   switch (pttState) {
     // 連線中：等待登入代號提示
@@ -102,27 +111,101 @@ function detectAndRespond(buf: string): void {
 
     // logging_in：帳號已送出，等密碼提示
     case "logging_in":
-      if (recent.includes("請輸入您的密碼") || recent.includes("Password:")) {
+      if (recent.includes("太多 guest") || recent.includes("too many guest")) {
+        setPttState("guest_overload");
+      } else if (
+        recent.includes("抱歉") &&
+        recent.includes("guest") &&
+        recent.includes("在站上")
+      ) {
+        setPttState("guest_overload");
+      } else if (
+        recent.includes("請輸入您的密碼") ||
+        recent.includes("Password:") ||
+        recent.includes("密碼")
+      ) {
         if (credentials) {
           client.send(credentials.password + "\r");
           setPttState("waiting_auth");
         }
+      } else if (
+        recent.includes("您同意遵守") ||
+        recent.includes("使用條款") ||
+        recent.includes("(Y/N)")
+      ) {
+        // guest 或特殊流程可能直接略過密碼提示，進入條款確認
+        client.send("y\r");
+        usePttSocketStore.getState().clearBuffer();
+        setPttState("waiting_auth");
+      } else if (recent.includes("按任意鍵繼續")) {
+        client.send(" ");
+        usePttSocketStore.getState().clearBuffer();
+        setPttState("waiting_auth");
+      } else if (
+        recent.includes("重複登入") ||
+        recent.includes("刪除其他重複登入")
+      ) {
+        setPttState("duplicate_login");
+      } else if (
+        recent.includes("主功能表") ||
+        recent.includes("【主功能表】")
+      ) {
+        // 少數情況可能直接進主選單
+        setPttState("ready");
+      } else if (recent.includes("請輸入代號") || recent.includes("Login:")) {
+        // 帳號不存在/流程被中斷，回到登入
+        setPttState("need_login");
       }
       break;
 
     // waiting_auth：密碼已送出，等條款/主功能表/衝突提示
     case "waiting_auth":
       if (recent.includes("主功能表") || recent.includes("【主功能表】")) {
+        console.log("[PTT] detected main menu → ready");
         setPttState("ready");
       } else if (
-        recent.includes("您同意遵守") ||
-        recent.includes("按任意鍵繼續") ||
-        recent.includes("(Y/N)")
+        recent.includes("太多 guest") ||
+        recent.includes("too many guest")
       ) {
+        setPttState("guest_overload");
+      } else if (
+        recent.includes("抱歉") &&
+        recent.includes("guest") &&
+        recent.includes("在站上")
+      ) {
+        setPttState("guest_overload");
+      } else if (recent.includes("請輸入代號") || recent.includes("Login:")) {
+        // 帳密錯誤或拒絕重複登入後回到登入提示
+        setPttState("need_login");
+      } else if (
+        recent.includes("重複登入") ||
+        recent.includes("刪除其他重複登入")
+      ) {
+        // 這個提示通常也會帶 (Y/N)，必須優先於通用 (Y/N) 規則判斷
+        console.log("[PTT] duplicate login detected → waiting user decision");
+        setPttState("duplicate_login");
+      } else if (recent.includes("您同意遵守") || recent.includes("使用條款")) {
+        console.log("[PTT] accepting terms");
         client.send("y\r");
-      } else if (recent.includes("您想刪除其他重複登入")) {
-        client.send("n\r");
+        usePttSocketStore.getState().clearBuffer();
+      } else if (recent.includes("按任意鍵繼續")) {
+        console.log("[PTT] pressing any key");
+        client.send(" ");
+        usePttSocketStore.getState().clearBuffer(); // 清除舊畫面，防止重複觸發
+      } else if (recent.includes("(Y/N)")) {
+        // 登入流程中若出現未辨識的 Y/N 提示，優先交由使用者決策，
+        // 避免被自動空白鍵卡住。
+        console.log("[PTT] unknown (Y/N) prompt → waiting user decision");
+        setPttState("duplicate_login");
       }
+      break;
+
+    // duplicate_login：由 UI 決策是否踢掉其他重複登入
+    case "duplicate_login":
+      break;
+
+    // guest_overload：由 UI 提示重試 guest 或改一般登入
+    case "guest_overload":
       break;
 
     // ready：偵測意外登出
@@ -141,6 +224,9 @@ function detectAndRespond(buf: string): void {
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
 export function usePttSocket() {
+  const pttState = usePttSocketStore((s) => s.pttState);
+  const client = usePttSocketStore((s) => s.client);
+
   // 初始化 singleton（只跑一次，StrictMode 第二次進來會早退）
   useEffect(() => {
     if (_client) return;
@@ -149,8 +235,10 @@ export function usePttSocket() {
       onData: (text) => usePttSocketStore.getState().appendBuffer(text),
       onStatusChange: (s) => {
         usePttSocketStore.getState().setWsStatus(s);
-        if (s === "connecting") usePttSocketStore.getState().setPttState("connecting");
-        if (s === "closed" || s === "error") usePttSocketStore.getState().setPttState(s as PttState);
+        if (s === "connecting")
+          usePttSocketStore.getState().setPttState("connecting");
+        if (s === "closed" || s === "error")
+          usePttSocketStore.getState().setPttState(s as PttState);
       },
     });
 
@@ -168,10 +256,22 @@ export function usePttSocket() {
     return unsub;
   }, []);
 
+  // 登入流程保底：若卡在 logging_in / waiting_auth，定期送 Enter 推進畫面
+  useEffect(() => {
+    if (!client) return;
+    if (pttState !== "logging_in" && pttState !== "waiting_auth") return;
+
+    const timer = setInterval(() => {
+      client.send("\r");
+    }, 1800);
+
+    return () => clearInterval(timer);
+  }, [client, pttState]);
+
   return {
     wsStatus: usePttSocketStore((s) => s.wsStatus),
-    pttState: usePttSocketStore((s) => s.pttState),
-    client: usePttSocketStore((s) => s.client),
+    pttState,
+    client,
   };
 }
 
@@ -183,4 +283,14 @@ export function submitLogin(username: string, password: string): void {
   setCredentials({ username, password });
   client?.send(username + "\r");
   setPttState("logging_in");
+}
+
+/**
+ * 由 LoginModal 呼叫：重複登入時，決定是否踢掉其他連線
+ */
+export function submitDuplicateLoginDecision(kickOthers: boolean): void {
+  const { client, setPttState, clearBuffer } = usePttSocketStore.getState();
+  client?.send(kickOthers ? "y\r" : "n\r");
+  clearBuffer();
+  setPttState("waiting_auth");
 }

@@ -14,24 +14,20 @@ interface PushItemProps {
 
 function PushBadge({ type }: { type: AggregatedPush["type"] }) {
   if (type === "push")
-    return (
-      <span className="mr-1 text-xs font-bold text-green-400">推</span>
-    );
+    return <span className="mr-1 text-xs font-bold text-green-400">推</span>;
   if (type === "boo")
-    return (
-      <span className="mr-1 text-xs font-bold text-red-400">噓</span>
-    );
+    return <span className="mr-1 text-xs font-bold text-red-400">噓</span>;
   return <span className="mr-1 text-xs text-gray-400">→</span>;
 }
 
 function ScoreBadge({ score }: { score: number }) {
   if (score === 0) return null;
-  const color =
-    score > 0 ? "text-green-400" : "text-red-400";
+  const color = score > 0 ? "text-green-400" : "text-red-400";
   const sign = score > 0 ? "+" : "";
   return (
     <span className={`ml-1 text-xs ${color}`}>
-      ({sign}{score})
+      ({sign}
+      {score})
     </span>
   );
 }
@@ -40,7 +36,10 @@ function PushItem({ push, children = [], depth = 0 }: PushItemProps) {
   const indent = depth * 16; // px
 
   return (
-    <div style={{ marginLeft: indent }} className="border-l border-gray-700 pl-2 my-1">
+    <div
+      style={{ marginLeft: indent }}
+      className="border-l border-gray-700 pl-2 my-1"
+    >
       <div className="flex items-start gap-1 text-sm">
         <PushBadge type={push.type} />
         <span className="font-semibold text-sky-300 whitespace-nowrap">
@@ -68,9 +67,6 @@ interface PushThreadProps {
 }
 
 export function PushThread({ pushes, score }: PushThreadProps) {
-  // 建立 id → push 的映射
-  const pushMap = new Map(pushes.map((p) => [p.id, p]));
-
   // 建立 parent id → children 的映射
   const childrenMap = new Map<string, AggregatedPush[]>();
   for (const p of pushes) {
