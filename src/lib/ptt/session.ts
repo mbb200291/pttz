@@ -27,6 +27,11 @@ export interface DetectResult {
 export function detectState(raw: string): DetectResult {
   // 移除 ANSI codes 再比對
   const plain = raw.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
+  const hasBoardDirectoryRows = /(?:^|\n)\s*\S{2,}\s+\S{1,6}\s+◎/u.test(plain);
+  const hasArticleRows =
+    /(?:^|\n)\s*\d{4,6}\s+.\s*(?:爆|X\d+|\d+)?\s+\d{1,2}\/\d{2}\s+\S{2,12}\s+/u.test(
+      plain,
+    );
 
   let state: SessionState = "unknown";
 
@@ -36,15 +41,23 @@ export function detectState(raw: string): DetectResult {
     state = "password_prompt";
   } else if (plain.includes("您同意遵守本站的規則與使用條款")) {
     state = "terms_prompt";
-  } else if (plain.includes("【主功能表】") || plain.includes("主選單")) {
-    state = "main_menu";
-  } else if (plain.includes("文章選讀") || plain.includes("看板列表")) {
-    state = "board_list";
   } else if (
-    plain.match(/\d+\s+\w+\s+\d+\/\d+/) && // 文章列表格式
+    plain.includes("【主功能表】") ||
+    plain.includes("主功能表") ||
+    plain.includes("主選單")
+  ) {
+    state = "main_menu";
+  } else if (
+    (plain.includes("看板《") || hasArticleRows) &&
     !plain.includes("文章內容")
   ) {
     state = "article_list";
+  } else if (
+    plain.includes("選擇看板") ||
+    plain.includes("看板列表") ||
+    hasBoardDirectoryRows
+  ) {
+    state = "board_list";
   } else if (plain.includes("─────────────────")) {
     // 推文分隔線，表示在文章內
     state = "article";

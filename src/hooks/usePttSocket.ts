@@ -15,6 +15,7 @@ import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import { PttClient, type ConnectionStatus } from "../lib/ptt/client";
 import { stripAnsi } from "../lib/ptt/parser";
+import { detectState } from "../lib/ptt/session";
 
 export type PttState =
   | "idle"
@@ -44,6 +45,7 @@ interface PttSocketStore {
   setWsStatus: (s: ConnectionStatus) => void;
   setPttState: (s: PttState) => void;
   setCredentials: (c: Credentials) => void;
+  clearCredentials: () => void;
   appendBuffer: (text: string) => void;
   clearBuffer: () => void;
 }
@@ -61,6 +63,7 @@ export const usePttSocketStore = create<PttSocketStore>()(
     setWsStatus: (s) => set({ wsStatus: s }),
     setPttState: (s) => set({ pttState: s }),
     setCredentials: (c) => set({ credentials: c }),
+    clearCredentials: () => set({ credentials: null }),
     appendBuffer: (text) =>
       set((state) => {
         const next = state.recentBuffer + text;
@@ -73,19 +76,47 @@ export const usePttSocketStore = create<PttSocketStore>()(
   })),
 );
 
+if (import.meta.env.DEV && typeof window !== "undefined") {
+  (window as typeof window & { __pttSocketStore?: typeof usePttSocketStore }).__pttSocketStore =
+    usePttSocketStore;
+}
+
 // ─── Module-level singleton ───────────────────────────────────────────────────
 // 防止 React 18 StrictMode double-mount 造成 WS 在 CONNECTING 時被 close
 let _client: PttClient | null = null;
 
 // ─── PTT session state detection ─────────────────────────────────────────────
 
-function detectAndRespond(buf: string): void {
-  const { client, credentials, pttState, setPttState } =
+export function handleSocketStatusChange(status: ConnectionStatus): void {
+  const { client, pttState, setPttState, setWsStatus } =
+    usePttSocketStore.getState();
+
+  setWsStatus(status);
+
+  if (status === "connecting") {
+    setPttState("connecting");
+    return;
+  }
+
+  if (status === "closed" || status === "error") {
+    if (pttState === "ready") {
+      setPttState(status as PttState);
+      return;
+    }
+
+    setPttState("need_login");
+    client?.connect();
+  }
+}
+
+export function detectAndRespond(buf: string): void {
+  const { client, credentials, pttState, setPttState, clearCredentials } =
     usePttSocketStore.getState();
   if (!client) return;
 
   // 只看最近 3000 字，去掉 ANSI
   const recent = stripAnsi(buf.slice(-3000));
+  const session = detectState(recent);
 
   console.log(
     `[PTT] state=${pttState} tail=${JSON.stringify(recent.slice(-200))}`,
@@ -152,15 +183,28 @@ function detectAndRespond(buf: string): void {
       ) {
         // 少數情況可能直接進主選單
         setPttState("ready");
+      } else if (
+        session.state === "main_menu" ||
+        session.state === "board_list" ||
+        session.state === "article_list"
+      ) {
+        setPttState("ready");
       } else if (recent.includes("請輸入代號") || recent.includes("Login:")) {
         // 帳號不存在/流程被中斷，回到登入
+        clearCredentials();
         setPttState("need_login");
       }
       break;
 
     // waiting_auth：密碼已送出，等條款/主功能表/衝突提示
     case "waiting_auth":
-      if (recent.includes("主功能表") || recent.includes("【主功能表】")) {
+      if (
+        recent.includes("主功能表") ||
+        recent.includes("【主功能表】") ||
+        session.state === "main_menu" ||
+        session.state === "board_list" ||
+        session.state === "article_list"
+      ) {
         console.log("[PTT] detected main menu → ready");
         setPttState("ready");
       } else if (
@@ -176,6 +220,7 @@ function detectAndRespond(buf: string): void {
         setPttState("guest_overload");
       } else if (recent.includes("請輸入代號") || recent.includes("Login:")) {
         // 帳密錯誤或拒絕重複登入後回到登入提示
+        clearCredentials();
         setPttState("need_login");
       } else if (
         recent.includes("重複登入") ||
@@ -233,13 +278,7 @@ export function usePttSocket() {
 
     _client = new PttClient({
       onData: (text) => usePttSocketStore.getState().appendBuffer(text),
-      onStatusChange: (s) => {
-        usePttSocketStore.getState().setWsStatus(s);
-        if (s === "connecting")
-          usePttSocketStore.getState().setPttState("connecting");
-        if (s === "closed" || s === "error")
-          usePttSocketStore.getState().setPttState(s as PttState);
-      },
+      onStatusChange: handleSocketStatusChange,
     });
 
     usePttSocketStore.getState().setClient(_client);
@@ -279,8 +318,10 @@ export function usePttSocket() {
  * 由 LoginModal 呼叫：儲存憑證並送出帳號
  */
 export function submitLogin(username: string, password: string): void {
-  const { client, setPttState, setCredentials } = usePttSocketStore.getState();
+  const { client, setPttState, setCredentials, clearBuffer } =
+    usePttSocketStore.getState();
   setCredentials({ username, password });
+  clearBuffer();
   client?.send(username + "\r");
   setPttState("logging_in");
 }
@@ -289,7 +330,9 @@ export function submitLogin(username: string, password: string): void {
  * 由 LoginModal 呼叫：重複登入時，決定是否踢掉其他連線
  */
 export function submitDuplicateLoginDecision(kickOthers: boolean): void {
-  const { client, setPttState, clearBuffer } = usePttSocketStore.getState();
+  const { client, setPttState, clearBuffer, clearCredentials } =
+    usePttSocketStore.getState();
+  if (!kickOthers) clearCredentials();
   client?.send(kickOthers ? "y\r" : "n\r");
   clearBuffer();
   setPttState("waiting_auth");

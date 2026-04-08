@@ -13,6 +13,7 @@ import {
   type ArticleSummary,
 } from "../lib/ptt/parser";
 import { detectState } from "../lib/ptt/session";
+import { getEnterBoardCommand } from "../lib/ptt/navigation";
 
 export interface UseBoardReturn {
   articles: ArticleSummary[];
@@ -22,26 +23,44 @@ export interface UseBoardReturn {
 }
 
 const LINE_BUFFER_TIMEOUT = 300; // ms，等候 terminal 輸出穩定
+const DEBUG_TAIL_LENGTH = 80;
+const BOARD_ENTRY_RETRY_DELAY = 1200;
+const MAX_BOARD_ENTRY_RETRIES = 2;
+const TERMINAL_LINE_SPLIT_RE = /\x1b\[K|\r?\n/;
+
+function formatTail(raw: string): string {
+  return stripAnsi(raw)
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(-DEBUG_TAIL_LENGTH);
+}
 
 export function useBoard(boardName: string): UseBoardReturn {
   const { client, pttState } = usePttSocketStore();
   const [articles, setArticles] = useState<ArticleSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const hasParsedArticlesRef = useRef(false);
+  const boardEntryRetriesRef = useRef(0);
   const rawRef = useRef("");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const parseAndSet = useCallback((raw: string) => {
-    const lines = raw.split("\n");
+    const lines = raw.split(TERMINAL_LINE_SPLIT_RE);
     const parsed = lines
       .map((l) => parseArticleLine(stripAnsi(l)))
       .filter((a): a is ArticleSummary => a !== null);
     if (parsed.length > 0) {
+      hasParsedArticlesRef.current = true;
       setArticles((prev) => {
         const map = new Map(prev.map((a) => [a.index, a]));
         parsed.forEach((a) => map.set(a.index, a));
         return Array.from(map.values()).sort((a, b) => b.index - a.index);
       });
+      setError(null);
+    } else if (raw.trim() && !hasParsedArticlesRef.current) {
+      const { state } = detectState(raw);
+      setError(`尚未解析出文章列表（state=${state}，tail=${formatTail(raw)}）`);
     }
     setLoading(false);
   }, []);
@@ -49,6 +68,11 @@ export function useBoard(boardName: string): UseBoardReturn {
   // 監聽 recentBuffer 的變化，解析文章列表
   useEffect(() => {
     if (pttState !== "ready" || !client) return;
+
+    const currentBuffer = usePttSocketStore.getState().recentBuffer;
+    if (currentBuffer) {
+      parseAndSet(currentBuffer);
+    }
 
     const unsubscribe = usePttSocketStore.subscribe(
       (state) => state.recentBuffer,
@@ -81,7 +105,9 @@ export function useBoard(boardName: string): UseBoardReturn {
       state === "article_list";
 
     if (!canEnterBoard) {
-      setError("目前畫面尚未就緒，暫時無法進入看板");
+      setError(
+        `目前畫面尚未就緒，暫時無法進入看板（state=${state}，tail=${formatTail(recentBuffer)}）`,
+      );
       setLoading(false);
       return;
     }
@@ -89,10 +115,35 @@ export function useBoard(boardName: string): UseBoardReturn {
     setLoading(true);
     setError(null);
     setArticles([]);
+    hasParsedArticlesRef.current = false;
+    boardEntryRetriesRef.current = 0;
     rawRef.current = "";
-    usePttSocketStore.getState().clearBuffer();
-    client?.enqueue(`s ${boardName}\r`, 250);
+    client?.enqueue(getEnterBoardCommand(state, boardName), 250);
   }, [pttState, boardName, client]);
+
+  useEffect(() => {
+    if (!loading || !client) return;
+
+    const timer = setTimeout(() => {
+      const { recentBuffer } = usePttSocketStore.getState();
+      const { state } = detectState(recentBuffer);
+
+      if (state === "article_list") {
+        parseAndSet(recentBuffer);
+        return;
+      }
+
+      if (
+        state === "board_list" &&
+        boardEntryRetriesRef.current < MAX_BOARD_ENTRY_RETRIES
+      ) {
+        boardEntryRetriesRef.current += 1;
+        client.enqueue(getEnterBoardCommand(state, boardName), 250);
+      }
+    }, BOARD_ENTRY_RETRY_DELAY);
+
+    return () => clearTimeout(timer);
+  }, [loading, client, boardName, parseAndSet]);
 
   const loadMore = useCallback(() => {
     if (!client || loading) return;
@@ -105,6 +156,24 @@ export function useBoard(boardName: string): UseBoardReturn {
     // 使用 PageUp 控制碼翻頁，避免送出 y 誤觸 yes/reply 類互動
     client.enqueue("\x1b[5~", 200);
   }, [client, loading]);
+
+  if (import.meta.env.DEV && typeof window !== "undefined") {
+    (
+      window as typeof window & {
+        __boardDebug?: {
+          boardName: string;
+          articles: ArticleSummary[];
+          loading: boolean;
+          error: string | null;
+        };
+      }
+    ).__boardDebug = {
+      boardName,
+      articles,
+      loading,
+      error,
+    };
+  }
 
   return { articles, loading, error, loadMore };
 }

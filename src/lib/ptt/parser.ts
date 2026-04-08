@@ -8,9 +8,27 @@
 
 // ANSI escape sequence regex
 const ANSI_RE = /\x1b\[[0-9;]*[A-Za-z]/g;
+const ARTICLE_LINE_RE =
+  /^\s*(?<index>\d{4,6})\s+(?<mark>.)(?<pushCount>\s*(?:爆|X\d+|\d+)?)\s+(?<date>\d{1,2}\/\d{2})\s+(?<author>\S{2,12})\s+(?<title>.+)$/u;
+
+function stripBackspaces(text: string): string {
+  const chars: string[] = [];
+
+  for (const char of text) {
+    if (char === "\b") {
+      while (chars.length > 0 && chars[chars.length - 1] === " ") {
+        chars.pop();
+      }
+      continue;
+    }
+    chars.push(char);
+  }
+
+  return chars.join("");
+}
 
 export function stripAnsi(text: string): string {
-  return text.replace(ANSI_RE, "");
+  return stripBackspaces(text.replace(ANSI_RE, ""));
 }
 
 // ─── 文章列表 ────────────────────────────────────────────────────────────────
@@ -32,25 +50,17 @@ export interface ArticleSummary {
 export function parseArticleLine(line: string): ArticleSummary | null {
   const plain = stripAnsi(line);
 
-  // 簡單以空白分割，取固定欄位
-  // PTT 文章列表行格式（寬 80 字）：
-  // col 0-5: 編號
-  // col 6: mark
-  // col 7-10: 推文數
-  // col 11-15: 日期
-  // col 16-27: 作者
-  // col 28-: 標題
+  const match = plain.match(ARTICLE_LINE_RE);
+  if (!match?.groups) return null;
 
-  if (plain.length < 30) return null;
-
-  const index = parseInt(plain.substring(0, 6).trim(), 10);
+  const index = parseInt(match.groups.index, 10);
   if (isNaN(index)) return null;
 
-  const mark = plain.charAt(6);
-  const pushCount = plain.substring(7, 11).trim();
-  const date = plain.substring(11, 16).trim();
-  const author = plain.substring(17, 29).trim();
-  const title = plain.substring(29).trim();
+  const mark = match.groups.mark.trim() || " ";
+  const pushCount = match.groups.pushCount.trim();
+  const date = match.groups.date.trim();
+  const author = match.groups.author.trim();
+  const title = match.groups.title.trim();
 
   if (!title) return null;
 

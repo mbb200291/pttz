@@ -12,6 +12,7 @@ interface ArticleListProps {
   onBack: () => void;
   mockArticles?: ArticleSummary[];
   mockLoading?: boolean;
+  mockError?: string | null;
   onMockLoadMore?: () => void;
 }
 
@@ -72,15 +73,18 @@ export function ArticleList({
   onBack,
   mockArticles,
   mockLoading,
+  mockError,
   onMockLoadMore,
 }: ArticleListProps) {
   const {
     articles: liveArticles,
     loading: liveLoading,
+    error: liveError,
     loadMore,
   } = useBoard(boardName);
   const articles = mockArticles ?? liveArticles;
   const loading = mockLoading ?? liveLoading;
+  const error = mockError ?? liveError;
   const handleLoadMore = onMockLoadMore ?? loadMore;
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -128,6 +132,8 @@ export function ArticleList({
       <div ref={bottomRef} className="py-8 text-center">
         {loading ? (
           <span className="text-gray-500 text-sm">載入中…</span>
+        ) : error && articles.length === 0 ? (
+          <span className="text-amber-400 text-sm">{error}</span>
         ) : articles.length === 0 ? (
           <span className="text-gray-600 text-sm">正在連線至 PTT…</span>
         ) : (
