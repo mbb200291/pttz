@@ -20,6 +20,19 @@ export interface DetectResult {
   isAtBottom: boolean; // 是否已到文章/列表底部
 }
 
+export function detectAuthInterrupt(raw: string): boolean {
+  const plain = raw.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
+
+  return (
+    plain.includes("請輸入代號") ||
+    plain.includes("Login:") ||
+    plain.includes("請輸入您的密碼") ||
+    plain.includes("Password:") ||
+    plain.includes("刪除其他重複登入") ||
+    plain.includes("重複登入")
+  );
+}
+
 /**
  * 從 terminal raw buffer 判斷目前狀態
  * PTT 的 terminal 輸出有特徵字串可辨識
@@ -29,7 +42,7 @@ export function detectState(raw: string): DetectResult {
   const plain = raw.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
   const hasBoardDirectoryRows = /(?:^|\n)\s*\S{2,}\s+\S{1,6}\s+◎/u.test(plain);
   const hasArticleRows =
-    /(?:^|\n)\s*\d{4,6}\s+.\s*(?:爆|X\d+|\d+)?\s+\d{1,2}\/\d{2}\s+\S{2,12}\s+/u.test(
+    /(?:^|[\r\n]|\s)\d{4,6}\s+.\s*(?:爆|X\d+|\d+)?\s+\d{1,2}\/\d{2}\s+\S{2,12}\s+/u.test(
       plain,
     );
 
@@ -42,25 +55,28 @@ export function detectState(raw: string): DetectResult {
   } else if (plain.includes("您同意遵守本站的規則與使用條款")) {
     state = "terms_prompt";
   } else if (
+    (plain.includes("看板《") ||
+      plain.includes("文章選讀") ||
+      plain.includes("[←]離開 [→]閱讀") ||
+      hasArticleRows) &&
+    !plain.includes("文章內容")
+  ) {
+    state = "article_list";
+  } else if (plain.includes("─────────────────")) {
+    // 推文分隔線，表示在文章內
+    state = "article";
+  } else if (
     plain.includes("【主功能表】") ||
     plain.includes("主功能表") ||
     plain.includes("主選單")
   ) {
     state = "main_menu";
   } else if (
-    (plain.includes("看板《") || hasArticleRows) &&
-    !plain.includes("文章內容")
-  ) {
-    state = "article_list";
-  } else if (
     plain.includes("選擇看板") ||
     plain.includes("看板列表") ||
     hasBoardDirectoryRows
   ) {
     state = "board_list";
-  } else if (plain.includes("─────────────────")) {
-    // 推文分隔線，表示在文章內
-    state = "article";
   }
 
   const isAtBottom =

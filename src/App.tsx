@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePttSocket } from "./hooks/usePttSocket";
 import { BoardInput } from "./components/BoardInput";
 import { ArticleList } from "./components/ArticleList";
@@ -8,11 +8,7 @@ import type { ArticleSummary } from "./lib/ptt/parser";
 import type { ArticleData } from "./hooks/useArticle";
 import type { AggregatedPush } from "./lib/ptt/pushAggregator";
 import type { PttState } from "./hooks/usePttSocket";
-
-type View =
-  | { type: "home" }
-  | { type: "board"; name: string }
-  | { type: "article"; board: string; index: number };
+import { getSafeViewForPttState, type AppView } from "./lib/ptt/viewState";
 
 type PreviewMode = "home" | "board" | "article" | "login";
 
@@ -111,8 +107,8 @@ const MOCK_ARTICLE: ArticleData = {
 };
 
 export default function App() {
-  const { wsStatus, pttState } = usePttSocket();
-  const [view, setView] = useState<View>(() => {
+  const { wsStatus, pttState, client } = usePttSocket();
+  const [view, setView] = useState<AppView>(() => {
     if (previewMode === "board") return { type: "board", name: "Gossiping" };
     if (previewMode === "article")
       return { type: "article", board: "Gossiping", index: 30215 };
@@ -124,6 +120,12 @@ export default function App() {
   const effectiveWsStatus = isPreview ? "connected" : wsStatus;
   const modalPttState: PttState =
     previewMode === "login" ? "need_login" : effectivePttState;
+
+  useEffect(() => {
+    if (isPreview) return;
+
+    setView((current) => getSafeViewForPttState(current, pttState));
+  }, [isPreview, pttState]);
 
   return (
     <>
@@ -141,7 +143,10 @@ export default function App() {
       {view.type === "board" && (
         <ArticleList
           boardName={view.name}
-          onBack={() => setView({ type: "home" })}
+          onBack={() => {
+            client?.send("\x1b[D");
+            setView({ type: "home" });
+          }}
           onSelectArticle={(index) =>
             setView({ type: "article", board: view.name, index })
           }
@@ -153,7 +158,10 @@ export default function App() {
         <Article
           boardName={view.board}
           articleIndex={view.index}
-          onBack={() => setView({ type: "board", name: view.board })}
+          onBack={() => {
+            client?.send("\x1b[D");
+            setView({ type: "board", name: view.board });
+          }}
           mockArticle={isPreview ? MOCK_ARTICLE : undefined}
         />
       )}

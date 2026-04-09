@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectState } from "../session";
+import { detectAuthInterrupt, detectState } from "../session";
 
 describe("detectState", () => {
   it("recognizes main menu when buffer contains 主功能表 without brackets", () => {
@@ -30,5 +30,31 @@ describe("detectState", () => {
     );
 
     expect(result.state).toBe("article_list");
+  });
+
+  it("prefers article list over stale main menu text in the same buffer", () => {
+    const result = detectState(
+      "主功能表\r\n[SU] 訂閱看板\r\n看板《Gossiping》\r\n 781854 + 6 4/09 todao        R: [問卦] 為什麼長照服務員薪水那麼低? 781855 + 7 4/09 sss1234      □ [問卦] 全台灣單挑上海會贏嗎？\r\n 文章選讀 (y)回應(X)推文(^X)轉錄",
+    );
+
+    expect(result.state).toBe("article_list");
+  });
+});
+
+describe("detectAuthInterrupt", () => {
+  it("detects duplicate login prompts inside an active session buffer", () => {
+    expect(
+      detectAuthInterrupt(
+        "看板《Gossiping》\r\n 781953 + 3 4/09 trapt □ [問卦] 一直納悶 為啥中共閉口不談64？\r\n刪除其他重複登入(Y/N)",
+      ),
+    ).toBe(true);
+  });
+
+  it("detects login prompts that interrupt the current flow", () => {
+    expect(
+      detectAuthInterrupt(
+        "作者 trapt (aa)\r\n標題 [問卦] 一直納悶 為啥中共閉口不談64？\r\nLogin:",
+      ),
+    ).toBe(true);
   });
 });

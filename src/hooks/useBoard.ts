@@ -8,11 +8,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { usePttSocketStore } from "./usePttSocket";
 import {
-  parseArticleLine,
+  parseArticleBuffer,
   stripAnsi,
   type ArticleSummary,
 } from "../lib/ptt/parser";
-import { detectState } from "../lib/ptt/session";
+import { detectAuthInterrupt, detectState } from "../lib/ptt/session";
 import { getEnterBoardCommand } from "../lib/ptt/navigation";
 
 export interface UseBoardReturn {
@@ -26,7 +26,7 @@ const LINE_BUFFER_TIMEOUT = 300; // ms，等候 terminal 輸出穩定
 const DEBUG_TAIL_LENGTH = 80;
 const BOARD_ENTRY_RETRY_DELAY = 1200;
 const MAX_BOARD_ENTRY_RETRIES = 2;
-const TERMINAL_LINE_SPLIT_RE = /\x1b\[K|\r?\n/;
+const STATE_WINDOW = 3000;
 
 function formatTail(raw: string): string {
   return stripAnsi(raw)
@@ -46,10 +46,15 @@ export function useBoard(boardName: string): UseBoardReturn {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const parseAndSet = useCallback((raw: string) => {
-    const lines = raw.split(TERMINAL_LINE_SPLIT_RE);
-    const parsed = lines
-      .map((l) => parseArticleLine(stripAnsi(l)))
-      .filter((a): a is ArticleSummary => a !== null);
+    if (detectAuthInterrupt(raw)) {
+      setArticles([]);
+      setError("登入流程已被重新觸發，請重新登入");
+      setLoading(false);
+      hasParsedArticlesRef.current = false;
+      return;
+    }
+
+    const parsed = parseArticleBuffer(raw);
     if (parsed.length > 0) {
       hasParsedArticlesRef.current = true;
       setArticles((prev) => {
@@ -96,7 +101,20 @@ export function useBoard(boardName: string): UseBoardReturn {
     if (pttState !== "ready" || !boardName) return;
 
     const { recentBuffer } = usePttSocketStore.getState();
-    const { state } = detectState(recentBuffer);
+    if (detectAuthInterrupt(recentBuffer)) {
+      setArticles([]);
+      setError("登入流程已被重新觸發，請重新登入");
+      setLoading(false);
+      return;
+    }
+    const { state } = detectState(recentBuffer.slice(-STATE_WINDOW));
+
+    if (state === "article") {
+      setLoading(true);
+      setError(null);
+      client?.enqueue("\x1b[D", 180);
+      return;
+    }
 
     // 只在可預期畫面送出「進入看板」指令，避免誤觸
     const canEnterBoard =
@@ -118,7 +136,7 @@ export function useBoard(boardName: string): UseBoardReturn {
     hasParsedArticlesRef.current = false;
     boardEntryRetriesRef.current = 0;
     rawRef.current = "";
-    client?.enqueue(getEnterBoardCommand(state, boardName), 250);
+    client?.enqueue(getEnterBoardCommand(state, boardName, recentBuffer), 250);
   }, [pttState, boardName, client]);
 
   useEffect(() => {
@@ -126,7 +144,13 @@ export function useBoard(boardName: string): UseBoardReturn {
 
     const timer = setTimeout(() => {
       const { recentBuffer } = usePttSocketStore.getState();
-      const { state } = detectState(recentBuffer);
+      if (detectAuthInterrupt(recentBuffer)) {
+        setArticles([]);
+        setError("登入流程已被重新觸發，請重新登入");
+        setLoading(false);
+        return;
+      }
+      const { state } = detectState(recentBuffer.slice(-STATE_WINDOW));
 
       if (state === "article_list") {
         parseAndSet(recentBuffer);
@@ -138,7 +162,7 @@ export function useBoard(boardName: string): UseBoardReturn {
         boardEntryRetriesRef.current < MAX_BOARD_ENTRY_RETRIES
       ) {
         boardEntryRetriesRef.current += 1;
-        client.enqueue(getEnterBoardCommand(state, boardName), 250);
+        client.enqueue(getEnterBoardCommand(state, boardName, recentBuffer), 250);
       }
     }, BOARD_ENTRY_RETRY_DELAY);
 
@@ -148,11 +172,18 @@ export function useBoard(boardName: string): UseBoardReturn {
   const loadMore = useCallback(() => {
     if (!client || loading) return;
 
-    const { recentBuffer } = usePttSocketStore.getState();
-    const { state } = detectState(recentBuffer);
+    const { recentBuffer, clearBuffer } = usePttSocketStore.getState();
+    if (detectAuthInterrupt(recentBuffer)) {
+      setArticles([]);
+      setError("登入流程已被重新觸發，請重新登入");
+      setLoading(false);
+      return;
+    }
+    const { state } = detectState(recentBuffer.slice(-STATE_WINDOW));
     if (state !== "article_list") return;
 
     setLoading(true);
+    clearBuffer();
     // 使用 PageUp 控制碼翻頁，避免送出 y 誤觸 yes/reply 類互動
     client.enqueue("\x1b[5~", 200);
   }, [client, loading]);

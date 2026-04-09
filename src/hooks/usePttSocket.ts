@@ -25,6 +25,8 @@ export type PttState =
   | "waiting_auth" // 已送出密碼，等待 PTT 驗證結果
   | "duplicate_login" // 偵測到重複登入，等待使用者決策
   | "guest_overload" // guest 人數已滿，等待使用者重試或改一般登入
+  | "syncing_users" // 正在同步線上使用者與好友名單
+  | "login_rate_limited" // 登入太頻繁，被系統暫時限制
   | "ready" // 主功能表，可以瀏覽看板
   | "closed"
   | "error";
@@ -81,9 +83,19 @@ if (import.meta.env.DEV && typeof window !== "undefined") {
     usePttSocketStore;
 }
 
-// ─── Module-level singleton ───────────────────────────────────────────────────
-// 防止 React 18 StrictMode double-mount 造成 WS 在 CONNECTING 時被 close
-let _client: PttClient | null = null;
+// ─── Global singleton ─────────────────────────────────────────────────────────
+// 防止 React 18 StrictMode 與 Vite HMR 在 dev 中重建多條 WS 連線
+type PttSocketGlobal = typeof globalThis & {
+  __pttClientSingleton?: PttClient | null;
+};
+
+function getSingletonClient(): PttClient | null {
+  return (globalThis as PttSocketGlobal).__pttClientSingleton ?? null;
+}
+
+function setSingletonClient(client: PttClient | null): void {
+  (globalThis as PttSocketGlobal).__pttClientSingleton = client;
+}
 
 // ─── PTT session state detection ─────────────────────────────────────────────
 
@@ -144,6 +156,17 @@ export function detectAndRespond(buf: string): void {
     case "logging_in":
       if (recent.includes("太多 guest") || recent.includes("too many guest")) {
         setPttState("guest_overload");
+      } else if (
+        recent.includes("正在更新與同步線上使用者及好友名單") ||
+        (recent.includes("好友名單") && recent.includes("系統負荷量大"))
+      ) {
+        setPttState("syncing_users");
+      } else if (
+        recent.includes("登入太頻繁") &&
+        recent.includes("請稍後再試")
+      ) {
+        clearCredentials();
+        setPttState("login_rate_limited");
       } else if (
         recent.includes("抱歉") &&
         recent.includes("guest") &&
@@ -208,6 +231,17 @@ export function detectAndRespond(buf: string): void {
         console.log("[PTT] detected main menu → ready");
         setPttState("ready");
       } else if (
+        recent.includes("正在更新與同步線上使用者及好友名單") ||
+        (recent.includes("好友名單") && recent.includes("系統負荷量大"))
+      ) {
+        setPttState("syncing_users");
+      } else if (
+        recent.includes("登入太頻繁") &&
+        recent.includes("請稍後再試")
+      ) {
+        clearCredentials();
+        setPttState("login_rate_limited");
+      } else if (
         recent.includes("太多 guest") ||
         recent.includes("too many guest")
       ) {
@@ -251,6 +285,28 @@ export function detectAndRespond(buf: string): void {
 
     // guest_overload：由 UI 提示重試 guest 或改一般登入
     case "guest_overload":
+    case "login_rate_limited":
+      break;
+
+    case "syncing_users":
+      if (
+        recent.includes("主功能表") ||
+        recent.includes("【主功能表】") ||
+        session.state === "main_menu" ||
+        session.state === "board_list" ||
+        session.state === "article_list"
+      ) {
+        setPttState("ready");
+      } else if (recent.includes("按任意鍵繼續")) {
+        client.send(" ");
+        usePttSocketStore.getState().clearBuffer();
+      } else if (
+        recent.includes("登入太頻繁") &&
+        recent.includes("請稍後再試")
+      ) {
+        clearCredentials();
+        setPttState("login_rate_limited");
+      }
       break;
 
     // ready：偵測意外登出
@@ -274,15 +330,24 @@ export function usePttSocket() {
 
   // 初始化 singleton（只跑一次，StrictMode 第二次進來會早退）
   useEffect(() => {
-    if (_client) return;
+    const existingClient = getSingletonClient();
+    if (existingClient) {
+      existingClient.setOptions({
+        onData: (text) => usePttSocketStore.getState().appendBuffer(text),
+        onStatusChange: handleSocketStatusChange,
+      });
+      usePttSocketStore.getState().setClient(existingClient);
+      return;
+    }
 
-    _client = new PttClient({
+    const nextClient = new PttClient({
       onData: (text) => usePttSocketStore.getState().appendBuffer(text),
       onStatusChange: handleSocketStatusChange,
     });
 
-    usePttSocketStore.getState().setClient(_client);
-    _client.connect();
+    setSingletonClient(nextClient);
+    usePttSocketStore.getState().setClient(nextClient);
+    nextClient.connect();
     // 不需要 cleanup：這是 app 生命週期等長的 singleton
   }, []);
 

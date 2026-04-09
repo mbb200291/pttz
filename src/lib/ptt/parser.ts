@@ -8,8 +8,12 @@
 
 // ANSI escape sequence regex
 const ANSI_RE = /\x1b\[[0-9;]*[A-Za-z]/g;
+const PAGE_INFO_RE = /瀏覽 第\s*(\d+)\/(\d+)\s*頁/u;
+const PAGE_INFO_GLOBAL_RE = /瀏覽 第\s*(\d+)\/(\d+)\s*頁/gu;
 const ARTICLE_LINE_RE =
   /^\s*(?<index>\d{4,6})\s+(?<mark>.)(?<pushCount>\s*(?:爆|X\d+|\d+)?)\s+(?<date>\d{1,2}\/\d{2})\s+(?<author>\S{2,12})\s+(?<title>.+)$/u;
+const ARTICLE_BLOCK_RE =
+  /(?:^|[\r\n])\s*(?<index>\d{4,6})\s+(?<mark>.)\s*(?<pushCount>爆|X\d+|\d+)?\s+(?<date>\d{1,2}\/\d{2})\s+(?<author>\S{2,12})\s+(?<title>.+?)(?=(?:[\r\n]+\s*\d{4,6}\s+.\s*(?:爆|X\d+|\d+)?\s+\d{1,2}\/\d{2}\s+\S{2,12}\s+)|(?:[\r\n]\s*●\s)|(?:[\r\n]\s*文章選讀)|$)/gu;
 
 function stripBackspaces(text: string): string {
   const chars: string[] = [];
@@ -29,6 +33,10 @@ function stripBackspaces(text: string): string {
 
 export function stripAnsi(text: string): string {
   return stripBackspaces(text.replace(ANSI_RE, ""));
+}
+
+function normalizeText(raw: string): string {
+  return stripAnsi(raw).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 }
 
 // ─── 文章列表 ────────────────────────────────────────────────────────────────
@@ -65,6 +73,29 @@ export function parseArticleLine(line: string): ArticleSummary | null {
   if (!title) return null;
 
   return { index, mark, pushCount, date, author, title };
+}
+
+export function parseArticleBuffer(raw: string): ArticleSummary[] {
+  const plain = stripAnsi(raw)
+    .replace(/\r\n/g, "\n")
+    .replace(/(?<!\n)(\d{4,6}\s+.\s*(?:爆|X\d+|\d+)?\s+\d{1,2}\/\d{2}\s+\S{2,12}\s+)/gu, "\n$1");
+  const parsed: ArticleSummary[] = [];
+
+  for (const match of plain.matchAll(ARTICLE_BLOCK_RE)) {
+    const { index, mark, pushCount, date, author, title } = match.groups ?? {};
+    if (!index || !mark || !date || !author || !title) continue;
+
+    parsed.push({
+      index: parseInt(index, 10),
+      mark: mark.trim() || " ",
+      pushCount: (pushCount ?? "").trim(),
+      date: date.trim(),
+      author: author.trim(),
+      title: title.trim(),
+    });
+  }
+
+  return parsed.filter((article) => !Number.isNaN(article.index));
 }
 
 // ─── 推文 ────────────────────────────────────────────────────────────────────
@@ -120,6 +151,47 @@ export function parsePushLine(line: string): RawPush | null {
   return { type, author, content, time };
 }
 
+export function parsePushBuffer(raw: string): RawPush[] {
+  const plain = stripAnsi(raw)
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/(?<!\n)([推噓→]\s+\S{2,12}:)/gu, "\n$1");
+  const pushes: RawPush[] = [];
+  const startRe = /(?:^|\n)([推噓→])\s+(\S{2,12}):/gu;
+  const starts = Array.from(plain.matchAll(startRe));
+
+  for (let index = 0; index < starts.length; index += 1) {
+    const match = starts[index];
+    const next = starts[index + 1];
+    const segmentStart = match.index ?? 0;
+    const segmentEnd = next?.index ?? plain.length;
+    const segment = plain.slice(segmentStart, segmentEnd).trim();
+    const headerMatch = segment.match(/^([推噓→])\s+(\S{2,12}):\s*([\s\S]*)$/u);
+    if (!headerMatch) continue;
+
+    const [, marker, author, remainder] = headerMatch;
+    const timeMatch = remainder.match(/(\d{2}\/\d{2} \d{2}:\d{2})/u);
+    if (!timeMatch || timeMatch.index === undefined) continue;
+
+    const beforeTime = remainder.slice(0, timeMatch.index).trim();
+    const afterTime = remainder.slice(timeMatch.index + timeMatch[1].length);
+    const continuation = afterTime
+      .replace(new RegExp(`^${author}`), "")
+      .replace(/\b\d{1,3}(?:\.\d{1,3}){3}\b/gu, "")
+      .replace(/\d{2}\/\d{2} \d{2}:\d{2}/gu, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const content = `${beforeTime}${continuation ? ` ${continuation}` : ""}`.trim();
+    const normalized = `${marker} ${author}: ${content} ${timeMatch[1]}`;
+    const parsed = parsePushLine(normalized);
+    if (parsed) {
+      pushes.push(parsed);
+    }
+  }
+
+  return pushes;
+}
+
 // ─── 文章正文 ─────────────────────────────────────────────────────────────────
 
 /**
@@ -131,15 +203,132 @@ export function splitArticleBody(raw: string): {
   pushLines: string[];
 } {
   const lines = raw.split("\n");
-  const separatorIdx = lines.findIndex((l) =>
-    /^─{10,}/.test(stripAnsi(l).trim()),
-  );
+  const firstPushIdx = lines.findIndex((line) => parsePushLine(line) !== null);
 
-  if (separatorIdx === -1) {
+  if (firstPushIdx >= 0) {
+    return {
+      body: lines.slice(0, firstPushIdx).join("\n").trimEnd(),
+      pushLines: lines.slice(firstPushIdx).filter((line) => line.trim()),
+    };
+  }
+
+  const separatorIndexes = lines
+    .map((line, index) =>
+      /^─{10,}/.test(stripAnsi(line).trim()) ? index : -1,
+    )
+    .filter((index) => index >= 0);
+
+  if (separatorIndexes.length < 2) {
     return { body: raw, pushLines: [] };
   }
 
+  const separatorIdx = separatorIndexes[separatorIndexes.length - 1];
   const body = lines.slice(0, separatorIdx).join("\n");
-  const pushLines = lines.slice(separatorIdx + 1);
+  const pushLines = lines.slice(separatorIdx + 1).filter((line) => line.trim());
+
   return { body, pushLines };
+}
+
+export function mergeArticlePage(existing: string, nextPage: string): string {
+  if (!existing.trim()) return nextPage.trim();
+  if (!nextPage.trim()) return existing.trim();
+
+  const existingLines = existing.split("\n");
+  const nextLines = nextPage.split("\n");
+  const maxOverlap = Math.min(existingLines.length, nextLines.length);
+  const normalizeForMerge = (text: string) =>
+    stripAnsi(text).replace(/\s+/g, "").replace(/[^\p{L}\p{N}:/\[\]（）()！？。，、%+-]/gu, "");
+
+  for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
+    const existingSuffix = existingLines.slice(-overlap).join("\n").trim();
+    const nextPrefix = nextLines.slice(0, overlap).join("\n").trim();
+
+    if (
+      existingSuffix &&
+      (existingSuffix === nextPrefix ||
+        normalizeForMerge(existingSuffix) === normalizeForMerge(nextPrefix))
+    ) {
+      return [...existingLines, ...nextLines.slice(overlap)].join("\n").trim();
+    }
+  }
+
+  for (let overlap = Math.min(6, nextLines.length); overlap >= 2; overlap -= 1) {
+    const nextPrefix = nextLines.slice(0, overlap).join("\n").trim();
+    if (!nextPrefix) continue;
+
+    for (let start = 0; start <= existingLines.length - overlap; start += 1) {
+      const existingWindow = existingLines
+        .slice(start, start + overlap)
+        .join("\n")
+        .trim();
+
+      if (
+        existingWindow === nextPrefix ||
+        normalizeForMerge(existingWindow) === normalizeForMerge(nextPrefix)
+      ) {
+        return [...existingLines.slice(0, start), ...nextLines].join("\n").trim();
+      }
+    }
+  }
+
+  return `${existing.trim()}\n${nextPage.trim()}`;
+}
+
+export function extractCurrentArticlePage(raw: string): string {
+  const plain = normalizeText(raw);
+  const lines = plain.split("\n");
+  const footerIndexes = lines
+    .map((line, index) => (PAGE_INFO_RE.test(line) ? index : -1))
+    .filter((index) => index >= 0);
+
+  if (footerIndexes.length === 0) {
+    return plain;
+  }
+
+  const currentFooter = footerIndexes[footerIndexes.length - 1];
+  const previousFooter =
+    footerIndexes.length > 1 ? footerIndexes[footerIndexes.length - 2] : -1;
+
+  let start = previousFooter + 1;
+  if (previousFooter < 0) {
+    for (let index = currentFooter; index >= 0; index -= 1) {
+      const line = lines[index];
+      if (
+        line.trimStart().startsWith("作者") ||
+        line.trimStart().startsWith("看板") ||
+        line.trimStart().startsWith("標題") ||
+        line.trimStart().startsWith("時間")
+      ) {
+        start = index;
+      }
+    }
+  }
+
+  return lines.slice(start, currentFooter).join("\n").trim();
+}
+
+export function getLastPageInfo(
+  raw: string,
+): { currentPage: number; totalPages: number } | null {
+  const plain = normalizeText(raw);
+  const matches = Array.from(plain.matchAll(PAGE_INFO_GLOBAL_RE));
+  const lastMatch = matches[matches.length - 1];
+  if (!lastMatch) return null;
+
+  const currentPage = parseInt(lastMatch[1], 10);
+  const totalPages = parseInt(lastMatch[2], 10);
+  if (Number.isNaN(currentPage) || Number.isNaN(totalPages)) {
+    return null;
+  }
+
+  return { currentPage, totalPages };
+}
+
+export function extractFirstArticlePage(raw: string): string {
+  const plain = normalizeText(raw);
+  const match = plain.match(
+    /(作者[\s\S]*?標題[\s\S]*?時間[^\n]*\n[\s\S]*?)(?=\n\s*瀏覽 第\s*\d+\/\d+\s*頁)/u,
+  );
+
+  return match?.[1]?.trim() ?? "";
 }

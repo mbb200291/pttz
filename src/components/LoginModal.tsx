@@ -28,8 +28,17 @@ export function LoginModal({ pttState, wsStatus }: Props) {
   const isLoggingIn = pttState === "logging_in" || pttState === "waiting_auth";
   const isDuplicateLogin = pttState === "duplicate_login";
   const isGuestOverload = pttState === "guest_overload";
+  const isSyncingUsers = pttState === "syncing_users";
+  const isLoginRateLimited = pttState === "login_rate_limited";
 
-  if (!isOpen && !isLoggingIn && !isDuplicateLogin && !isGuestOverload)
+  if (
+    !isOpen &&
+    !isLoggingIn &&
+    !isDuplicateLogin &&
+    !isGuestOverload &&
+    !isSyncingUsers &&
+    !isLoginRateLimited
+  )
     return null;
 
   const handleLogin = (e: React.FormEvent) => {
@@ -97,6 +106,34 @@ export function LoginModal({ pttState, wsStatus }: Props) {
                 保留其他連線（否）
               </button>
             </div>
+          </div>
+        ) : isSyncingUsers ? (
+          <div className="space-y-3 text-sm text-gray-300 leading-relaxed">
+            <div className="text-center text-2xl">⏳</div>
+            <div>正在更新與同步線上使用者及好友名單，系統負荷量大時會需時較久。</div>
+            <div className="text-xs text-gray-500">
+              若長時間沒有進度，可改用重新登入再試一次。
+            </div>
+            <button
+              type="button"
+              onClick={() => setPttState("need_login")}
+              className="w-full py-2.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-gray-200 transition-colors"
+            >
+              重新登入
+            </button>
+          </div>
+        ) : isLoginRateLimited ? (
+          <div className="space-y-3">
+            <div className="text-sm text-amber-300 leading-relaxed">
+              登入太頻繁，為避免系統負荷過重，請稍後再試。
+            </div>
+            <button
+              type="button"
+              onClick={() => setPttState("need_login")}
+              className="w-full py-2.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-gray-200 transition-colors"
+            >
+              返回登入
+            </button>
           </div>
         ) : isLoggingIn ? (
           <div className="text-center py-3 text-gray-400 text-sm">

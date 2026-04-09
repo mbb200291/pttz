@@ -133,4 +133,60 @@ describe("usePttSocket login flow", () => {
 
     expect(usePttSocketStore.getState().pttState).toBe("ready");
   });
+
+  it("marks the session syncing when PTT is updating online users and friends", async () => {
+    const { detectAndRespond, usePttSocketStore } = await loadModule();
+    const client = createClientStub();
+
+    usePttSocketStore.setState({
+      client,
+      wsStatus: "connected",
+      pttState: "waiting_auth",
+      credentials: { username: "testuser", password: "secret" },
+      recentBuffer: "",
+    });
+
+    detectAndRespond(
+      "正在更新與同步線上使用者及好友名單，系統負荷量大時會需時較久...",
+    );
+
+    expect(usePttSocketStore.getState().pttState).toBe("syncing_users");
+  });
+
+  it("continues past the post-sync any-key prompt", async () => {
+    const { detectAndRespond, usePttSocketStore } = await loadModule();
+    const client = createClientStub();
+
+    usePttSocketStore.setState({
+      client,
+      wsStatus: "connected",
+      pttState: "syncing_users",
+      credentials: { username: "testuser", password: "secret" },
+      recentBuffer: "正在更新與同步線上使用者及好友名單，系統負荷量大時會需時較久...",
+    });
+
+    detectAndRespond("歡迎您再度拜訪。\r\n請按任意鍵繼續");
+
+    expect(client.send).toHaveBeenCalledWith(" ");
+    expect(usePttSocketStore.getState().recentBuffer).toBe("");
+  });
+
+  it("marks the session rate-limited when login attempts are too frequent", async () => {
+    const { detectAndRespond, usePttSocketStore } = await loadModule();
+    const client = createClientStub();
+
+    usePttSocketStore.setState({
+      client,
+      wsStatus: "connected",
+      pttState: "waiting_auth",
+      credentials: { username: "testuser", password: "secret" },
+      recentBuffer: "",
+    });
+
+    detectAndRespond(
+      "登入太頻繁, 為避免系統負荷過重, 請稍後再試",
+    );
+
+    expect(usePttSocketStore.getState().pttState).toBe("login_rate_limited");
+  });
 });

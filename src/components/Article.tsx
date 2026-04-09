@@ -21,12 +21,17 @@ export function Article({
   mockArticle,
   mockLoading,
 }: ArticleProps) {
-  const { article: liveArticle, loading: liveLoading } = useArticle(
+  const {
+    article: liveArticle,
+    loading: liveLoading,
+    error: liveError,
+  } = useArticle(
     boardName,
     articleIndex,
   );
   const article = mockArticle ?? liveArticle;
   const loading = mockLoading ?? liveLoading;
+  const error = liveError;
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100">
@@ -47,7 +52,9 @@ export function Article({
         )}
 
         {!loading && !article && (
-          <div className="text-center py-16 text-gray-500">無法載入文章</div>
+          <div className="text-center py-16 text-gray-500">
+            {error ?? "無法載入文章"}
+          </div>
         )}
 
         {article && (

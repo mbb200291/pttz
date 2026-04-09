@@ -37,7 +37,9 @@ export class PttClient {
   }
 
   connect(): void {
-    if (this.ws && this.status === "connected") return;
+    if (this.ws && (this.status === "connected" || this.status === "connecting")) {
+      return;
+    }
 
     this.setStatus("connecting");
     const ws = new WebSocket(PTT_WS_URL);
@@ -110,6 +112,10 @@ export class PttClient {
 
   private setStatus(status: ConnectionStatus): void {
     this.status = status;
-    this.options.onStatusChange?.(status);
+      this.options.onStatusChange?.(status);
+  }
+
+  setOptions(options: PttClientOptions): void {
+    this.options = options;
   }
 }
