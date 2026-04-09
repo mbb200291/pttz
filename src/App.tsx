@@ -107,7 +107,7 @@ const MOCK_ARTICLE: ArticleData = {
 };
 
 export default function App() {
-  const { wsStatus, pttState, client } = usePttSocket();
+  const { wsStatus, pttState } = usePttSocket();
   const [view, setView] = useState<AppView>(() => {
     if (previewMode === "board") return { type: "board", name: "Gossiping" };
     if (previewMode === "article")
@@ -143,10 +143,7 @@ export default function App() {
       {view.type === "board" && (
         <ArticleList
           boardName={view.name}
-          onBack={() => {
-            client?.send("\x1b[D");
-            setView({ type: "home" });
-          }}
+          onBack={() => setView({ type: "home" })}
           onSelectArticle={(index) =>
             setView({ type: "article", board: view.name, index })
           }
@@ -158,10 +155,7 @@ export default function App() {
         <Article
           boardName={view.board}
           articleIndex={view.index}
-          onBack={() => {
-            client?.send("\x1b[D");
-            setView({ type: "board", name: view.board });
-          }}
+          onBack={() => setView({ type: "board", name: view.board })}
           mockArticle={isPreview ? MOCK_ARTICLE : undefined}
         />
       )}

@@ -23,6 +23,8 @@ export function LoginModal({ pttState, wsStatus }: Props) {
   const [password, setPassword] = useState("");
   const client = usePttSocketStore((s) => s.client);
   const setPttState = usePttSocketStore((s) => s.setPttState);
+  const loginError = usePttSocketStore((s) => s.loginError);
+  const setLoginError = usePttSocketStore((s) => s.setLoginError);
 
   const isOpen = pttState === "need_login";
   const isLoggingIn = pttState === "logging_in" || pttState === "waiting_auth";
@@ -44,10 +46,12 @@ export function LoginModal({ pttState, wsStatus }: Props) {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim()) return;
+    setLoginError(null);
     submitLogin(username.trim(), password);
   };
 
   const handleGuest = () => {
+    setLoginError(null);
     submitLogin("guest", "");
   };
 
@@ -173,6 +177,11 @@ export function LoginModal({ pttState, wsStatus }: Props) {
           </div>
         ) : (
           <form onSubmit={handleLogin} className="space-y-4">
+            {loginError && (
+              <div className="rounded-lg border border-amber-700/60 bg-amber-950/40 px-4 py-2.5 text-sm text-amber-300">
+                {loginError}
+              </div>
+            )}
             <div>
               <label className="block text-sm text-gray-400 mb-1">帳號</label>
               <input

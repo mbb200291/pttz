@@ -2,7 +2,8 @@
  * ArticleList — 看板文章列表
  */
 
-import { useEffect, useRef } from "react";
+import type { MouseEvent } from "react";
+import { useRef } from "react";
 import { useBoard } from "../hooks/useBoard";
 import type { ArticleSummary } from "../lib/ptt/parser";
 
@@ -36,14 +37,20 @@ function ArticleRow({
   onClick,
 }: {
   article: ArticleSummary;
-  onClick: () => void;
+  onClick: (index: number) => void;
 }) {
   const isRe = article.title.startsWith("Re:");
   const isDeleted = article.title.includes("(已被刪除)");
+  const handleClick = (event: MouseEvent<HTMLButtonElement>) => {
+    const nextIndex = Number(event.currentTarget.dataset.articleIndex);
+    onClick(Number.isNaN(nextIndex) ? article.index : nextIndex);
+  };
 
   return (
     <button
-      onClick={onClick}
+      type="button"
+      data-article-index={article.index}
+      onClick={handleClick}
       disabled={isDeleted}
       className={`w-full text-left px-4 py-3 border-b border-gray-800 hover:bg-gray-800 transition-colors flex items-baseline gap-3 ${
         isDeleted ? "opacity-40 cursor-not-allowed" : ""
@@ -88,20 +95,6 @@ export function ArticleList({
   const handleLoadMore = onMockLoadMore ?? loadMore;
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // 無限捲動：到底時自動載入更多
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && !loading) {
-          handleLoadMore();
-        }
-      },
-      { threshold: 0.1 },
-    );
-    if (bottomRef.current) observer.observe(bottomRef.current);
-    return () => observer.disconnect();
-  }, [loading, handleLoadMore]);
-
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100">
       {/* 頂部 */}
@@ -123,7 +116,7 @@ export function ArticleList({
           <ArticleRow
             key={a.index}
             article={a}
-            onClick={() => onSelectArticle(a.index)}
+            onClick={onSelectArticle}
           />
         ))}
       </div>

@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import type { Plugin } from 'vite'
 import { WebSocket as WsNode, WebSocketServer } from 'ws'
 import type { Duplex } from 'stream'
+import { nodePolyfills } from 'vite-plugin-node-polyfills'
 
 /**
  * 在 Vite dev server 上攔截 /ptt-ws 的 WebSocket upgrade，
@@ -53,6 +54,14 @@ function pttWsPlugin(): Plugin {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
+    nodePolyfills({
+      globals: {
+        Buffer: true,
+        global: true,
+        process: true,
+      },
+      protocolImports: true,
+    }),
     react(),
     tailwindcss(),
     pttWsPlugin(),
