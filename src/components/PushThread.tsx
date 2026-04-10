@@ -1,10 +1,11 @@
 /**
  * PushThread — 推文討論串
  *
- * 第一層推文直接列出；有 replyTo 的嵌套推文縮排顯示在父推文下方。
+ * 第一層推文以卡片式顯示；有 replyTo 的嵌套推文顯示在父推文下。
  */
 
 import type { AggregatedPush } from "../lib/ptt/pushAggregator";
+import type { ArticleEditNote } from "../lib/ptt/parser";
 
 interface PushItemProps {
   push: AggregatedPush;
@@ -13,73 +14,148 @@ interface PushItemProps {
 }
 
 function PushBadge({ type }: { type: AggregatedPush["type"] }) {
-  if (type === "push")
-    return <span className="mr-1 text-xs font-bold text-green-400">推</span>;
-  if (type === "boo")
-    return <span className="mr-1 text-xs font-bold text-red-400">噓</span>;
-  return <span className="mr-1 text-xs text-gray-400">→</span>;
+  if (type === "edit") {
+    return (
+      <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-bold text-amber-300">
+        編
+      </span>
+    );
+  }
+  if (type === "push") {
+    return (
+      <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-bold text-green-300">
+        推
+      </span>
+    );
+  }
+  if (type === "boo") {
+    return (
+      <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-xs font-bold text-red-300">
+        噓
+      </span>
+    );
+  }
+  return (
+    <span className="rounded-full bg-gray-700/70 px-2 py-0.5 text-xs text-gray-300">
+      →
+    </span>
+  );
 }
 
 function ScoreBadge({ score }: { score: number }) {
   if (score === 0) return null;
   const color = score > 0 ? "text-green-400" : "text-red-400";
   const sign = score > 0 ? "+" : "";
+  return <span className={`text-xs font-medium ${color}`}>{sign}{score}</span>;
+}
+
+function EditNoteBlock({ note }: { note: ArticleEditNote }) {
   return (
-    <span className={`ml-1 text-xs ${color}`}>
-      ({sign}
-      {score})
-    </span>
+    <div className="rounded-xl border border-gray-700/80 bg-gray-950/40 px-3 py-2 text-xs leading-5 text-gray-400">
+      <div className="mb-1 font-medium text-gray-500">
+        {note.marker.trim()}
+      </div>
+      <p className="whitespace-pre-wrap break-words text-gray-300">
+        {note.content}
+      </p>
+    </div>
   );
 }
 
 function PushItem({ push, children = [], depth = 0 }: PushItemProps) {
-  const indent = depth * 16; // px
+  const visualDepth = Math.min(depth, 3);
+  const indent = visualDepth * 20;
+  const ipLabel =
+    push.ipAddresses.length === 0 ? null : push.ipAddresses.join(", ");
+  const isEditNode = push.type === "edit";
 
   return (
-    <div
-      style={{ marginLeft: indent }}
-      className="border-l border-gray-700 pl-2 my-1"
-    >
-      <div className="flex items-start gap-1 text-sm">
-        <PushBadge type={push.type} />
-        <span className="font-semibold text-sky-300 whitespace-nowrap">
-          {push.author}
-          {push.isOP && (
-            <span className="ml-1 text-xs text-yellow-400">[OP]</span>
-          )}
-        </span>
-        <span className="text-gray-300 flex-1 break-words">{push.content}</span>
-        <ScoreBadge score={push.score} />
-        <span className="text-xs text-gray-500 whitespace-nowrap shrink-0">
-          {push.time}
-        </span>
+    <div style={{ marginLeft: indent }} className="relative">
+      {depth > 0 && (
+        <div className="absolute bottom-0 left-0 top-0 w-px bg-gray-700/70" />
+      )}
+
+      <div
+        className={`rounded-2xl border px-4 py-3 shadow-sm ${
+          isEditNode
+            ? "border-amber-500/30 bg-amber-500/5"
+            : depth === 0
+            ? "border-gray-700 bg-gray-800/80"
+            : depth <= 3
+              ? "border-gray-800 bg-gray-900/85"
+              : "border-gray-800/90 bg-gray-950/90"
+        }`}
+      >
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <PushBadge type={push.type} />
+            <div className="group relative min-w-0">
+              <span className="truncate text-sm font-semibold text-sky-300">
+                {push.author}
+              </span>
+              {ipLabel && (
+                <div className="pointer-events-none absolute left-0 top-full z-10 mt-2 hidden whitespace-nowrap rounded-lg border border-gray-700 bg-gray-950 px-2 py-1 text-xs text-gray-300 shadow-lg group-hover:block">
+                  {ipLabel}
+                </div>
+              )}
+            </div>
+            {push.isOP && (
+              <span className="rounded-full border border-yellow-500/30 bg-yellow-500/10 px-2 py-0.5 text-[11px] font-medium text-yellow-300">
+                OP
+              </span>
+            )}
+            {!isEditNode && <ScoreBadge score={push.score} />}
+            {push.marker && (
+              <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-300">
+                {push.marker.trim()}
+              </span>
+            )}
+          </div>
+          {push.time ? (
+            <span className="shrink-0 text-xs text-gray-500">{push.time}</span>
+          ) : null}
+        </div>
+
+        <div className="pl-1">
+          <p className="whitespace-pre-wrap break-words text-sm leading-6 text-gray-200">
+            {push.content}
+          </p>
+        </div>
+
+        {children.length > 0 && (
+          <div className="mt-3 space-y-2 border-t border-gray-800/80 pt-3">
+            {children.map((child) => (
+              <PushItem key={child.id} push={child} depth={depth + 1} />
+            ))}
+          </div>
+        )}
       </div>
-      {children.map((child) => (
-        <PushItem key={child.id} push={child} depth={depth + 1} />
-      ))}
     </div>
   );
 }
 
 interface PushThreadProps {
   pushes: AggregatedPush[];
+  articleNotes?: ArticleEditNote[];
   score: number;
 }
 
-export function PushThread({ pushes, score }: PushThreadProps) {
-  // 建立 parent id → children 的映射
+export function PushThread({
+  pushes,
+  articleNotes = [],
+  score,
+}: PushThreadProps) {
   const childrenMap = new Map<string, AggregatedPush[]>();
-  for (const p of pushes) {
-    if (p.replyTo) {
-      const list = childrenMap.get(p.replyTo) ?? [];
-      list.push(p);
-      childrenMap.set(p.replyTo, list);
+  for (const push of pushes) {
+    if (push.replyTo) {
+      const list = childrenMap.get(push.replyTo) ?? [];
+      list.push(push);
+      list.sort((a, b) => a.anchorOrder - b.anchorOrder);
+      childrenMap.set(push.replyTo, list);
     }
   }
 
-  // 只取第一層（replyTo === null）
-  const topLevel = pushes.filter((p) => p.replyTo === null);
-
+  const topLevel = pushes.filter((push) => push.replyTo === null);
   const scoreColor =
     score > 0 ? "text-green-400" : score < 0 ? "text-red-400" : "text-gray-400";
   const scoreLabel =
@@ -90,18 +166,36 @@ export function PushThread({ pushes, score }: PushThreadProps) {
         : `${score > 0 ? "+" : ""}${score}`;
 
   return (
-    <div className="mt-4 border-t border-gray-700 pt-4">
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-sm font-semibold text-gray-300">推文</span>
-        <span className={`text-sm font-bold ${scoreColor}`}>{scoreLabel}</span>
-        <span className="text-xs text-gray-500">({topLevel.length} 則)</span>
+    <div className="mt-10 border-t border-gray-700 pt-6">
+      <div className="mb-4 flex items-center gap-3">
+        <span className="text-sm font-semibold tracking-wide text-gray-300">
+          討論串
+        </span>
+        <span
+          className={`rounded-full border border-current/20 px-2.5 py-1 text-sm font-bold ${scoreColor}`}
+        >
+          {scoreLabel}
+        </span>
+        <span className="text-xs text-gray-500">({topLevel.length} 則第一層回覆)</span>
       </div>
-      <div className="space-y-0.5">
-        {topLevel.map((p) => (
+
+      {articleNotes.length > 0 && (
+        <div className="mb-4 space-y-2 rounded-2xl border border-gray-700/70 bg-gray-900/60 p-3">
+          <div className="text-xs font-semibold tracking-wide text-gray-400">
+            文章編輯註記
+          </div>
+          {articleNotes.map((note, index) => (
+            <EditNoteBlock key={`article-note-${index}`} note={note} />
+          ))}
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {topLevel.map((push) => (
           <PushItem
-            key={p.id}
-            push={p}
-            children={childrenMap.get(p.id) ?? []}
+            key={push.id}
+            push={push}
+            children={childrenMap.get(push.id) ?? []}
             depth={0}
           />
         ))}

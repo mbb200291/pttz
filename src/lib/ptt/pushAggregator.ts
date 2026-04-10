@@ -9,7 +9,12 @@
  * 5. 計算每則聚合推文的 score（其嵌套回覆中 push - boo）
  */
 
-import type { RawPush, PushType } from "./parser";
+import type { ArticleEditNote, RawPush, PushType } from "./parser";
+
+type AnchoredRawPush = RawPush & {
+  anchorOffset?: number;
+  rawFloor?: number;
+};
 
 export interface AggregatedPush {
   id: string;
@@ -17,10 +22,19 @@ export interface AggregatedPush {
   author: string;
   content: string;
   time: string;
+  ipAddresses: string[];
   isOP: boolean;
   replyTo: string | null; // 被回覆推文的 id
   score: number; // 此推文收到的嵌套 push - boo
   floorNumber: number; // 在第一層的樓層號（0-indexed），嵌套推文繼承父層
+  anchorOrder: number;
+  sourceFloors: number[];
+  marker?: string;
+}
+
+export interface AggregatedThread {
+  pushes: AggregatedPush[];
+  articleNotes: ArticleEditNote[];
 }
 
 // PTT 推文欄位最大 byte 寬度（Big5 中文 2 bytes/字）
@@ -62,20 +76,21 @@ function timeDiffMinutes(t1: string, t2: string): number {
 // ─── 合併群組 ─────────────────────────────────────────────────────────────────
 
 interface PushGroup {
-  pushes: RawPush[]; // 要合併在一起的原始推文
+  pushes: AnchoredRawPush[]; // 要合併在一起的原始推文
+  anchorOrder: number;
 }
 
 /**
  * 第一步：將原始推文分群（同作者可合併者放在同一群）
  */
-function groupPushes(rawPushes: RawPush[]): PushGroup[] {
+function groupPushes(rawPushes: AnchoredRawPush[]): PushGroup[] {
   const groups: PushGroup[] = [];
 
   for (let i = 0; i < rawPushes.length; i++) {
     const cur = rawPushes[i];
 
     if (groups.length === 0) {
-      groups.push({ pushes: [cur] });
+      groups.push({ pushes: [cur], anchorOrder: cur.anchorOffset ?? i });
       continue;
     }
 
@@ -90,7 +105,7 @@ function groupPushes(rawPushes: RawPush[]): PushGroup[] {
 
     if (sameAuthorGroupIdx === -1) {
       // 從未出現過此作者
-      groups.push({ pushes: [cur] });
+      groups.push({ pushes: [cur], anchorOrder: cur.anchorOffset ?? i });
       continue;
     }
 
@@ -105,6 +120,7 @@ function groupPushes(rawPushes: RawPush[]): PushGroup[] {
 
     if (isConsecutive) {
       sameGroup.pushes.push(cur);
+      sameGroup.anchorOrder = cur.anchorOffset ?? i;
       continue;
     }
 
@@ -112,14 +128,15 @@ function groupPushes(rawPushes: RawPush[]): PushGroup[] {
     const allPrevFull = sameGroup.pushes.every((p) => isFull(p.content));
     const lastContent = lastPush.content;
     const noEndPeriod =
-      !lastContent.endsWith("。") && !lastContent.endsWith(".");
+      !/[。.!?！？]$/u.test(lastContent);
     const timeOk =
       timeDiffMinutes(lastPush.time, cur.time) <= TIME_GAP_MINUTES;
 
     if (allPrevFull && noEndPeriod && timeOk) {
       sameGroup.pushes.push(cur);
+      sameGroup.anchorOrder = cur.anchorOffset ?? i;
     } else {
-      groups.push({ pushes: [cur] });
+      groups.push({ pushes: [cur], anchorOrder: cur.anchorOffset ?? i });
     }
   }
 
@@ -131,7 +148,7 @@ function groupPushes(rawPushes: RawPush[]): PushGroup[] {
 const REPLY_RE = /^回(\d+)樓[：:]/;
 
 interface ReplyInfo {
-  targetFloor: number; // 要回覆的樓層（1-indexed，對應第一層的 floorNumber+1）
+  targetFloor: number; // 要回覆的原始樓號（一行一樓）
   strippedContent: string; // 移除「回x樓：」後的內容
 }
 
@@ -147,9 +164,10 @@ function detectReply(content: string): ReplyInfo | null {
 // ─── 主要匯出 ─────────────────────────────────────────────────────────────────
 
 export function aggregatePushes(
-  rawPushes: RawPush[],
+  rawPushes: AnchoredRawPush[],
   articleAuthor: string,
-): AggregatedPush[] {
+  editNotes: ArticleEditNote[] = [],
+): AggregatedThread {
   // Step 1：分群
   const groups = groupPushes(rawPushes);
 
@@ -161,6 +179,9 @@ export function aggregatePushes(
     const rep = g.pushes[0]; // 代表型別與作者取第一則
     const mergedContent = g.pushes.map((p) => p.content).join("");
     const lastTime = g.pushes[g.pushes.length - 1].time;
+    const ipAddresses = Array.from(
+      new Set(g.pushes.map((p) => p.ipAddress).filter(Boolean)),
+    ) as string[];
 
     firstLayer.push({
       id: `push-${i}`,
@@ -168,10 +189,13 @@ export function aggregatePushes(
       author: rep.author,
       content: mergedContent,
       time: lastTime,
+      ipAddresses,
       isOP: rep.author === articleAuthor,
       replyTo: null,
       score: 0,
       floorNumber: i, // 暫定，後面篩掉嵌套後重排
+      anchorOrder: g.anchorOrder,
+      sourceFloors: g.pushes.map((push, index) => push.rawFloor ?? i + index + 1),
     });
   }
 
@@ -182,9 +206,9 @@ export function aggregatePushes(
   for (const p of firstLayer) {
     const reply = detectReply(p.content);
     if (reply) {
-      // 找到對應的第一層推文 id
-      const targetIdx = reply.targetFloor - 1; // floor 是 0-indexed
-      const target = topLevel[targetIdx];
+      const target = firstLayer.find((candidate) =>
+        candidate.sourceFloors.includes(reply.targetFloor),
+      );
       p.replyTo = target ? target.id : null;
       p.content = reply.strippedContent;
       p.floorNumber = target ? target.floorNumber : floor;
@@ -207,7 +231,52 @@ export function aggregatePushes(
     p.score = scoreMap.get(p.id) ?? 0;
   }
 
-  return firstLayer;
+  const articleNotes: ArticleEditNote[] = [];
+  const sortedEditNotes = [...editNotes].sort((a, b) => {
+    return a.contentAnchorOffset - b.contentAnchorOffset;
+  });
+  const threadPushes = [...firstLayer];
+
+  for (const note of sortedEditNotes) {
+    let target: AggregatedPush | undefined;
+    let targetOrder = -Infinity;
+
+    for (let i = 0; i < firstLayer.length; i += 1) {
+      const candidate = firstLayer[i];
+      if (
+        candidate.anchorOrder < note.contentAnchorOffset &&
+        candidate.anchorOrder > targetOrder
+      ) {
+        target = candidate;
+        targetOrder = candidate.anchorOrder;
+      }
+    }
+
+    if (target) {
+      threadPushes.push({
+        id: `edit-${threadPushes.length}`,
+        type: "edit",
+        author: articleAuthor,
+        content: note.content,
+        time: "",
+        ipAddresses: [],
+        isOP: true,
+        replyTo: target.id,
+        score: 0,
+        floorNumber: target.floorNumber,
+        anchorOrder: note.contentAnchorOffset,
+        sourceFloors: [],
+        marker: note.marker,
+      });
+    } else {
+      articleNotes.push(note);
+    }
+  }
+
+  return {
+    pushes: threadPushes,
+    articleNotes,
+  };
 }
 
 /**

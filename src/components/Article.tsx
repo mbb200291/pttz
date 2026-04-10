@@ -84,7 +84,11 @@ export function Article({
             </pre>
 
             {/* 推文討論串 */}
-            <PushThread pushes={article.pushes} score={article.score} />
+            <PushThread
+              pushes={article.pushes}
+              articleNotes={article.articleNotes}
+              score={article.score}
+            />
           </>
         )}
       </div>

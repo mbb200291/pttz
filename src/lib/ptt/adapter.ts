@@ -6,10 +6,13 @@ import {
   type AggregatedPush,
 } from "./pushAggregator";
 import {
+  extractArticleThreadEvents,
   parsePushBuffer,
   splitArticleBody,
   stripAnsi,
+  type ArticleEditNote,
   type ArticleSummary,
+  type RawPush,
 } from "./parser";
 
 export type ConnectionStatus =
@@ -45,6 +48,7 @@ export interface AdapterArticleData {
   board: string;
   body: string;
   pushes: AggregatedPush[];
+  articleNotes: ArticleEditNote[];
   score: number;
 }
 
@@ -397,6 +401,179 @@ function normalizeText(raw: string): string {
   return stripAnsi(raw).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 }
 
+type AnchoredRawPush = RawPush & {
+  anchorOffset: number;
+  rawFloor: number;
+};
+
+type RawLineWithOffset = {
+  line: string;
+  start: number;
+  end: number;
+  lineEnd: number;
+};
+
+function splitRawLinesWithOffsets(raw: string): RawLineWithOffset[] {
+  const lines: RawLineWithOffset[] = [];
+
+  if (raw.length === 0) {
+    return [{ line: "", start: 0, end: 0, lineEnd: 0 }];
+  }
+
+  let start = 0;
+  while (start < raw.length) {
+    let end = start;
+    while (end < raw.length && raw[end] !== "\n" && raw[end] !== "\r") {
+      end += 1;
+    }
+
+    let lineEnd = end;
+    if (end < raw.length) {
+      if (raw[end] === "\r" && raw[end + 1] === "\n") {
+        lineEnd = end + 2;
+      } else {
+        lineEnd = end + 1;
+      }
+    }
+
+    lines.push({ line: raw.slice(start, end), start, end, lineEnd });
+
+    if (end >= raw.length) break;
+    if (raw[end] === "\r" && raw[end + 1] === "\n") {
+      start = end + 2;
+    } else {
+      start = end + 1;
+    }
+  }
+
+  return lines;
+}
+
+function isPushLine(line: string): boolean {
+  return /^[推噓→]\s+\S{2,12}:/u.test(stripAnsi(line).trimStart());
+}
+
+function isEditNoteLine(line: string): boolean {
+  return /^※\s*編輯:/u.test(stripAnsi(line).trimStart());
+}
+
+function findPushMarkerRawOffsets(raw: string): number[] {
+  const visibleChars: Array<{ char: string; rawIndex: number }> = [];
+
+  for (let rawIndex = 0; rawIndex < raw.length; ) {
+    if (raw[rawIndex] === "\x1b" && raw[rawIndex + 1] === "[") {
+      rawIndex += 2;
+      while (rawIndex < raw.length) {
+        const code = raw.charCodeAt(rawIndex);
+        rawIndex += 1;
+        if (code >= 0x40 && code <= 0x7e) break;
+      }
+      continue;
+    }
+
+    const char = raw[rawIndex];
+    if (char === "\b") {
+      while (
+        visibleChars.length > 0 &&
+        visibleChars[visibleChars.length - 1].char === " "
+      ) {
+        visibleChars.pop();
+      }
+      rawIndex += 1;
+      continue;
+    }
+
+    visibleChars.push({ char, rawIndex });
+    rawIndex += 1;
+  }
+
+  const visible = visibleChars.map((entry) => entry.char).join("");
+  const markerRe = /[推噓→]\s+\S{2,12}:/gu;
+  const offsets: number[] = [];
+
+  for (const match of visible.matchAll(markerRe)) {
+    if (match.index === undefined) continue;
+    offsets.push(visibleChars[match.index]?.rawIndex ?? 0);
+  }
+
+  return offsets;
+}
+
+function collectAnchoredPushes(raw: string): AnchoredRawPush[] {
+  const lines = splitRawLinesWithOffsets(raw);
+  const pushes: AnchoredRawPush[] = [];
+  let rawFloor = 1;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const current = lines[index];
+    if (!isPushLine(current.line)) continue;
+
+    let end = current.lineEnd;
+    let cursor = index + 1;
+
+    while (cursor < lines.length) {
+      const next = lines[cursor];
+      if (isPushLine(next.line) || isEditNoteLine(next.line)) break;
+      end = next.lineEnd;
+      cursor += 1;
+    }
+
+    const parsedPushes = parsePushBuffer(raw.slice(current.start, end));
+    const anchorOffsets = findPushMarkerRawOffsets(raw.slice(current.start, end));
+
+    for (let pushIndex = 0; pushIndex < parsedPushes.length; pushIndex += 1) {
+      const parsed = parsedPushes[pushIndex];
+      pushes.push({
+        ...parsed,
+        anchorOffset: current.start + (anchorOffsets[pushIndex] ?? 0),
+        rawFloor,
+      });
+      rawFloor += 1;
+    }
+
+    index = cursor - 1;
+  }
+
+  return pushes;
+}
+
+function stripFallbackEditContentFromPushParsing(
+  raw: string,
+  editNotes: ArticleEditNote[],
+): string {
+  if (editNotes.length === 0) return raw;
+
+  const chars = raw.split("");
+
+  for (const note of editNotes) {
+    if (note.contentAnchorOffset >= note.markerOffset) continue;
+
+    for (let index = note.contentAnchorOffset; index < note.markerOffset; index += 1) {
+      if (chars[index] !== "\n" && chars[index] !== "\r") {
+        chars[index] = " ";
+      }
+    }
+  }
+
+  return chars.join("");
+}
+
+function buildArticleThread(rawFull: string, author: string) {
+  const editNotes = extractArticleThreadEvents(rawFull).editNotes;
+  const pushParsingRaw = stripFallbackEditContentFromPushParsing(rawFull, editNotes);
+  const thread = aggregatePushes(
+    collectAnchoredPushes(pushParsingRaw),
+    author,
+    editNotes,
+  );
+
+  return {
+    pushes: thread.pushes,
+    articleNotes: thread.articleNotes,
+    score: calcArticleScore(thread.pushes),
+  };
+}
+
 export function parseArticleHeaderBlock(body: string): {
   author: string;
   title: string;
@@ -468,7 +645,7 @@ export async function fetchArticleFromBot(
       const author = parsed.author || article.author?.trim() || "";
       const title = parsed.title || article.title?.trim() || "";
       const date = parsed.date || article.timestamp?.trim() || "";
-      const pushes = aggregatePushes(parsePushBuffer(rawFull), author);
+      const thread = buildArticleThread(rawFull, author);
 
       return {
         title,
@@ -476,8 +653,9 @@ export async function fetchArticleFromBot(
         date,
         board: parsed.board || article.boardname?.trim() || boardName,
         body: parsed.content,
-        pushes,
-        score: calcArticleScore(pushes),
+        pushes: thread.pushes,
+        articleNotes: thread.articleNotes,
+        score: thread.score,
       };
     } finally {
       if (originalEnterIndex) {
@@ -504,7 +682,7 @@ export async function fetchArticleFromBot(
   const author = parsed.author;
   const title = parsed.title;
   const date = parsed.date;
-  const pushes = aggregatePushes(parsePushBuffer(rawFull), author);
+  const thread = buildArticleThread(rawFull, author);
 
   return {
     title,
@@ -512,7 +690,8 @@ export async function fetchArticleFromBot(
     date,
     board: parsed.board || boardName,
     body: parsed.content,
-    pushes,
-    score: calcArticleScore(pushes),
+    pushes: thread.pushes,
+    articleNotes: thread.articleNotes,
+    score: thread.score,
   };
 }

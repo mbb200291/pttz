@@ -7,6 +7,7 @@
 import { useState, useEffect } from "react";
 import { usePttSocketStore } from "./usePttSocket";
 import type { AggregatedPush } from "../lib/ptt/pushAggregator";
+import type { ArticleEditNote } from "../lib/ptt/parser";
 
 export interface ArticleData {
   title: string;
@@ -15,6 +16,7 @@ export interface ArticleData {
   board: string;
   body: string;
   pushes: AggregatedPush[];
+  articleNotes: ArticleEditNote[];
   score: number;
 }
 
