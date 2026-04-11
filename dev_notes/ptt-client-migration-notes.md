@@ -1,4 +1,4 @@
-# 2026-04-09 ptt-client 遷移筆記
+# ptt-client 遷移筆記
 
 這份文件記錄這次把 PTT 存取層從「自寫 terminal parser/state machine」遷移到 `ptt-client` 過程中，實際踩過的坑、最後採用的解法，以及目前專案所處的狀態。
 

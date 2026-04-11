@@ -41,6 +41,7 @@ PTTzzz 是一個純前端的 PTT 閱讀器。
 2. PTT terminal snapshot 狀態觀察
 3. 看板列表與文章資料映射
 4. bot 命令序列化，避免競態
+5. 文章 debug dump 產生，協助定位真站解析問題
 
 ### 2. 狀態橋接層
 
@@ -53,8 +54,14 @@ PTTzzz 是一個純前端的 PTT 閱讀器。
 3. credentials
 4. login error
 5. recent terminal buffer
+6. 是否中斷其他重複登入連線的使用者選項
 
 這層的角色是「UI 狀態轉接」，不是直接做 terminal parser。
+
+登入安全預設：
+
+1. 預設保留其他已登入的 PTT 連線
+2. 只有使用者明確勾選「中斷其他連線」時，才會在 PTT 重複登入提示回答是
 
 ### 3. 看板與文章資料層
 
@@ -69,6 +76,8 @@ PTTzzz 是一個純前端的 PTT 閱讀器。
 1. 讀單篇文章
 2. 取得正文
 3. 取得聚合後推文
+4. 取得文章層級編輯紀錄
+5. 在 dev 環境提供目前文章 debug dump
 
 ### 4. 推文聚合層
 
@@ -76,12 +85,17 @@ PTTzzz 是一個純前端的 PTT 閱讀器。
 
 目前已實作：
 
-1. 同作者連續推文合併
-2. 同作者非連續但符合條件時合併
-3. `回x樓：` 巢狀識別
-4. OP 標示
-5. 第一層文章總分計算
-6. 單則聚合推文的 score 計算
+1. 同作者臨近推文聚合
+2. 不連續但時間間隔小於等於 5 分鐘時的同作者推文聚合
+3. 回文終止符與 `||` 串接符號判斷
+4. 依 raw line spacing 判斷滿行，決定聚合後直接接續或保留換行
+5. `回x樓` 巢狀識別
+6. 原始 PTT 樓號與聚合後 reply id 的對應
+7. 自己回自己與不存在樓層的防護
+8. OP 標示
+9. 文章層級編輯紀錄與作者編輯補充 reply
+10. 第一層文章總分計算
+11. 單則聚合推文的 score 計算
 
 ### 5. UI 呈現層
 
@@ -99,6 +113,7 @@ PTTzzz 是一個純前端的 PTT 閱讀器。
 2. 看板閱讀
 3. 文章閱讀
 4. 討論串顯示
+5. 回文 score、IP、OP、作者編輯標籤
 
 做成穩定可用版本。
 
@@ -113,7 +128,11 @@ PTTzzz 是一個純前端的 PTT 閱讀器。
 5. 推文解析
 6. 推文聚合與巢狀顯示
 7. 原發文者標示
-8. 基本的看板與文章閱讀 UI
+8. 文章編輯紀錄顯示
+9. 作者編輯補充回覆顯示
+10. 回文 score 顯示
+11. 回文 IP 直接顯示
+12. 基本的看板與文章閱讀 UI
 
 ## 目前保留的舊程式邏輯
 
@@ -125,7 +144,9 @@ PTTzzz 是一個純前端的 PTT 閱讀器。
 2. `parsePushLine`
 3. `parsePushBuffer`
 4. `splitArticleBody`
-5. 共用型別
+5. `extractArticleThreadEvents`
+6. 推文滿行 metadata
+7. 共用型別
 
 也就是說，現在專案不再依賴舊的 terminal session parser，但仍沿用少量字串解析工具。
 
@@ -148,6 +169,7 @@ PTTzzz 是一個純前端的 PTT 閱讀器。
 3. 推文聚合規則目前是 heuristic，不是完整語意解析
 4. `ptt-client` 與瀏覽器整合仍偏脆弱，需要 adapter 層保護
 5. UI 已可用，但仍屬第一版，不是完整產品化狀態
+6. `ptt-client.getArticle()` 是否在所有熱門文章都能完整取回全部推文，仍需持續用 debug dump 驗證
 
 ## 開發狀態
 
@@ -159,12 +181,15 @@ PTTzzz 是一個純前端的 PTT 閱讀器。
 4. 討論串 UI
 5. 真站登入與閱讀驗證
 6. 舊 terminal 架構清理
+7. dev-only 文章 debug dump
+8. 登入時中斷其他連線改為使用者 opt-in
 
 ### 正在維護
 
 1. adapter 穩定性
 2. 文章與推文解析正確率
 3. 前端閱讀體驗
+4. 實站特殊推文格式的 parser / aggregator case
 
 ### 尚未開始
 
@@ -178,4 +203,6 @@ PTTzzz 是一個純前端的 PTT 閱讀器。
 
 目前主要筆記：
 
-1. [2026-04-09-ptt-client-migration-notes.md](/Users/linbangqi/pttzzz/dev_notes/2026-04-09-ptt-client-migration-notes.md)
+1. [ptt-client-migration-notes.md](/Users/linbangqi/pttzzz/dev_notes/ptt-client-migration-notes.md)
+2. [goal-3-implementation-plan.md](/Users/linbangqi/pttzzz/dev_notes/goal-3-implementation-plan.md)
+3. [goal-3-implementation-notes.md](/Users/linbangqi/pttzzz/dev_notes/goal-3-implementation-notes.md)
