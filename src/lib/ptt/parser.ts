@@ -49,6 +49,7 @@ export interface RawPush {
   content: string;
   ipAddress?: string;
   time: string;
+  isFullWidthLine?: boolean;
 }
 
 export interface ArticleEditRecord {
@@ -97,6 +98,27 @@ export function parsePushLine(line: string): RawPush | null {
   return { type, author, content, time };
 }
 
+function countTrailingSpaces(value: string): number {
+  const match = value.match(/[ \u3000]*$/u);
+  return match?.[0].length ?? 0;
+}
+
+function isFullWidthPushRemainder(
+  remainder: string,
+  timeStartIndex: number,
+): boolean {
+  const beforeTime = remainder.slice(0, timeStartIndex);
+  const ipMatch = beforeTime.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b\s*$/u);
+  const contentField = ipMatch?.index === undefined
+    ? beforeTime
+    : beforeTime.slice(0, ipMatch.index);
+  const content = contentField.trimEnd();
+
+  if (content.length === 0) return false;
+
+  return countTrailingSpaces(contentField) <= 3;
+}
+
 export function parsePushBuffer(raw: string): RawPush[] {
   const plain = stripAnsi(raw)
     .replace(/\r\n/g, "\n")
@@ -142,7 +164,14 @@ export function parsePushBuffer(raw: string): RawPush[] {
     const normalized = `${marker} ${author}: ${content} ${timeMatch[1]}`;
     const parsed = parsePushLine(normalized);
     if (parsed) {
-      pushes.push({ ...parsed, ipAddress });
+      pushes.push({
+        ...parsed,
+        ipAddress,
+        isFullWidthLine: isFullWidthPushRemainder(
+          remainder,
+          timeMatch.index,
+        ),
+      });
     }
   }
 

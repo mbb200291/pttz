@@ -3,7 +3,7 @@
  *
  * 依照 idea.md 的規則：
  * 1. 同作者推文在前一則可續接時合併
- * 2. 可續接條件：塞滿且未用終止符，或以 || 明確標記續接
+ * 2. 可續接條件：未用終止符，或以 || 明確標記續接
  * 3. 「回x樓：...」識別為嵌套回覆
  * 4. 原 po 回覆標示 isOP
  * 5. 計算每則聚合推文的 score（其嵌套回覆中 push - boo）
@@ -42,8 +42,8 @@ export interface AggregatedThread {
   articleNotes: ArticleEditRecord[];
 }
 
-// PTT 推文欄位最大 byte 寬度（Big5 中文 2 bytes/字）
-const MAX_PUSH_BYTES = 45;
+// PTT 推文內容區會受作者欄、IP 與時間欄擠壓；約 37 bytes 已會貼近 IP 欄。
+const MIN_FULL_PUSH_BYTES = 37;
 // 同作者不連續但允許合併的最大時間間隔（分鐘）
 const TIME_GAP_MINUTES = 5;
 const CONTINUATION_MARKER_RE = /\|\|\s*$/u;
@@ -62,7 +62,7 @@ function approximateBytes(s: string): number {
 
 /** 判斷此推文內容是否「塞滿」（接近 PTT 推文欄位上限） */
 function isFull(content: string): boolean {
-  return approximateBytes(content) >= MAX_PUSH_BYTES - 2;
+  return approximateBytes(content) >= MIN_FULL_PUSH_BYTES;
 }
 
 function hasContinuationMarker(content: string): boolean {
@@ -70,14 +70,33 @@ function hasContinuationMarker(content: string): boolean {
 }
 
 function stripContinuationMarker(content: string): string {
-  return content.replace(CONTINUATION_MARKER_RE, "");
+  return content.replace(CONTINUATION_MARKER_RE, "").trimEnd();
 }
 
-function canContinueFrom(content: string): boolean {
-  if (hasContinuationMarker(content)) return true;
+function isFullPushLine(push: AnchoredRawPush): boolean {
+  const visibleContent = stripContinuationMarker(push.content);
+  return push.isFullWidthLine ?? isFull(visibleContent);
+}
 
-  const visibleContent = stripContinuationMarker(content).trimEnd();
-  return isFull(visibleContent) && !END_TERMINATOR_RE.test(visibleContent);
+function canContinueFromPush(push: AnchoredRawPush): boolean {
+  if (hasContinuationMarker(push.content)) return true;
+
+  const visibleContent = stripContinuationMarker(push.content);
+  return !END_TERMINATOR_RE.test(visibleContent);
+}
+
+function mergePushContents(pushes: AnchoredRawPush[]): string {
+  if (pushes.length === 0) return "";
+
+  let merged = stripContinuationMarker(pushes[0].content);
+  for (let i = 1; i < pushes.length; i += 1) {
+    const previous = pushes[i - 1];
+    const current = stripContinuationMarker(pushes[i].content);
+    const separator = isFullPushLine(previous) ? "" : "\n";
+    merged += `${separator}${current}`;
+  }
+
+  return merged;
 }
 
 /** 解析 "MM/DD HH:mm" → 當年的分鐘數（用於計算時間差） */
@@ -142,7 +161,7 @@ function groupPushes(rawPushes: AnchoredRawPush[]): PushGroup[] {
     const timeOk =
       timeDiffMinutes(lastPush.time, cur.time) <= TIME_GAP_MINUTES;
 
-    if (canContinueFrom(lastPush.content) && (isConsecutive || timeOk)) {
+    if (canContinueFromPush(lastPush) && (isConsecutive || timeOk)) {
       sameGroup.pushes.push(cur);
       sameGroup.anchorOrder = cur.anchorOffset ?? i;
     } else {
@@ -258,9 +277,7 @@ export function aggregatePushes(
   for (let i = 0; i < groups.length; i++) {
     const g = groups[i];
     const rep = g.pushes[0]; // 代表型別與作者取第一則
-    const mergedContent = g.pushes
-      .map((p) => stripContinuationMarker(p.content))
-      .join("");
+    const mergedContent = mergePushContents(g.pushes);
     const lastTime = g.pushes[g.pushes.length - 1].time;
     const ipAddresses = Array.from(
       new Set(g.pushes.map((p) => p.ipAddress).filter(Boolean)),

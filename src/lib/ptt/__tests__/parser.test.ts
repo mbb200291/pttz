@@ -47,14 +47,31 @@ describe("parsePushBuffer", () => {
     );
 
     expect(pushes).toEqual([
-      {
+      expect.objectContaining({
         type: "push",
         author: "user1",
         content: "第一則推文",
         ipAddress: "111.22.33.44",
         time: "04/09 10:01",
-      },
+      }),
     ]);
+  });
+
+  it("marks push lines as visually full when content reaches the IP column", () => {
+    const pushes = parsePushBuffer(
+      "→ neoa01: 新聞：專家：「跑山獸的存在」讓7.5億消   223.136.103.248 04/11 23:01\n→ neoa01: 短句                                    223.136.103.248 04/11 23:02",
+    );
+
+    expect(pushes[0]).toMatchObject({
+      author: "neoa01",
+      content: "新聞：專家：「跑山獸的存在」讓7.5億消",
+      isFullWidthLine: true,
+    });
+    expect(pushes[1]).toMatchObject({
+      author: "neoa01",
+      content: "短句",
+      isFullWidthLine: false,
+    });
   });
 
   it("parses padded author columns before the colon", () => {

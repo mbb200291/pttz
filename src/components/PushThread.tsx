@@ -44,9 +44,21 @@ function PushBadge({ type }: { type: AggregatedPush["type"] }) {
 
 function ScoreBadge({ score }: { score: number }) {
   if (score === 0) return null;
-  const color = score > 0 ? "text-green-400" : "text-red-400";
+  const color =
+    score > 0
+      ? "border-green-500/20 bg-green-500/10 text-green-300"
+      : "border-red-500/20 bg-red-500/10 text-red-300";
+  const label = score > 0 ? "推" : "噓";
   const sign = score > 0 ? "+" : "";
-  return <span className={`text-xs font-medium ${color}`}>{sign}{score}</span>;
+  return (
+    <span
+      title="此回文收到的巢狀推噓分數"
+      className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${color}`}
+    >
+      {label} {sign}
+      {score}
+    </span>
+  );
 }
 
 function PushItem({
@@ -81,14 +93,14 @@ function PushItem({
         <div className="mb-3 flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
             <PushBadge type={push.type} />
-            <div className="group relative min-w-0">
+            <div className="flex min-w-0 items-baseline gap-2">
               <span className="truncate text-sm font-semibold text-sky-300">
                 {push.author}
               </span>
               {ipLabel && (
-                <div className="pointer-events-none absolute left-0 top-full z-10 mt-2 hidden whitespace-nowrap rounded-lg border border-gray-700 bg-gray-950 px-2 py-1 text-xs text-gray-300 shadow-lg group-hover:block">
+                <span className="shrink-0 text-[11px] text-gray-500">
                   {ipLabel}
-                </div>
+                </span>
               )}
             </div>
             {push.isOP && (

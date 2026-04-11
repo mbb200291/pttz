@@ -58,4 +58,84 @@ describe("PushThread", () => {
     expect(html).toContain("OK");
     expect(html).toContain("sure?");
   });
+
+  it("shows reply score on the aggregated reply card", () => {
+    const html = renderToStaticMarkup(
+      <PushThread
+        score={0}
+        pushes={[
+          push({
+            id: "push-0",
+            author: "askz0",
+            content: "Ok?",
+            score: 2,
+            anchorOrder: 10,
+            sourceFloors: [1],
+          }),
+          push({
+            id: "push-1",
+            type: "push",
+            author: "MBB200291",
+            content: "OK",
+            replyTo: "push-0",
+            anchorOrder: 20,
+            sourceFloors: [2],
+          }),
+          push({
+            id: "push-2",
+            type: "push",
+            author: "other",
+            content: "good",
+            replyTo: "push-0",
+            anchorOrder: 30,
+            sourceFloors: [3],
+          }),
+        ]}
+      />,
+    );
+
+    expect(html).toContain("推 +2");
+  });
+
+  it("shows negative reply score as boo count", () => {
+    const html = renderToStaticMarkup(
+      <PushThread
+        score={0}
+        pushes={[
+          push({
+            id: "push-0",
+            author: "askz0",
+            content: "Ok?",
+            score: -1,
+            anchorOrder: 10,
+            sourceFloors: [1],
+          }),
+        ]}
+      />,
+    );
+
+    expect(html).toContain("噓 -1");
+  });
+
+  it("shows reply IP address next to the author without hover", () => {
+    const html = renderToStaticMarkup(
+      <PushThread
+        score={0}
+        pushes={[
+          push({
+            id: "push-0",
+            author: "askz0",
+            content: "Ok?",
+            ipAddresses: ["36.237.166.196"],
+            anchorOrder: 10,
+            sourceFloors: [1],
+          }),
+        ]}
+      />,
+    );
+
+    expect(html).toContain("askz0");
+    expect(html).toContain("36.237.166.196");
+    expect(html).not.toContain("group-hover:block");
+  });
 });

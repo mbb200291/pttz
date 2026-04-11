@@ -34,11 +34,12 @@ describe("單則推文不聚合", () => {
 describe("連續同作者推文合併", () => {
   const full45 = "a".repeat(44);
 
-  it("短的連續同作者推文不自動合併", () => {
-    const raw = [push("alice", "Hello"), push("alice", " World")];
+  it("短的連續同作者推文未用終止符時合併為多行", () => {
+    const raw = [push("alice", "Hello"), push("alice", "World")];
     const thread = aggregatePushes(raw, OP);
     const alicePushes = thread.pushes.filter((r) => r.author === "alice");
-    expect(alicePushes).toHaveLength(2);
+    expect(alicePushes).toHaveLength(1);
+    expect(alicePushes[0].content).toBe("Hello\nWorld");
   });
 
   it("連續同作者且前則塞滿且未用終止符時合併", () => {
@@ -49,41 +50,82 @@ describe("連續同作者推文合併", () => {
     expect(alicePushes[0].content).toBe(`${full45}接續`);
   });
 
+  it("PTT 視覺上貼近 IP 欄的中文推文視為塞滿並合併", () => {
+    const raw = [
+      {
+        ...push("neoa01", "新聞：專家：「跑山獸的存在」讓7.5億消", "04/11 23:01"),
+        isFullWidthLine: true,
+      },
+      push("neoa01", "防計畫像詐騙　林教官神隱5天", "04/11 23:01"),
+    ];
+    const thread = aggregatePushes(raw, OP);
+    const neoaPushes = thread.pushes.filter((r) => r.author === "neoa01");
+
+    expect(neoaPushes).toHaveLength(1);
+    expect(neoaPushes[0].content).toBe(
+      "新聞：專家：「跑山獸的存在」讓7.5億消防計畫像詐騙　林教官神隱5天",
+    );
+  });
+
+  it("parser 標記為未塞滿時，同作者連續合併後保留為獨立行", () => {
+    const raw = [
+      { ...push("neoa01", "短句", "04/11 23:01"), isFullWidthLine: false },
+      push("neoa01", "下一句", "04/11 23:01"),
+    ];
+    const thread = aggregatePushes(raw, OP);
+    const neoaPushes = thread.pushes.filter((r) => r.author === "neoa01");
+
+    expect(neoaPushes).toHaveLength(1);
+    expect(neoaPushes[0].content).toBe("短句\n下一句");
+  });
+
   it("連續同作者且前則以串接符號結尾時合併並移除串接符號", () => {
     const raw = [push("alice", "Hello ||"), push("alice", "World")];
     const thread = aggregatePushes(raw, OP);
     const alicePushes = thread.pushes.filter((r) => r.author === "alice");
     expect(alicePushes).toHaveLength(1);
-    expect(alicePushes[0].content).toBe("Hello World");
+    expect(alicePushes[0].content).toBe("Hello\nWorld");
   });
 
-  it("中間有他人則不連續", () => {
+  it("中間有他人但時間間隔小且前則未用終止符時仍合併", () => {
     const raw = [push("alice", "Hello"), push("bob", "Hi"), push("alice", "World")];
     const thread = aggregatePushes(raw, OP);
-    expect(thread.pushes.filter((r) => r.type !== "edit")).toHaveLength(3);
+    const alicePushes = thread.pushes.filter((r) => r.author === "alice");
+    expect(alicePushes).toHaveLength(1);
+    expect(alicePushes[0].content).toBe("Hello\nWorld");
   });
 });
 
 describe("不連續推文的合併條件", () => {
-  // 塞滿：製造一個接近 45 bytes 的內容
-  const full45 = "a".repeat(44); // 44 ASCII = 44 bytes，算塞滿
+  const full45 = "a".repeat(44);
 
-  it("前則塞滿且無句號且時間間隔小 → 合併", () => {
+  it("前則未用終止符且時間間隔小 → 合併為多行", () => {
+    const raw = [
+      push("alice", "短句", "01/01 12:00"),
+      push("bob", "插入一句"),
+      push("alice", "接續", "01/01 12:03"),
+    ];
+    const result = aggregatePushes(raw, OP).pushes;
+    const alicePushes = result.filter((r) => r.author === "alice");
+    expect(alicePushes).toHaveLength(1);
+    expect(alicePushes[0].content).toBe("短句\n接續");
+  });
+
+  it("前則塞滿且未用終止符時，下一行直接接續該行", () => {
     const raw = [
       push("alice", full45, "01/01 12:00"),
       push("bob", "插入一句"),
       push("alice", "接續", "01/01 12:03"),
     ];
     const result = aggregatePushes(raw, OP).pushes;
-    // alice 的兩則應合併成一則
     const alicePushes = result.filter((r) => r.author === "alice");
     expect(alicePushes).toHaveLength(1);
-    expect(alicePushes[0].content).toBe(full45 + "接續");
+    expect(alicePushes[0].content).toBe(`${full45}接續`);
   });
 
-  it("前則塞滿但結尾是句號 → 不合併", () => {
+  it("前則結尾是終止符 → 不合併", () => {
     const raw = [
-      push("alice", full45 + "。", "01/01 12:00"),
+      push("alice", "短句。", "01/01 12:00"),
       push("bob", "插入"),
       push("alice", "接續", "01/01 12:01"),
     ];
@@ -92,9 +134,9 @@ describe("不連續推文的合併條件", () => {
     expect(alicePushes).toHaveLength(2);
   });
 
-  it("前則塞滿但時間間隔超過 5 分鐘 → 不合併", () => {
+  it("前則未用終止符但時間間隔超過 5 分鐘 → 不合併", () => {
     const raw = [
-      push("alice", full45, "01/01 12:00"),
+      push("alice", "短句", "01/01 12:00"),
       push("bob", "插入"),
       push("alice", "接續", "01/01 12:10"),
     ];
@@ -103,9 +145,9 @@ describe("不連續推文的合併條件", () => {
     expect(alicePushes).toHaveLength(2);
   });
 
-  it("前則塞滿但結尾是驚嘆號或問號 → 不合併", () => {
+  it("前則結尾是驚嘆號或問號 → 不合併", () => {
     const raw = [
-      push("alice", `${full45}!`, "01/01 12:00"),
+      push("alice", "短句!", "01/01 12:00"),
       push("bob", "插入"),
       push("alice", "接續", "01/01 12:01"),
     ];
@@ -113,9 +155,9 @@ describe("不連續推文的合併條件", () => {
     expect(result.filter((r) => r.author === "alice")).toHaveLength(2);
   });
 
-  it("前則塞滿但結尾是分號 → 不合併", () => {
+  it("前則結尾是分號 → 不合併", () => {
     const raw = [
-      push("alice", `${full45}；`, "01/01 12:00"),
+      push("alice", "短句；", "01/01 12:00"),
       push("bob", "插入"),
       push("alice", "接續", "01/01 12:01"),
     ];
@@ -132,7 +174,19 @@ describe("不連續推文的合併條件", () => {
     const result = aggregatePushes(raw, OP).pushes;
     const alicePushes = result.filter((r) => r.author === "alice");
     expect(alicePushes).toHaveLength(1);
-    expect(alicePushes[0].content).toBe("HelloWorld");
+    expect(alicePushes[0].content).toBe("Hello\nWorld");
+  });
+
+  it("前則有終止符但後方有串接符號時仍合併", () => {
+    const raw = [
+      push("alice", "Hello.||", "01/01 12:00"),
+      push("bob", "插入"),
+      push("alice", "World", "01/01 12:03"),
+    ];
+    const result = aggregatePushes(raw, OP).pushes;
+    const alicePushes = result.filter((r) => r.author === "alice");
+    expect(alicePushes).toHaveLength(1);
+    expect(alicePushes[0].content).toBe("Hello.\nWorld");
   });
 });
 
