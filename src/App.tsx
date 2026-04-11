@@ -102,7 +102,7 @@ const MOCK_PUSHES: AggregatedPush[] = [
     floorNumber: 0,
     anchorOrder: 25,
     sourceFloors: [],
-    marker: "※ 編輯:",
+    marker: "作者編輯",
   },
   {
     id: "push-3",
@@ -127,7 +127,14 @@ const MOCK_ARTICLE: ArticleData = {
   board: "Gossiping",
   body: `作者 pttzzz (PTTzzz)\n看板 Gossiping\n標題 [分享] 我做了一個現代化 PTT 閱讀器 PTTzzz\n時間 Mon Apr 07 16:20:00 2026\n\n大家好，這是一個 React + TypeScript 的 PTT 閱讀器。\n\n特色：\n1. 自動偵測登入流程\n2. 看板清單 + 文章閱讀\n3. 推文聚合與討論串顯示\n\n歡迎大家給我建議～`,
   pushes: MOCK_PUSHES,
-  articleNotes: [],
+  articleNotes: [
+    {
+      marker: "※ 編輯:",
+      content: "pttzzz (114.32.10.2), 04/07/2026 16:25:00",
+      rawBlock: "※ 編輯: pttzzz (114.32.10.2), 04/07/2026 16:25:00",
+      markerOffset: 0,
+    },
+  ],
   score: 1,
 };
 

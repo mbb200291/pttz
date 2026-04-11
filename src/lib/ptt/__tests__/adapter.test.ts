@@ -139,7 +139,86 @@ describe("ptt adapter module", () => {
     expect(article.body).toContain("內文第一行");
   });
 
-  it("threads article edit notes through push aggregation when reading an article", async () => {
+  it("includes a dev debug dump with raw line and parsed push summaries", async () => {
+    const mod = await import("../adapter");
+
+    const bot = {
+      async getArticle(_boardName: string, _articleIndex: number) {
+        return {
+          author: "poggssi (冠軍車手321)",
+          title: "Re: [問卦] debug",
+          timestamp: "Thu Apr  9 21:41:07 2026",
+          boardname: "Gossiping",
+          lines: [
+            "作者  poggssi (冠軍車手321) 看板  Gossiping",
+            "標題  Re: [問卦] debug",
+            "時間  Thu Apr  9 21:41:07 2026",
+            "───────────────────────────────────────",
+            "內文第一行",
+            "推 user1: 第一則                         111.22.33.44 04/09 21:45",
+            "推 user2: 第二則                         111.22.33.55 04/09 21:46",
+            "瀏覽 第 2/2 頁 (100%)",
+          ],
+        };
+      },
+    };
+
+    const article = await mod.fetchArticleFromBot(bot, "Gossiping", 782696);
+
+    expect(article?.debug).toMatchObject({
+      boardName: "Gossiping",
+      articleIndex: 782696,
+      rawLineCount: 8,
+      parsedPushCount: 2,
+      bottomStatusLine: "瀏覽 第 2/2 頁 (100%)",
+    });
+    expect(article?.debug?.lastLines.at(-1)).toBe("瀏覽 第 2/2 頁 (100%)");
+    expect(article?.debug?.parsedLastPushes.at(-1)).toMatchObject({
+      author: "user2",
+      content: "第二則",
+    });
+  });
+
+  it("parses padded Stock-style push author columns throughout article reading", async () => {
+    const mod = await import("../adapter");
+
+    const bot = {
+      async getArticle(_boardName: string, _articleIndex: number) {
+        return {
+          author: "joanzkow (星浪)",
+          title: "[新聞] 快訊",
+          timestamp: "Sat Apr 11 16:08:24 2026",
+          boardname: "Stock",
+          lines: [
+            "作者  joanzkow (星浪)                                            看板  Stock ",
+            "標題  [新聞] 快訊",
+            "時間  Sat Apr 11 16:08:24 2026",
+            "───────────────────────────────────────",
+            "內文第一行",
+            "推 wheat1130   : https://i.meee.com.tw/hC3mVOL.jpg                 04/11 19:46",
+            "→ bb10181128  : 伊朗外長平常都穿西裝啊                            04/11 20:25",
+            "噓 Rutschman   : 垃圾媒體放什麼話                                  04/11 20:30",
+          ],
+        };
+      },
+    };
+
+    const article = await mod.fetchArticleFromBot(bot, "Stock", 198761);
+
+    expect(article?.pushes.filter((push) => push.type !== "edit")).toHaveLength(3);
+    expect(article?.pushes.map((push) => push.author)).toEqual([
+      "wheat1130",
+      "bb10181128",
+      "Rutschman",
+    ]);
+    expect(article?.pushes.at(-1)).toMatchObject({
+      type: "boo",
+      content: "垃圾媒體放什麼話",
+      time: "04/11 20:30",
+    });
+  });
+
+  it("keeps edit records article-level while threading OP edited text when reading an article", async () => {
     const mod = await import("../adapter");
 
     const bot = {
@@ -179,12 +258,17 @@ describe("ptt adapter module", () => {
       ),
     ).toEqual([
       expect.objectContaining({
-        marker: "※ 編輯:",
+        marker: "作者編輯",
         content: "補充說明",
       }),
     ]);
     expect(article?.pushes[1]?.content).toBe("第二則推文");
-    expect(article?.articleNotes ?? []).toHaveLength(0);
+    expect(article?.articleNotes ?? []).toEqual([
+      expect.objectContaining({
+        marker: "※ 編輯:",
+        content: "poggssi (1.2.3.4), 04/09/2026 21:46:07",
+      }),
+    ]);
   });
 
   it("keeps edit-note attachment stable when ANSI bytes appear before a later push", async () => {
@@ -222,7 +306,7 @@ describe("ptt adapter module", () => {
       ),
     ).toEqual([expect.objectContaining({ content: "補充說明" })]);
     expect(article?.pushes[1]?.content).toBe("第二則推文");
-    expect(article?.articleNotes ?? []).toHaveLength(0);
+    expect(article?.articleNotes ?? []).toHaveLength(1);
   });
 
   it("preserves compressed same-line pushes when reading an article", async () => {
@@ -256,7 +340,7 @@ describe("ptt adapter module", () => {
     ]);
   });
 
-  it("attaches an edit note after compressed same-line pushes to the later push", async () => {
+  it("attaches OP edited text after compressed same-line pushes to the later push", async () => {
     const mod = await import("../adapter");
 
     const bot = {
@@ -329,8 +413,54 @@ describe("ptt adapter module", () => {
     ).toEqual([
       expect.objectContaining({
         content: "靠鋼珠把圓盤全部塞滿 硬擠進去",
-        marker: "※ 編輯:",
+        marker: "作者編輯",
         author: "Lineage097 (狐狸壽司)",
+      }),
+    ]);
+    expect(article?.articleNotes ?? []).toEqual([
+      expect.objectContaining({
+        marker: "※ 編輯:",
+        content: "Lineage097 (1.2.3.4), 04/09/2026 21:46:07",
+      }),
+    ]);
+  });
+
+  it("keeps OP edited text between normal pushes out of the previous push block", async () => {
+    const mod = await import("../adapter");
+
+    const bot = {
+      async getArticle(_boardName: string, _articleIndex: number) {
+        return {
+          author: "Lineage097 (狐狸壽司)",
+          title: "Re: [問卦] 刪推文",
+          timestamp: "Sat Apr 11 12:50:00 2026",
+          boardname: "Gossiping",
+          lines: [
+            "作者  Lineage097 (狐狸壽司) 看板  Gossiping",
+            "標題  Re: [問卦] 刪推文",
+            "時間  Sat Apr 11 12:50:00 2026",
+            "───────────────────────────────────────",
+            "推 darren2586: 哇靠老哥你是把推文全刪了喔        04/11 12:53",
+            "真的抱歉 我按編輯不知道為什麼全不見了...",
+            "→ zteboom46: 刪推文喔?                         04/11 12:53",
+          ],
+        };
+      },
+    };
+
+    const article = await mod.fetchArticleFromBot(bot, "Gossiping", 782700);
+    const parent = article?.pushes.find((push) => push.author === "darren2586");
+
+    expect(parent?.content).toBe("哇靠老哥你是把推文全刪了喔");
+    expect(
+      article?.pushes.filter(
+        (push) => push.replyTo === parent?.id && push.type === "edit",
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        marker: "作者編輯",
+        author: "Lineage097 (狐狸壽司)",
+        content: "真的抱歉 我按編輯不知道為什麼全不見了...",
       }),
     ]);
   });

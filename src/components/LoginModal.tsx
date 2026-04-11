@@ -21,6 +21,7 @@ interface Props {
 export function LoginModal({ pttState, wsStatus }: Props) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [kickOthers, setKickOthers] = useState(false);
   const client = usePttSocketStore((s) => s.client);
   const setPttState = usePttSocketStore((s) => s.setPttState);
   const loginError = usePttSocketStore((s) => s.loginError);
@@ -47,12 +48,12 @@ export function LoginModal({ pttState, wsStatus }: Props) {
     e.preventDefault();
     if (!username.trim()) return;
     setLoginError(null);
-    submitLogin(username.trim(), password);
+    submitLogin(username.trim(), password, kickOthers);
   };
 
   const handleGuest = () => {
     setLoginError(null);
-    submitLogin("guest", "");
+    submitLogin("guest", "", false);
   };
 
   return (
@@ -203,6 +204,22 @@ export function LoginModal({ pttState, wsStatus }: Props) {
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-sky-500"
               />
             </div>
+            <label className="flex items-start gap-3 rounded-lg border border-gray-800 bg-gray-950/40 px-3 py-2.5 text-sm text-gray-300">
+              <input
+                type="checkbox"
+                checked={kickOthers}
+                onChange={(e) => setKickOthers(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-gray-600 bg-gray-800 text-sky-500 focus:ring-sky-500"
+              />
+              <span>
+                <span className="block font-medium text-gray-200">
+                  中斷其他連線
+                </span>
+                <span className="block text-xs text-gray-500">
+                  預設保留其他已登入的 PTT 連線；勾選後才會回答「是」。
+                </span>
+              </span>
+            </label>
 
             <div className="flex gap-2 pt-2">
               <button

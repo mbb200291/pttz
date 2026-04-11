@@ -5,11 +5,11 @@
  */
 
 import type { AggregatedPush } from "../lib/ptt/pushAggregator";
-import type { ArticleEditNote } from "../lib/ptt/parser";
 
 interface PushItemProps {
   push: AggregatedPush;
   children?: AggregatedPush[];
+  childrenMap?: Map<string, AggregatedPush[]>;
   depth?: number;
 }
 
@@ -49,20 +49,12 @@ function ScoreBadge({ score }: { score: number }) {
   return <span className={`text-xs font-medium ${color}`}>{sign}{score}</span>;
 }
 
-function EditNoteBlock({ note }: { note: ArticleEditNote }) {
-  return (
-    <div className="rounded-xl border border-gray-700/80 bg-gray-950/40 px-3 py-2 text-xs leading-5 text-gray-400">
-      <div className="mb-1 font-medium text-gray-500">
-        {note.marker.trim()}
-      </div>
-      <p className="whitespace-pre-wrap break-words text-gray-300">
-        {note.content}
-      </p>
-    </div>
-  );
-}
-
-function PushItem({ push, children = [], depth = 0 }: PushItemProps) {
+function PushItem({
+  push,
+  children = [],
+  childrenMap,
+  depth = 0,
+}: PushItemProps) {
   const visualDepth = Math.min(depth, 3);
   const indent = visualDepth * 20;
   const ipLabel =
@@ -125,7 +117,13 @@ function PushItem({ push, children = [], depth = 0 }: PushItemProps) {
         {children.length > 0 && (
           <div className="mt-3 space-y-2 border-t border-gray-800/80 pt-3">
             {children.map((child) => (
-              <PushItem key={child.id} push={child} depth={depth + 1} />
+              <PushItem
+                key={child.id}
+                push={child}
+                children={childrenMap?.get(child.id) ?? []}
+                childrenMap={childrenMap}
+                depth={depth + 1}
+              />
             ))}
           </div>
         )}
@@ -136,13 +134,11 @@ function PushItem({ push, children = [], depth = 0 }: PushItemProps) {
 
 interface PushThreadProps {
   pushes: AggregatedPush[];
-  articleNotes?: ArticleEditNote[];
   score: number;
 }
 
 export function PushThread({
   pushes,
-  articleNotes = [],
   score,
 }: PushThreadProps) {
   const childrenMap = new Map<string, AggregatedPush[]>();
@@ -179,23 +175,13 @@ export function PushThread({
         <span className="text-xs text-gray-500">({topLevel.length} 則第一層回覆)</span>
       </div>
 
-      {articleNotes.length > 0 && (
-        <div className="mb-4 space-y-2 rounded-2xl border border-gray-700/70 bg-gray-900/60 p-3">
-          <div className="text-xs font-semibold tracking-wide text-gray-400">
-            文章編輯註記
-          </div>
-          {articleNotes.map((note, index) => (
-            <EditNoteBlock key={`article-note-${index}`} note={note} />
-          ))}
-        </div>
-      )}
-
       <div className="space-y-3">
         {topLevel.map((push) => (
           <PushItem
             key={push.id}
             push={push}
             children={childrenMap.get(push.id) ?? []}
+            childrenMap={childrenMap}
             depth={0}
           />
         ))}

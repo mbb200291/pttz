@@ -57,12 +57,42 @@ describe("parsePushBuffer", () => {
     ]);
   });
 
+  it("parses padded author columns before the colon", () => {
+    const pushes = parsePushBuffer(
+      "推 wheat1130   : https://i.meee.com.tw/hC3mVOL.jpg                 04/11 19:46\n→ bb10181128  : 伊朗外長平常都穿西裝啊                            04/11 20:25",
+    );
+
+    expect(pushes).toEqual([
+      expect.objectContaining({
+        type: "push",
+        author: "wheat1130",
+        content: "https://i.meee.com.tw/hC3mVOL.jpg",
+        time: "04/11 19:46",
+      }),
+      expect.objectContaining({
+        type: "neutral",
+        author: "bb10181128",
+        content: "伊朗外長平常都穿西裝啊",
+        time: "04/11 20:25",
+      }),
+    ]);
+  });
+
   it("keeps multiline continuation content attached to the same push", () => {
     const pushes = parsePushBuffer(
       "推 user1: 第一行                         111.22.33.44 04/09 10:01\nuser1第二行補充",
     );
 
     expect(pushes[0]?.content).toContain("第二行補充");
+  });
+
+  it("does not attach non-author continuation text to the previous push", () => {
+    const pushes = parsePushBuffer(
+      "推 darren2586: 哇靠老哥你是把推文全刪了喔        04/11 12:53\n真的抱歉 我按編輯不知道為什麼全不見了...\n→ zteboom46: 刪推文喔?                         04/11 12:53",
+    );
+
+    expect(pushes[0]?.content).toBe("哇靠老哥你是把推文全刪了喔");
+    expect(pushes[0]?.content).not.toContain("真的抱歉");
   });
 
   it("extracts consecutive pushes from a compressed multi-line buffer", () => {
@@ -101,46 +131,65 @@ describe("parsePushBuffer", () => {
 });
 
 describe("extractArticleThreadEvents", () => {
-  it("anchors raw edit-note data to the original raw input", () => {
+  it("extracts edit marker lines as article-level edit records", () => {
     const raw =
       "正文\r\n推 user1: 第一則                         1.1.1.1 04/09 10:01\r\n※ 編輯: author (1.2.3.4), 04/09/2026 10:02:03\r\n補充內容\r\n推 a: boundary 1.1.1.2 04/09 10:03";
 
     const result = extractArticleThreadEvents(raw);
-    const note = result.editNotes[0];
+    const note = result.editRecords[0];
     const start = raw.indexOf("※ 編輯: author (1.2.3.4)");
-    const end = raw.indexOf("推 a: boundary");
 
-    expect(note?.contentAnchorOffset).toBe(raw.indexOf("補充內容"));
-    expect(note?.rawBlock).toBe(raw.slice(start, end));
+    expect(note).toMatchObject({
+      marker: "※ 編輯:",
+      content: "author (1.2.3.4), 04/09/2026 10:02:03",
+      markerOffset: start,
+    });
+    expect(note?.rawBlock).toBe("※ 編輯: author (1.2.3.4), 04/09/2026 10:02:03");
   });
 
-  it("keeps edit-note parsing aligned with real push boundaries", () => {
+  it("extracts non-push text in an edited interval as one OP reply segment", () => {
     const raw =
       "正文\n※ 編輯: author (1.2.3.4), 04/09/2026 10:02:03\n編輯補充\n推 a: boundary 1.1.1.2 04/09 10:03";
 
     const result = extractArticleThreadEvents(raw);
 
-    expect(result.editNotes[0]?.content).toBe("編輯補充");
-    expect(result.editNotes[0]?.content).not.toContain("推 a:");
+    expect(result.editRecords).toHaveLength(1);
+    expect(result.opReplySegments).toHaveLength(0);
   });
 
-  it("preserves multi-paragraph edit-note content", () => {
+  it("extracts non-push text between normal pushes as an OP edited reply segment even without a visible edit marker", () => {
     const raw =
-      "正文\n※ 編輯: author (1.2.3.4), 04/09/2026 10:02:03\n第一段\n\n第二段\n推 a: boundary 1.1.1.2 04/09 10:03";
+      "正文\n推 darren2586: 哇靠老哥你是把推文全刪了喔        04/11 12:53\n真的抱歉 我按編輯不知道為什麼全不見了...\n→ zteboom46: 刪推文喔?                         04/11 12:53";
 
     const result = extractArticleThreadEvents(raw);
 
-    expect(result.editNotes[0]?.content).toContain("第一段\n\n第二段");
-    expect(result.editNotes[0]?.content).not.toContain("推 a:");
+    expect(result.editRecords).toHaveLength(0);
+    expect(result.opReplySegments).toEqual([
+      expect.objectContaining({
+        marker: "作者編輯",
+        content: "真的抱歉 我按編輯不知道為什麼全不見了...",
+        contentAnchorOffset: raw.indexOf("真的抱歉"),
+      }),
+    ]);
   });
 
-  it("stops an edit note when a push marker is concatenated onto the same line", () => {
+  it("preserves multi-line OP edited reply content between two pushes", () => {
     const raw =
-      "正文\n※ 編輯: author (1.2.3.4), 04/09/2026 10:02:03\n補充內容推 user1: boundary 1.1.1.2 04/09 10:03";
+      "正文\n推 user1: 第一則                         1.1.1.1 04/09 10:01\n第一段\n\n第二段\n※ 編輯: author (1.2.3.4), 04/09/2026 10:02:03\n推 a: boundary 1.1.1.2 04/09 10:03";
 
     const result = extractArticleThreadEvents(raw);
-    const note = result.editNotes[0];
-    const start = raw.indexOf("※ 編輯: author (1.2.3.4)");
+
+    expect(result.opReplySegments[0]?.content).toBe("第一段\n第二段");
+    expect(result.opReplySegments[0]?.content).not.toContain("推 a:");
+  });
+
+  it("stops an OP edited reply segment when a push marker is concatenated onto the same line", () => {
+    const raw =
+      "正文\n推 user0: 第一則 1.1.1.0 04/09 10:01\n※ 編輯: author (1.2.3.4), 04/09/2026 10:02:03\n補充內容推 user1: boundary 1.1.1.2 04/09 10:03";
+
+    const result = extractArticleThreadEvents(raw);
+    const note = result.opReplySegments[0];
+    const start = raw.indexOf("補充內容");
     const pushStart = raw.indexOf("推 user1: boundary");
 
     expect(note?.content).toBe("補充內容");
@@ -148,13 +197,13 @@ describe("extractArticleThreadEvents", () => {
     expect(note?.rawBlock).not.toContain("推 user1:");
   });
 
-  it("keeps ANSI bytes aligned when a push marker is concatenated onto the same line", () => {
+  it("keeps ANSI bytes aligned when an OP edited reply ends before an embedded push marker", () => {
     const raw =
-      "正文\n※ 編輯: author (1.2.3.4), 04/09/2026 10:02:03\n補充內容\u001b[31m推 user1: boundary 1.1.1.2 04/09 10:03";
+      "正文\n推 user0: 第一則 1.1.1.0 04/09 10:01\n※ 編輯: author (1.2.3.4), 04/09/2026 10:02:03\n補充內容\u001b[31m推 user1: boundary 1.1.1.2 04/09 10:03";
 
     const result = extractArticleThreadEvents(raw);
-    const note = result.editNotes[0];
-    const start = raw.indexOf("※ 編輯: author (1.2.3.4)");
+    const note = result.opReplySegments[0];
+    const start = raw.indexOf("補充內容");
     const pushStart = raw.indexOf("推 user1: boundary");
 
     expect(note?.content).toBe("補充內容");
@@ -162,13 +211,13 @@ describe("extractArticleThreadEvents", () => {
     expect(note?.rawBlock).toContain("\u001b[31m");
   });
 
-  it("keeps backspace artifacts aligned when a push marker is concatenated onto the same line", () => {
+  it("keeps backspace artifacts aligned when an OP edited reply ends before an embedded push marker", () => {
     const raw =
-      "正文\n※ 編輯: author (1.2.3.4), 04/09/2026 10:02:03\n補充內容\b推 user1: boundary 1.1.1.2 04/09 10:03";
+      "正文\n推 user0: 第一則 1.1.1.0 04/09 10:01\n※ 編輯: author (1.2.3.4), 04/09/2026 10:02:03\n補充內容\b推 user1: boundary 1.1.1.2 04/09 10:03";
 
     const result = extractArticleThreadEvents(raw);
-    const note = result.editNotes[0];
-    const start = raw.indexOf("※ 編輯: author (1.2.3.4)");
+    const note = result.opReplySegments[0];
+    const start = raw.indexOf("補充內容");
     const pushStart = raw.indexOf("推 user1: boundary");
 
     expect(note?.content).toBe("補充內容");
@@ -176,7 +225,7 @@ describe("extractArticleThreadEvents", () => {
     expect(note?.rawBlock).toContain("\b");
   });
 
-  it("extracts article edit notes as separate raw events", () => {
+  it("extracts article edit records separately from OP reply segments", () => {
     const result = extractArticleThreadEvents(`
 正文
 推 user1: 第一則                         1.1.1.1 04/09 10:01
@@ -184,27 +233,29 @@ describe("extractArticleThreadEvents", () => {
 補充內容
 `);
 
-    expect(result.editNotes).toHaveLength(1);
-    expect(result.editNotes[0]).toMatchObject({
+    expect(result.editRecords).toHaveLength(1);
+    expect(result.editRecords[0]).toMatchObject({
       marker: "※ 編輯:",
-      content: "補充內容",
+      content: "author (1.2.3.4), 04/09/2026 10:02:03",
     });
-    expect(result.editNotes[0]?.rawBlock).toContain("※ 編輯: author (1.2.3.4)");
+    expect(result.opReplySegments).toEqual([
+      expect.objectContaining({ content: "補充內容" }),
+    ]);
   });
 
-  it("anchors edit notes to the start of the follow-up content instead of the marker line", () => {
+  it("anchors OP edited reply segments to the actual content instead of the edit marker line", () => {
     const raw =
       "正文\n推 user1: 第一則                         1.1.1.1 04/09 10:01\n※ 編輯: author (1.2.3.4), 04/09/2026 10:02:03\n補充內容";
 
     const result = extractArticleThreadEvents(raw);
 
-    expect(result.editNotes[0]?.contentAnchorOffset).toBe(raw.indexOf("補充內容"));
-    expect(result.editNotes[0]?.contentAnchorOffset).not.toBe(
+    expect(result.opReplySegments[0]?.contentAnchorOffset).toBe(raw.indexOf("補充內容"));
+    expect(result.opReplySegments[0]?.contentAnchorOffset).not.toBe(
       raw.indexOf("※ 編輯:"),
     );
   });
 
-  it("falls back to the immediately preceding body paragraph when the edit marker has no trailing content", () => {
+  it("uses the immediately preceding edited paragraph as an OP reply segment when the edit marker has no trailing content", () => {
     const raw = [
       "正文",
       "推 user1: 最後怎麼破的，忘了 04/09 10:01",
@@ -214,8 +265,8 @@ describe("extractArticleThreadEvents", () => {
 
     const result = extractArticleThreadEvents(raw);
 
-    expect(result.editNotes[0]?.content).toBe("靠鋼珠把圓盤全部塞滿 硬擠進去");
-    expect(result.editNotes[0]?.contentAnchorOffset).toBe(
+    expect(result.opReplySegments[0]?.content).toBe("靠鋼珠把圓盤全部塞滿 硬擠進去");
+    expect(result.opReplySegments[0]?.contentAnchorOffset).toBe(
       raw.indexOf("靠鋼珠把圓盤全部塞滿 硬擠進去"),
     );
   });

@@ -10,7 +10,8 @@ import {
   parsePushBuffer,
   splitArticleBody,
   stripAnsi,
-  type ArticleEditNote,
+  type ArticleEditRecord,
+  type OpEditedReplySegment,
   type ArticleSummary,
   type RawPush,
 } from "./parser";
@@ -48,8 +49,32 @@ export interface AdapterArticleData {
   board: string;
   body: string;
   pushes: AggregatedPush[];
-  articleNotes: ArticleEditNote[];
+  articleNotes: ArticleEditRecord[];
   score: number;
+  debug?: ArticleDebugDump;
+}
+
+export interface ArticleDebugDump {
+  boardName: string;
+  articleIndex: number;
+  title: string;
+  author: string;
+  rawLineCount: number;
+  firstLines: string[];
+  lastLines: string[];
+  parsedPushCount: number;
+  parsedLastPushes: Array<{
+    id: string;
+    type: AggregatedPush["type"];
+    author: string;
+    content: string;
+    time: string;
+    replyTo: string | null;
+    sourceFloors: number[];
+  }>;
+  articleNoteCount: number;
+  articleNotes: ArticleEditRecord[];
+  bottomStatusLine: string;
 }
 
 export interface PttAdapter {
@@ -156,7 +181,7 @@ class PttClientAdapter implements PttAdapter {
   async login(
     username: string,
     password: string,
-    kickOthers = true,
+    kickOthers = false,
   ): Promise<LoginResult> {
     return this.runSerial(async () => {
       await this.waitUntilConnected();
@@ -450,7 +475,7 @@ function splitRawLinesWithOffsets(raw: string): RawLineWithOffset[] {
 }
 
 function isPushLine(line: string): boolean {
-  return /^[推噓→]\s+\S{2,12}:/u.test(stripAnsi(line).trimStart());
+  return /^[推噓→]\s+\S{2,12}\s*:/u.test(stripAnsi(line).trimStart());
 }
 
 function isEditNoteLine(line: string): boolean {
@@ -488,7 +513,7 @@ function findPushMarkerRawOffsets(raw: string): number[] {
   }
 
   const visible = visibleChars.map((entry) => entry.char).join("");
-  const markerRe = /[推噓→]\s+\S{2,12}:/gu;
+  const markerRe = /[推噓→]\s+\S{2,12}\s*:/gu;
   const offsets: number[] = [];
 
   for (const match of visible.matchAll(markerRe)) {
@@ -537,18 +562,18 @@ function collectAnchoredPushes(raw: string): AnchoredRawPush[] {
   return pushes;
 }
 
-function stripFallbackEditContentFromPushParsing(
+function stripOpEditedReplyContentFromPushParsing(
   raw: string,
-  editNotes: ArticleEditNote[],
+  opReplySegments: OpEditedReplySegment[],
 ): string {
-  if (editNotes.length === 0) return raw;
+  if (opReplySegments.length === 0) return raw;
 
   const chars = raw.split("");
 
-  for (const note of editNotes) {
-    if (note.contentAnchorOffset >= note.markerOffset) continue;
-
-    for (let index = note.contentAnchorOffset; index < note.markerOffset; index += 1) {
+  for (const segment of opReplySegments) {
+    const start = segment.contentAnchorOffset;
+    const end = start + segment.rawBlock.length;
+    for (let index = start; index < end; index += 1) {
       if (chars[index] !== "\n" && chars[index] !== "\r") {
         chars[index] = " ";
       }
@@ -559,18 +584,61 @@ function stripFallbackEditContentFromPushParsing(
 }
 
 function buildArticleThread(rawFull: string, author: string) {
-  const editNotes = extractArticleThreadEvents(rawFull).editNotes;
-  const pushParsingRaw = stripFallbackEditContentFromPushParsing(rawFull, editNotes);
+  const { editRecords, opReplySegments } = extractArticleThreadEvents(rawFull);
+  const pushParsingRaw = stripOpEditedReplyContentFromPushParsing(
+    rawFull,
+    opReplySegments,
+  );
   const thread = aggregatePushes(
     collectAnchoredPushes(pushParsingRaw),
     author,
-    editNotes,
+    opReplySegments,
+    editRecords,
   );
 
   return {
     pushes: thread.pushes,
     articleNotes: thread.articleNotes,
     score: calcArticleScore(thread.pushes),
+  };
+}
+
+function buildArticleDebugDump(params: {
+  boardName: string;
+  articleIndex: number;
+  title: string;
+  author: string;
+  rawLines: string[];
+  pushes: AggregatedPush[];
+  articleNotes: ArticleEditRecord[];
+}): ArticleDebugDump | undefined {
+  if (!import.meta.env.DEV) return undefined;
+
+  const { boardName, articleIndex, title, author, rawLines, pushes, articleNotes } =
+    params;
+  const parsedLastPushes = pushes.slice(-12).map((push) => ({
+    id: push.id,
+    type: push.type,
+    author: push.author,
+    content: push.content,
+    time: push.time,
+    replyTo: push.replyTo,
+    sourceFloors: push.sourceFloors,
+  }));
+
+  return {
+    boardName,
+    articleIndex,
+    title,
+    author,
+    rawLineCount: rawLines.length,
+    firstLines: rawLines.slice(0, 12),
+    lastLines: rawLines.slice(-24),
+    parsedPushCount: pushes.length,
+    parsedLastPushes,
+    articleNoteCount: articleNotes.length,
+    articleNotes,
+    bottomStatusLine: rawLines[rawLines.length - 1] ?? "",
   };
 }
 
@@ -646,6 +714,15 @@ export async function fetchArticleFromBot(
       const title = parsed.title || article.title?.trim() || "";
       const date = parsed.date || article.timestamp?.trim() || "";
       const thread = buildArticleThread(rawFull, author);
+      const debug = buildArticleDebugDump({
+        boardName,
+        articleIndex,
+        title,
+        author,
+        rawLines,
+        pushes: thread.pushes,
+        articleNotes: thread.articleNotes,
+      });
 
       return {
         title,
@@ -656,6 +733,7 @@ export async function fetchArticleFromBot(
         pushes: thread.pushes,
         articleNotes: thread.articleNotes,
         score: thread.score,
+        debug,
       };
     } finally {
       if (originalEnterIndex) {
@@ -683,6 +761,15 @@ export async function fetchArticleFromBot(
   const title = parsed.title;
   const date = parsed.date;
   const thread = buildArticleThread(rawFull, author);
+  const debug = buildArticleDebugDump({
+    boardName,
+    articleIndex,
+    title,
+    author,
+    rawLines,
+    pushes: thread.pushes,
+    articleNotes: thread.articleNotes,
+  });
 
   return {
     title,
@@ -693,5 +780,6 @@ export async function fetchArticleFromBot(
     pushes: thread.pushes,
     articleNotes: thread.articleNotes,
     score: thread.score,
+    debug,
   };
 }

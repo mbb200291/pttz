@@ -2,9 +2,19 @@
  * Article — 文章閱讀頁
  */
 
+import { useEffect } from "react";
 import { useArticle } from "../hooks/useArticle";
 import { PushThread } from "./PushThread";
 import type { ArticleData } from "../hooks/useArticle";
+import type { ArticleEditRecord } from "../lib/ptt/parser";
+
+declare global {
+  interface Window {
+    pttzzzDebug?: {
+      dumpCurrentArticle?: () => unknown;
+    };
+  }
+}
 
 interface ArticleProps {
   boardName: string;
@@ -12,6 +22,31 @@ interface ArticleProps {
   onBack: () => void;
   mockArticle?: ArticleData | null;
   mockLoading?: boolean;
+}
+
+function ArticleEditRecords({ records }: { records: ArticleEditRecord[] }) {
+  if (records.length === 0) return null;
+
+  return (
+    <section className="mb-8 space-y-2 rounded-2xl border border-gray-700/70 bg-gray-900/60 p-3">
+      <div className="text-xs font-semibold tracking-wide text-gray-400">
+        文章編輯紀錄
+      </div>
+      {records.map((record, index) => (
+        <div
+          key={`${record.markerOffset}-${index}`}
+          className="rounded-xl border border-gray-700/80 bg-gray-950/40 px-3 py-2 text-xs leading-5 text-gray-400"
+        >
+          <div className="mb-1 font-medium text-gray-500">
+            {record.marker.trim()}
+          </div>
+          <p className="whitespace-pre-wrap break-words text-gray-300">
+            {record.content}
+          </p>
+        </div>
+      ))}
+    </section>
+  );
 }
 
 export function Article({
@@ -32,6 +67,27 @@ export function Article({
   const article = mockArticle ?? liveArticle;
   const loading = mockLoading ?? liveLoading;
   const error = liveError;
+
+  useEffect(() => {
+    if (!import.meta.env.DEV || typeof window === "undefined") return;
+
+    window.pttzzzDebug = window.pttzzzDebug ?? {};
+    window.pttzzzDebug.dumpCurrentArticle = () => {
+      const dump = article?.debug ?? {
+        boardName,
+        articleIndex,
+        warning: "No article debug data is available yet.",
+      };
+      console.log("[pttzzz] current article debug dump", dump);
+      return dump;
+    };
+
+    return () => {
+      if (window.pttzzzDebug?.dumpCurrentArticle) {
+        delete window.pttzzzDebug.dumpCurrentArticle;
+      }
+    };
+  }, [article, articleIndex, boardName]);
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100">
@@ -83,10 +139,11 @@ export function Article({
                 .trim()}
             </pre>
 
+            <ArticleEditRecords records={article.articleNotes} />
+
             {/* 推文討論串 */}
             <PushThread
               pushes={article.pushes}
-              articleNotes={article.articleNotes}
               score={article.score}
             />
           </>

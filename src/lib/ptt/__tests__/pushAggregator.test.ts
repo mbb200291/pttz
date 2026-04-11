@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { aggregatePushes, calcArticleScore } from "../pushAggregator";
-import type { ArticleEditNote, RawPush } from "../parser";
+import type { ArticleEditRecord, OpEditedReplySegment, RawPush } from "../parser";
 
 const OP = "opUser";
 
@@ -32,11 +32,29 @@ describe("單則推文不聚合", () => {
 });
 
 describe("連續同作者推文合併", () => {
-  it("兩則連續推文合併成一則", () => {
+  const full45 = "a".repeat(44);
+
+  it("短的連續同作者推文不自動合併", () => {
     const raw = [push("alice", "Hello"), push("alice", " World")];
     const thread = aggregatePushes(raw, OP);
-    expect(thread.pushes.filter((r) => r.type !== "edit")).toHaveLength(1);
-    expect(thread.pushes[0].content).toBe("Hello World");
+    const alicePushes = thread.pushes.filter((r) => r.author === "alice");
+    expect(alicePushes).toHaveLength(2);
+  });
+
+  it("連續同作者且前則塞滿且未用終止符時合併", () => {
+    const raw = [push("alice", full45), push("alice", "接續")];
+    const thread = aggregatePushes(raw, OP);
+    const alicePushes = thread.pushes.filter((r) => r.author === "alice");
+    expect(alicePushes).toHaveLength(1);
+    expect(alicePushes[0].content).toBe(`${full45}接續`);
+  });
+
+  it("連續同作者且前則以串接符號結尾時合併並移除串接符號", () => {
+    const raw = [push("alice", "Hello ||"), push("alice", "World")];
+    const thread = aggregatePushes(raw, OP);
+    const alicePushes = thread.pushes.filter((r) => r.author === "alice");
+    expect(alicePushes).toHaveLength(1);
+    expect(alicePushes[0].content).toBe("Hello World");
   });
 
   it("中間有他人則不連續", () => {
@@ -94,6 +112,28 @@ describe("不連續推文的合併條件", () => {
     const result = aggregatePushes(raw, OP).pushes;
     expect(result.filter((r) => r.author === "alice")).toHaveLength(2);
   });
+
+  it("前則塞滿但結尾是分號 → 不合併", () => {
+    const raw = [
+      push("alice", `${full45}；`, "01/01 12:00"),
+      push("bob", "插入"),
+      push("alice", "接續", "01/01 12:01"),
+    ];
+    const result = aggregatePushes(raw, OP).pushes;
+    expect(result.filter((r) => r.author === "alice")).toHaveLength(2);
+  });
+
+  it("不連續但前則以串接符號結尾且時間間隔小 → 合併並移除串接符號", () => {
+    const raw = [
+      push("alice", "Hello||", "01/01 12:00"),
+      push("bob", "插入"),
+      push("alice", "World", "01/01 12:03"),
+    ];
+    const result = aggregatePushes(raw, OP).pushes;
+    const alicePushes = result.filter((r) => r.author === "alice");
+    expect(alicePushes).toHaveLength(1);
+    expect(alicePushes[0].content).toBe("HelloWorld");
+  });
 });
 
 // ─── 嵌套回覆 ─────────────────────────────────────────────────────────────────
@@ -101,7 +141,7 @@ describe("不連續推文的合併條件", () => {
 describe("嵌套回覆識別", () => {
   it("「回x樓：...」以原始樓號對應聚合後回文", () => {
     const raw = [
-      push("alice", "第一段", "01/01 12:00", "push", 10, 1),
+      push("alice", "第一段||", "01/01 12:00", "push", 10, 1),
       push("alice", "第二段", "01/01 12:01", "push", 20, 2),
       push("bob", "回2樓：回覆alice", "01/01 12:02", "push", 30, 3),
     ];
@@ -111,6 +151,53 @@ describe("嵌套回覆識別", () => {
     expect(bobPush.replyTo).toBe(alicePush.id);
     expect(bobPush.content).toBe("回覆alice");
     expect(alicePush.sourceFloors).toEqual([1, 2]);
+  });
+
+  it.each([
+    ["回三樓：中文數字", "中文數字"],
+    ["回 3f 英文樓層", "英文樓層"],
+    ["回3F 大寫樓層", "大寫樓層"],
+    ["TO3f 無空白英文寫法", "無空白英文寫法"],
+    ["TO 3f 英文寫法", "英文寫法"],
+    ["reply to 3f 長英文寫法", "長英文寫法"],
+    [">>3f 類 imageboard 寫法", "類 imageboard 寫法"],
+  ])("支援回覆樓層變體：%s", (content, strippedContent) => {
+    const raw = [
+      push("floor1", "第一樓", "01/01 12:00", "push", 10, 1),
+      push("floor2", "第二樓", "01/01 12:01", "push", 20, 2),
+      push("floor3", "第三樓", "01/01 12:02", "push", 30, 3),
+      push("bob", content, "01/01 12:03", "push", 40, 4),
+    ];
+    const thread = aggregatePushes(raw, OP);
+    const target = thread.pushes.find((r) => r.author === "floor3")!;
+    const bobPush = thread.pushes.find((r) => r.author === "bob")!;
+
+    expect(bobPush.replyTo).toBe(target.id);
+    expect(bobPush.content).toBe(strippedContent);
+  });
+
+  it("目標樓層不存在時維持第一層回文", () => {
+    const raw = [
+      push("alice", "第一樓", "01/01 12:00", "push", 10, 1),
+      push("bob", "回9999F 樓層不存在", "01/01 12:01", "push", 20, 2),
+    ];
+    const thread = aggregatePushes(raw, OP);
+    const bobPush = thread.pushes.find((r) => r.author === "bob")!;
+
+    expect(bobPush.replyTo).toBeNull();
+    expect(bobPush.content).toBe("回9999F 樓層不存在");
+  });
+
+  it("回覆樓層是自己時維持第一層並保留原文", () => {
+    const raw = [
+      push("alice", "第一樓", "01/01 12:00", "push", 10, 1),
+      push("bob", "回2樓 這是自己這樓", "01/01 12:01", "push", 20, 2),
+    ];
+    const thread = aggregatePushes(raw, OP);
+    const bobPush = thread.pushes.find((r) => r.author === "bob")!;
+
+    expect(bobPush.replyTo).toBeNull();
+    expect(bobPush.content).toBe("回2樓 這是自己這樓");
   });
 
   it("未包含「回x樓」則 replyTo 為 null", () => {
@@ -127,6 +214,14 @@ describe("原 po 標示", () => {
     const raw = [push(OP, "我是原 po"), push("other", "路人")];
     const thread = aggregatePushes(raw, OP);
     expect(thread.pushes.find((r) => r.author === OP)!.isOP).toBe(true);
+    expect(thread.pushes.find((r) => r.author === "other")!.isOP).toBe(false);
+  });
+
+  it("文章作者含暱稱時仍以帳號 id 標示原 po", () => {
+    const raw = [push("askz0", "Ok?"), push("other", "路人")];
+    const thread = aggregatePushes(raw, "askz0 (askz0)");
+
+    expect(thread.pushes.find((r) => r.author === "askz0")!.isOP).toBe(true);
     expect(thread.pushes.find((r) => r.author === "other")!.isOP).toBe(false);
   });
 });
@@ -169,17 +264,29 @@ describe("IP metadata", () => {
 });
 
 describe("編輯註記", () => {
-  function editNote(anchorOffset: number, content: string): ArticleEditNote {
+  function opEditedReply(
+    anchorOffset: number,
+    content: string,
+  ): OpEditedReplySegment {
     return {
-      marker: "※ 編輯:",
+      marker: "作者編輯",
       content,
-      rawBlock: `※ 編輯: author\n${content}`,
+      rawBlock: content,
       contentAnchorOffset: anchorOffset,
       markerOffset: anchorOffset,
     };
   }
 
-  it("uses comparable source offsets to attach edit notes to the nearest previous aggregated reply", () => {
+  function editRecord(anchorOffset: number, content: string): ArticleEditRecord {
+    return {
+      marker: "※ 編輯:",
+      content,
+      rawBlock: `※ 編輯: ${content}`,
+      markerOffset: anchorOffset,
+    };
+  }
+
+  it("uses comparable source offsets to attach OP edited replies to the nearest previous aggregated reply", () => {
     const raw = [
       push("alice", "第一則", "01/01 12:00", "push", 100),
       push("bob", "第二則", "01/01 12:01", "push", 200),
@@ -187,17 +294,15 @@ describe("編輯註記", () => {
     ];
 
     const thread = aggregatePushes(raw, OP, [
-      editNote(50, "文章說明"),
-      editNote(250, "第二則後補充"),
-      editNote(350, "第三則後補充"),
+      opEditedReply(50, "文章說明"),
+      opEditedReply(250, "第二則後補充"),
+      opEditedReply(350, "第三則後補充"),
     ]);
 
     expect(
       thread.pushes.filter((r) => r.type !== "edit").map((r) => r.anchorOrder),
     ).toEqual([100, 200, 300]);
-    expect(thread.articleNotes).toEqual([
-      expect.objectContaining({ content: "文章說明" }),
-    ]);
+    expect(thread.articleNotes).toEqual([]);
     const bobChildren = thread.pushes.filter(
       (r) => r.replyTo === thread.pushes.find((node) => node.author === "bob")?.id,
     );
@@ -219,7 +324,7 @@ describe("編輯註記", () => {
       push("alice", "接續", "01/01 12:02", "push", 200),
     ];
 
-    const thread = aggregatePushes(raw, OP, [editNote(250, "合併後補充")]);
+    const thread = aggregatePushes(raw, OP, [opEditedReply(250, "合併後補充")]);
 
     expect(thread.pushes.find((r) => r.author === "alice")?.anchorOrder).toBe(
       200,
@@ -234,11 +339,16 @@ describe("編輯註記", () => {
     ).toHaveLength(0);
   });
 
-  it("keeps article-level notes when there is no previous reply", () => {
-    const thread = aggregatePushes([], OP, [editNote(1, "正文補充")]);
+  it("keeps article-level edit records separate from OP edited replies", () => {
+    const thread = aggregatePushes(
+      [],
+      OP,
+      [opEditedReply(1, "正文補充")],
+      [editRecord(2, "author (1.2.3.4), 04/09/2026 10:02:03")],
+    );
 
     expect(thread.articleNotes).toEqual([
-      expect.objectContaining({ content: "正文補充" }),
+      expect.objectContaining({ content: "author (1.2.3.4), 04/09/2026 10:02:03" }),
     ]);
     expect(thread.pushes).toHaveLength(0);
   });

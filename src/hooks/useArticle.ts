@@ -6,8 +6,9 @@
 
 import { useState, useEffect } from "react";
 import { usePttSocketStore } from "./usePttSocket";
+import type { ArticleDebugDump } from "../lib/ptt/adapter";
 import type { AggregatedPush } from "../lib/ptt/pushAggregator";
-import type { ArticleEditNote } from "../lib/ptt/parser";
+import type { ArticleEditRecord } from "../lib/ptt/parser";
 
 export interface ArticleData {
   title: string;
@@ -16,8 +17,9 @@ export interface ArticleData {
   board: string;
   body: string;
   pushes: AggregatedPush[];
-  articleNotes: ArticleEditNote[];
+  articleNotes: ArticleEditRecord[];
   score: number;
+  debug?: ArticleDebugDump;
 }
 
 export interface UseArticleReturn {

@@ -2,6 +2,24 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 describe("LoginModal", () => {
+  it("shows duplicate-session opt-in on the login form", async () => {
+    Object.defineProperty(globalThis, "location", {
+      configurable: true,
+      value: {
+        protocol: "http:",
+        host: "127.0.0.1:4173",
+      },
+    });
+
+    const { LoginModal } = await import("../LoginModal");
+    const html = renderToStaticMarkup(
+      <LoginModal pttState={"need_login" as never} wsStatus="connected" />,
+    );
+
+    expect(html).toContain("中斷其他連線");
+    expect(html).toContain("預設保留其他已登入的 PTT 連線");
+  });
+
   it("shows a syncing message when PTT is updating online users and friends", async () => {
     Object.defineProperty(globalThis, "location", {
       configurable: true,

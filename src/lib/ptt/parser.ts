@@ -9,6 +9,8 @@
  */
 
 const ANSI_RE = /\x1b\[[0-9;]*[A-Za-z]/g;
+const PUSH_MARKER_PATTERN = "([推噓→])\\s+(\\S{2,12})\\s*:";
+const PUSH_MARKER_RE = new RegExp(PUSH_MARKER_PATTERN, "u");
 
 function stripBackspaces(text: string): string {
   const chars: string[] = [];
@@ -49,7 +51,14 @@ export interface RawPush {
   time: string;
 }
 
-export interface ArticleEditNote {
+export interface ArticleEditRecord {
+  marker: string;
+  content: string;
+  rawBlock: string;
+  markerOffset: number;
+}
+
+export interface OpEditedReplySegment {
   marker: string;
   content: string;
   rawBlock: string;
@@ -92,9 +101,9 @@ export function parsePushBuffer(raw: string): RawPush[] {
   const plain = stripAnsi(raw)
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n")
-    .replace(/(?<!\n)([推噓→]\s+\S{2,12}:)/gu, "\n$1");
+    .replace(new RegExp(`(?<!\\n)${PUSH_MARKER_PATTERN}`, "gu"), "\n$1 $2:");
   const pushes: RawPush[] = [];
-  const startRe = /(?:^|\n)([推噓→])\s+(\S{2,12}):/gu;
+  const startRe = new RegExp(`(?:^|\\n)${PUSH_MARKER_PATTERN}`, "gu");
   const starts = Array.from(plain.matchAll(startRe));
 
   for (let index = 0; index < starts.length; index += 1) {
@@ -103,7 +112,9 @@ export function parsePushBuffer(raw: string): RawPush[] {
     const segmentStart = match.index ?? 0;
     const segmentEnd = next?.index ?? plain.length;
     const segment = plain.slice(segmentStart, segmentEnd).trim();
-    const headerMatch = segment.match(/^([推噓→])\s+(\S{2,12}):\s*([\s\S]*)$/u);
+    const headerMatch = segment.match(
+      new RegExp(`^${PUSH_MARKER_PATTERN}\\s*([\\s\\S]*)$`, "u"),
+    );
     if (!headerMatch) continue;
 
     const [, marker, author, remainder] = headerMatch;
@@ -118,7 +129,11 @@ export function parsePushBuffer(raw: string): RawPush[] {
       : beforeTime;
     const afterTime = remainder.slice(timeMatch.index + timeMatch[1].length);
     const continuation = afterTime
-      .replace(new RegExp(`^${author}`), "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith(author))
+      .map((line) => line.slice(author.length).trim())
+      .join(" ")
       .replace(/\b\d{1,3}(?:\.\d{1,3}){3}\b/gu, "")
       .replace(/\d{2}\/\d{2} \d{2}:\d{2}/gu, "")
       .replace(/\s+/g, " ")
@@ -203,109 +218,133 @@ function findEmbeddedPushMarkerRawIndex(line: string): number | null {
   }
 
   const visible = visibleChars.map((entry) => entry.char).join("");
-  const match = visible.match(/[推噓→]\s+\S{2,12}:/u);
+  const match = visible.match(PUSH_MARKER_RE);
   if (!match || match.index === undefined || match.index === 0) return null;
   return visibleChars[match.index]?.rawIndex ?? null;
 }
 
-function collectPrecedingBodyParagraph(
-  lines: Array<{ line: string; start: number; end: number; lineEnd: number }>,
-  markerIndex: number,
-): { content: string; contentAnchorOffset: number; rawBlockStart: number } | null {
-  const collected: Array<{ text: string; start: number }> = [];
+function isEditMarkerLine(line: string): boolean {
+  return /^※\s*編輯:/u.test(stripAnsi(line).trimStart());
+}
 
-  for (let index = markerIndex - 1; index >= 0; index -= 1) {
-    const current = lines[index];
-    const plain = stripAnsi(current.line);
-    const trimmed = plain.trim();
+function isTerminalStatusLine(line: string): boolean {
+  const plain = stripAnsi(line).trim();
+  return (
+    plain.includes("100%") ||
+    plain.includes("瀏覽 第") ||
+    plain.includes("目前顯示") ||
+    plain.includes("此文章無內容")
+  );
+}
 
-    if (trimmed.length === 0) {
-      if (collected.length > 0) break;
-      continue;
-    }
+function parseEditRecord(
+  line: { line: string; start: number },
+): ArticleEditRecord {
+  const plain = stripAnsi(line.line).trim();
+  return {
+    marker: "※ 編輯:",
+    content: plain.replace(/^※\s*編輯:\s*/u, ""),
+    rawBlock: line.line,
+    markerOffset: line.start,
+  };
+}
 
-    if (/^※\s*編輯:/u.test(trimmed) || parsePushLine(current.line) !== null) {
-      break;
-    }
-
-    collected.push({ text: plain.trimEnd(), start: current.start });
+function lineContentBeforeEmbeddedPush(line: string): {
+  text: string;
+  rawEndOffset: number;
+  hasEmbeddedPush: boolean;
+} {
+  const embeddedPushMarkerRawIndex = findEmbeddedPushMarkerRawIndex(line);
+  if (embeddedPushMarkerRawIndex === null) {
+    return {
+      text: stripAnsi(line).trimEnd(),
+      rawEndOffset: line.length,
+      hasEmbeddedPush: false,
+    };
   }
 
-  if (collected.length === 0) return null;
-
-  collected.reverse();
   return {
-    content: collected.map((line) => line.text).join("\n").trim(),
-    contentAnchorOffset: collected[0].start,
-    rawBlockStart: collected[0].start,
+    text: stripAnsi(line.slice(0, embeddedPushMarkerRawIndex)).trimEnd(),
+    rawEndOffset: embeddedPushMarkerRawIndex,
+    hasEmbeddedPush: true,
   };
 }
 
 export function extractArticleThreadEvents(raw: string): {
-  editNotes: ArticleEditNote[];
+  editRecords: ArticleEditRecord[];
+  opReplySegments: OpEditedReplySegment[];
 } {
   const lines = splitLinesWithOffsets(raw);
-  const editNotes: ArticleEditNote[] = [];
+  const editRecords: ArticleEditRecord[] = [];
+  const opReplySegments: OpEditedReplySegment[] = [];
 
   for (let index = 0; index < lines.length; index += 1) {
     const current = lines[index];
-    const marker = stripAnsi(current.line).trimStart();
-    if (!/^※\s*編輯:/u.test(marker)) continue;
+    if (isEditMarkerLine(current.line)) {
+      editRecords.push(parseEditRecord(current));
+    }
+  }
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const startLine = lines[index];
+    if (parsePushLine(startLine.line) === null) continue;
 
     let endIndex = index + 1;
-    let rawBlockEnd = current.lineEnd;
-    const contentLines: string[] = [];
-    let contentAnchorOffset = current.lineEnd;
     while (endIndex < lines.length) {
       const next = lines[endIndex];
-      const nextPlain = stripAnsi(next.line).trimStart();
-      if (/^※\s*編輯:/u.test(nextPlain)) break;
       if (parsePushLine(next.line) !== null) break;
-
-      const embeddedPushMarkerRawIndex = findEmbeddedPushMarkerRawIndex(next.line);
-      if (embeddedPushMarkerRawIndex !== null) {
-        if (contentLines.length === 0) {
-          contentAnchorOffset = next.start;
-        }
-        contentLines.push(
-          stripAnsi(next.line.slice(0, embeddedPushMarkerRawIndex)).trimEnd(),
-        );
-        rawBlockEnd = next.start + embeddedPushMarkerRawIndex;
-        endIndex += 1;
-        break;
-      }
-
-      if (contentLines.length === 0) {
-        contentAnchorOffset = next.start;
-      }
-      contentLines.push(stripAnsi(next.line).trimEnd());
-      rawBlockEnd = next.lineEnd;
+      if (findEmbeddedPushMarkerRawIndex(next.line) !== null) break;
       endIndex += 1;
     }
-    let content = contentLines.join("\n").trim();
-    let rawBlockStart = current.start;
 
-    if (content.length === 0) {
-      const precedingParagraph = collectPrecedingBodyParagraph(lines, index);
-      if (precedingParagraph) {
-        content = precedingParagraph.content;
-        contentAnchorOffset = precedingParagraph.contentAnchorOffset;
-        rawBlockStart = precedingParagraph.rawBlockStart;
+    const contentLines: Array<{ text: string; start: number; end: number }> = [];
+    const markerOffset =
+      lines
+        .slice(index + 1, endIndex + 1)
+        .find((line) => isEditMarkerLine(line.line))?.start ?? startLine.lineEnd;
+
+    for (
+      let cursor = index + 1;
+      cursor <= endIndex && cursor < lines.length;
+      cursor += 1
+    ) {
+      const current = lines[cursor];
+      if (
+        parsePushLine(current.line) !== null ||
+        isEditMarkerLine(current.line) ||
+        isTerminalStatusLine(current.line)
+      ) {
+        continue;
       }
+
+      const contentPart = lineContentBeforeEmbeddedPush(current.line);
+      const text = contentPart.text.trim();
+      if (text.length > 0) {
+        contentLines.push({
+          text,
+          start: current.start,
+          end: current.start + contentPart.rawEndOffset,
+        });
+      }
+      if (contentPart.hasEmbeddedPush) break;
     }
 
-    editNotes.push({
-      marker: "※ 編輯:",
-      content,
-      rawBlock: raw.slice(rawBlockStart, rawBlockEnd),
-      contentAnchorOffset,
-      markerOffset: current.start,
-    });
+    if (contentLines.length > 0) {
+      const rawBlockStart = contentLines[0].start;
+      const rawBlockEnd = contentLines[contentLines.length - 1].end;
+      opReplySegments.push({
+        marker: "作者編輯",
+        content: contentLines.map((line) => line.text).join("\n").trim(),
+        rawBlock: raw.slice(rawBlockStart, rawBlockEnd),
+        contentAnchorOffset: rawBlockStart,
+        markerOffset,
+      });
+    }
 
     index = endIndex - 1;
   }
 
-  return { editNotes };
+  return { editRecords, opReplySegments };
 }
 
 export function splitArticleBody(raw: string): {

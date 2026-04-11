@@ -2,14 +2,19 @@
  * 推文聚合器
  *
  * 依照 idea.md 的規則：
- * 1. 同作者「連續」推文，合併成一則
- * 2. 同作者「不連續」但塞滿且時間間隔小，也合併
+ * 1. 同作者推文在前一則可續接時合併
+ * 2. 可續接條件：塞滿且未用終止符，或以 || 明確標記續接
  * 3. 「回x樓：...」識別為嵌套回覆
  * 4. 原 po 回覆標示 isOP
  * 5. 計算每則聚合推文的 score（其嵌套回覆中 push - boo）
  */
 
-import type { ArticleEditNote, RawPush, PushType } from "./parser";
+import type {
+  ArticleEditRecord,
+  OpEditedReplySegment,
+  RawPush,
+  PushType,
+} from "./parser";
 
 type AnchoredRawPush = RawPush & {
   anchorOffset?: number;
@@ -34,13 +39,15 @@ export interface AggregatedPush {
 
 export interface AggregatedThread {
   pushes: AggregatedPush[];
-  articleNotes: ArticleEditNote[];
+  articleNotes: ArticleEditRecord[];
 }
 
 // PTT 推文欄位最大 byte 寬度（Big5 中文 2 bytes/字）
 const MAX_PUSH_BYTES = 45;
 // 同作者不連續但允許合併的最大時間間隔（分鐘）
 const TIME_GAP_MINUTES = 5;
+const CONTINUATION_MARKER_RE = /\|\|\s*$/u;
+const END_TERMINATOR_RE = /[。.!?！？;；]$/u;
 
 // ─── 工具函式 ─────────────────────────────────────────────────────────────────
 
@@ -56,6 +63,21 @@ function approximateBytes(s: string): number {
 /** 判斷此推文內容是否「塞滿」（接近 PTT 推文欄位上限） */
 function isFull(content: string): boolean {
   return approximateBytes(content) >= MAX_PUSH_BYTES - 2;
+}
+
+function hasContinuationMarker(content: string): boolean {
+  return CONTINUATION_MARKER_RE.test(content.trimEnd());
+}
+
+function stripContinuationMarker(content: string): string {
+  return content.replace(CONTINUATION_MARKER_RE, "");
+}
+
+function canContinueFrom(content: string): boolean {
+  if (hasContinuationMarker(content)) return true;
+
+  const visibleContent = stripContinuationMarker(content).trimEnd();
+  return isFull(visibleContent) && !END_TERMINATOR_RE.test(visibleContent);
 }
 
 /** 解析 "MM/DD HH:mm" → 當年的分鐘數（用於計算時間差） */
@@ -112,27 +134,15 @@ function groupPushes(rawPushes: AnchoredRawPush[]): PushGroup[] {
     const sameGroup = groups[sameAuthorGroupIdx];
     const lastPush = sameGroup.pushes[sameGroup.pushes.length - 1];
 
-    // 連續同作者（同作者群組恰好是 groups 最後一個，且上一則也是同作者）
+    // 連續同作者：上一則全域推文就是同作者。
     const prevGlobal = rawPushes[i - 1];
-    const isConsecutive =
-      sameAuthorGroupIdx === groups.length - 1 &&
-      prevGlobal.author === cur.author;
+    const isConsecutive = prevGlobal.author === cur.author;
 
-    if (isConsecutive) {
-      sameGroup.pushes.push(cur);
-      sameGroup.anchorOrder = cur.anchorOffset ?? i;
-      continue;
-    }
-
-    // 不連續：前幾則都塞滿、最後一則不以句號結尾、時間間隔夠小
-    const allPrevFull = sameGroup.pushes.every((p) => isFull(p.content));
-    const lastContent = lastPush.content;
-    const noEndPeriod =
-      !/[。.!?！？]$/u.test(lastContent);
+    // 前一段必須可續接。非連續時還必須在 k 分鐘內。
     const timeOk =
       timeDiffMinutes(lastPush.time, cur.time) <= TIME_GAP_MINUTES;
 
-    if (allPrevFull && noEndPeriod && timeOk) {
+    if (canContinueFrom(lastPush.content) && (isConsecutive || timeOk)) {
       sameGroup.pushes.push(cur);
       sameGroup.anchorOrder = cur.anchorOffset ?? i;
     } else {
@@ -145,7 +155,13 @@ function groupPushes(rawPushes: AnchoredRawPush[]): PushGroup[] {
 
 // ─── 嵌套偵測 ─────────────────────────────────────────────────────────────────
 
-const REPLY_RE = /^回(\d+)樓[：:]/;
+const REPLY_PATTERNS: RegExp[] = [
+  /^回\s*([0-9零〇一二兩三四五六七八九十百千萬]+)\s*樓\s*[：:]?\s*/iu,
+  /^回\s*([0-9零〇一二兩三四五六七八九十百千萬]+)\s*[fF]\b\s*[：:]?\s*/iu,
+  /^to\s*([0-9零〇一二兩三四五六七八九十百千萬]+)\s*[fF]\b\s*[：:]?\s*/iu,
+  /^reply\s+to\s+([0-9零〇一二兩三四五六七八九十百千萬]+)\s*[fF]\b\s*[：:]?\s*/iu,
+  /^>>\s*([0-9零〇一二兩三四五六七八九十百千萬]+)\s*[fF]\b\s*[：:]?\s*/iu,
+];
 
 interface ReplyInfo {
   targetFloor: number; // 要回覆的原始樓號（一行一樓）
@@ -153,12 +169,74 @@ interface ReplyInfo {
 }
 
 function detectReply(content: string): ReplyInfo | null {
-  const m = content.match(REPLY_RE);
-  if (!m) return null;
-  return {
-    targetFloor: parseInt(m[1], 10),
-    strippedContent: content.replace(REPLY_RE, "").trimStart(),
-  };
+  for (const pattern of REPLY_PATTERNS) {
+    const m = content.match(pattern);
+    if (!m) continue;
+    const targetFloor = parseFloorNumber(m[1]);
+    if (targetFloor === null) return null;
+    return {
+      targetFloor,
+      strippedContent: content.slice(m[0].length).trimStart(),
+    };
+  }
+
+  return null;
+}
+
+function parseFloorNumber(raw: string): number | null {
+  if (/^\d+$/u.test(raw)) return parseInt(raw, 10);
+
+  const normalized = raw.replace(/兩/gu, "二").replace(/〇/gu, "零");
+  const digitMap = new Map<string, number>([
+    ["零", 0],
+    ["一", 1],
+    ["二", 2],
+    ["三", 3],
+    ["四", 4],
+    ["五", 5],
+    ["六", 6],
+    ["七", 7],
+    ["八", 8],
+    ["九", 9],
+  ]);
+  const unitMap = new Map<string, number>([
+    ["十", 10],
+    ["百", 100],
+    ["千", 1000],
+    ["萬", 10000],
+  ]);
+
+  let total = 0;
+  let section = 0;
+  let number = 0;
+
+  for (const char of normalized) {
+    if (digitMap.has(char)) {
+      number = digitMap.get(char)!;
+      continue;
+    }
+
+    const unit = unitMap.get(char);
+    if (!unit) return null;
+
+    if (unit === 10000) {
+      section = (section + number) * unit;
+      total += section;
+      section = 0;
+      number = 0;
+      continue;
+    }
+
+    section += (number || 1) * unit;
+    number = 0;
+  }
+
+  const result = total + section + number;
+  return result > 0 ? result : null;
+}
+
+function extractAuthorId(author: string): string {
+  return author.trim().split(/\s+/u)[0] ?? "";
 }
 
 // ─── 主要匯出 ─────────────────────────────────────────────────────────────────
@@ -166,8 +244,11 @@ function detectReply(content: string): ReplyInfo | null {
 export function aggregatePushes(
   rawPushes: AnchoredRawPush[],
   articleAuthor: string,
-  editNotes: ArticleEditNote[] = [],
+  opReplySegments: OpEditedReplySegment[] = [],
+  articleEditRecords: ArticleEditRecord[] = [],
 ): AggregatedThread {
+  const articleAuthorId = extractAuthorId(articleAuthor);
+
   // Step 1：分群
   const groups = groupPushes(rawPushes);
 
@@ -177,7 +258,9 @@ export function aggregatePushes(
   for (let i = 0; i < groups.length; i++) {
     const g = groups[i];
     const rep = g.pushes[0]; // 代表型別與作者取第一則
-    const mergedContent = g.pushes.map((p) => p.content).join("");
+    const mergedContent = g.pushes
+      .map((p) => stripContinuationMarker(p.content))
+      .join("");
     const lastTime = g.pushes[g.pushes.length - 1].time;
     const ipAddresses = Array.from(
       new Set(g.pushes.map((p) => p.ipAddress).filter(Boolean)),
@@ -190,7 +273,7 @@ export function aggregatePushes(
       content: mergedContent,
       time: lastTime,
       ipAddresses,
-      isOP: rep.author === articleAuthor,
+      isOP: rep.author === articleAuthorId,
       replyTo: null,
       score: 0,
       floorNumber: i, // 暫定，後面篩掉嵌套後重排
@@ -209,9 +292,16 @@ export function aggregatePushes(
       const target = firstLayer.find((candidate) =>
         candidate.sourceFloors.includes(reply.targetFloor),
       );
-      p.replyTo = target ? target.id : null;
-      p.content = reply.strippedContent;
-      p.floorNumber = target ? target.floorNumber : floor;
+      if (target && target.id !== p.id && target.anchorOrder < p.anchorOrder) {
+        p.replyTo = target.id;
+        p.content = reply.strippedContent;
+        p.floorNumber = target.floorNumber;
+      } else {
+        p.replyTo = null;
+        p.floorNumber = floor;
+        floor++;
+        topLevel.push(p);
+      }
     } else {
       p.floorNumber = floor;
       floor++;
@@ -231,8 +321,7 @@ export function aggregatePushes(
     p.score = scoreMap.get(p.id) ?? 0;
   }
 
-  const articleNotes: ArticleEditNote[] = [];
-  const sortedEditNotes = [...editNotes].sort((a, b) => {
+  const sortedEditNotes = [...opReplySegments].sort((a, b) => {
     return a.contentAnchorOffset - b.contentAnchorOffset;
   });
   const threadPushes = [...firstLayer];
@@ -268,14 +357,12 @@ export function aggregatePushes(
         sourceFloors: [],
         marker: note.marker,
       });
-    } else {
-      articleNotes.push(note);
     }
   }
 
   return {
     pushes: threadPushes,
-    articleNotes,
+    articleNotes: articleEditRecords,
   };
 }
 

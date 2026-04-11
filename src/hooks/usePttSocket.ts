@@ -170,6 +170,7 @@ export function usePttSocket() {
 export async function submitLogin(
   username: string,
   password: string,
+  kickOthers = false,
 ): Promise<void> {
   const { client, setCredentials, setPttState, clearCredentials } =
     usePttSocketStore.getState();
@@ -179,7 +180,7 @@ export async function submitLogin(
   setCredentials({ username, password });
   setPttState("logging_in");
 
-  const result = await client.login(username, password, true);
+  const result = await client.login(username, password, kickOthers);
   if (result.ok) {
     setPttState("ready");
     return;
