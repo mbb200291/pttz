@@ -136,7 +136,7 @@ describe("ptt adapter module", () => {
     });
     expect(article?.date).toContain("Thu Apr");
     expect(article?.date).toContain("21:41:07 2026");
-    expect(article.body).toContain("內文第一行");
+    expect(article?.body).toContain("內文第一行");
   });
 
   it("includes a dev debug dump with raw line and parsed push summaries", async () => {
@@ -172,8 +172,12 @@ describe("ptt adapter module", () => {
       parsedPushCount: 2,
       bottomStatusLine: "瀏覽 第 2/2 頁 (100%)",
     });
-    expect(article?.debug?.lastLines.at(-1)).toBe("瀏覽 第 2/2 頁 (100%)");
-    expect(article?.debug?.parsedLastPushes.at(-1)).toMatchObject({
+    const debug = article?.debug;
+    const lastDebugLine = debug?.lastLines[debug.lastLines.length - 1];
+    const lastParsedPush =
+      debug?.parsedLastPushes[debug.parsedLastPushes.length - 1];
+    expect(lastDebugLine).toBe("瀏覽 第 2/2 頁 (100%)");
+    expect(lastParsedPush).toMatchObject({
       author: "user2",
       content: "第二則",
     });
@@ -211,7 +215,9 @@ describe("ptt adapter module", () => {
       "bb10181128",
       "Rutschman",
     ]);
-    expect(article?.pushes.at(-1)).toMatchObject({
+    const pushes = article?.pushes ?? [];
+    const lastPush = pushes[pushes.length - 1];
+    expect(lastPush).toMatchObject({
       type: "boo",
       content: "垃圾媒體放什麼話",
       time: "04/11 20:30",

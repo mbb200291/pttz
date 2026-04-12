@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { PushThread } from "../PushThread";
+import {
+  DEFAULT_REPLY_SORT,
+  PushThread,
+  sortTopLevelPushes,
+} from "../PushThread";
 import type { AggregatedPush } from "../../lib/ptt/pushAggregator";
 
 function push(overrides: Partial<AggregatedPush>): AggregatedPush {
@@ -22,6 +26,52 @@ function push(overrides: Partial<AggregatedPush>): AggregatedPush {
 }
 
 describe("PushThread", () => {
+  it("sorts top-level replies by time ascending by default", () => {
+    const sorted = sortTopLevelPushes(
+      [
+        push({ id: "new", content: "new", anchorOrder: 30 }),
+        push({ id: "old", content: "old", anchorOrder: 10 }),
+        push({ id: "mid", content: "mid", anchorOrder: 20 }),
+      ],
+      DEFAULT_REPLY_SORT,
+    );
+
+    expect(sorted.map((item) => item.id)).toEqual(["old", "mid", "new"]);
+  });
+
+  it("sorts top-level replies by time descending", () => {
+    const sorted = sortTopLevelPushes(
+      [
+        push({ id: "old", content: "old", anchorOrder: 10 }),
+        push({ id: "mid", content: "mid", anchorOrder: 20 }),
+        push({ id: "new", content: "new", anchorOrder: 30 }),
+      ],
+      { key: "time", direction: "desc" },
+    );
+
+    expect(sorted.map((item) => item.id)).toEqual(["new", "mid", "old"]);
+  });
+
+  it("sorts top-level replies by score with stable time tie-breakers", () => {
+    const replies = [
+      push({ id: "old-low", content: "old low", score: 1, anchorOrder: 10 }),
+      push({ id: "mid-high", content: "mid high", score: 8, anchorOrder: 20 }),
+      push({ id: "new-zero", content: "new zero", score: 0, anchorOrder: 30 }),
+      push({ id: "new-high", content: "new high", score: 8, anchorOrder: 40 }),
+    ];
+
+    expect(
+      sortTopLevelPushes(replies, { key: "score", direction: "desc" }).map(
+        (item) => item.id,
+      ),
+    ).toEqual(["mid-high", "new-high", "old-low", "new-zero"]);
+    expect(
+      sortTopLevelPushes(replies, { key: "score", direction: "asc" }).map(
+        (item) => item.id,
+      ),
+    ).toEqual(["new-zero", "old-low", "mid-high", "new-high"]);
+  });
+
   it("renders nested replies deeper than one level", () => {
     const html = renderToStaticMarkup(
       <PushThread
@@ -137,5 +187,39 @@ describe("PushThread", () => {
     expect(html).toContain("askz0");
     expect(html).toContain("36.237.166.196");
     expect(html).not.toContain("group-hover:block");
+  });
+
+  it("renders only the initial visible top-level batch", () => {
+    const html = renderToStaticMarkup(
+      <PushThread
+        score={0}
+        initialVisibleTopLevelCount={2}
+        pushes={[
+          push({ id: "push-0", content: "first", anchorOrder: 10 }),
+          push({ id: "push-1", content: "second", anchorOrder: 20 }),
+          push({ id: "push-2", content: "third", anchorOrder: 30 }),
+        ]}
+      />,
+    );
+
+    expect(html).toContain("first");
+    expect(html).toContain("second");
+    expect(html).not.toContain("third");
+    expect(html).toContain("已顯示 2 / 3 則第一層回覆");
+  });
+
+  it("shows refresh controls when refresh is available", () => {
+    const html = renderToStaticMarkup(
+      <PushThread score={0} pushes={[]} onRefresh={() => undefined} />,
+    );
+
+    expect(html).toContain("重新整理回文");
+  });
+
+  it("uses 推噓分 wording for score sorting", () => {
+    const html = renderToStaticMarkup(<PushThread score={0} pushes={[]} />);
+
+    expect(html).toContain("推噓分");
+    expect(html).not.toContain("推文數");
   });
 });

@@ -118,6 +118,30 @@ const MOCK_PUSHES: AggregatedPush[] = [
     anchorOrder: 30,
     sourceFloors: [3],
   },
+  ...Array.from({ length: 36 }, (_, index): AggregatedPush => {
+    const scores = [10, -3, 0, 5, 1, -1];
+    const typeCycle: AggregatedPush["type"][] = ["push", "neutral", "boo"];
+    const floor = index + 4;
+    return {
+      id: `push-extra-${floor}`,
+      type: typeCycle[index % typeCycle.length],
+      author: `mockUser${floor}`,
+      content:
+        index % 5 === 0
+          ? `第 ${floor} 則第一層回覆，這則用來測試比較長的內容與 lazy rendering。https://example.com/very/long/mock/url/${floor}`
+          : `第 ${floor} 則第一層回覆`,
+      ipAddresses: [`203.0.113.${floor}`],
+      time: `04/07 ${String(16 + Math.floor(floor / 10)).padStart(2, "0")}:${String(
+        floor % 60,
+      ).padStart(2, "0")}`,
+      isOP: false,
+      replyTo: null,
+      score: scores[index % scores.length],
+      floorNumber: floor - 1,
+      anchorOrder: 40 + index * 10,
+      sourceFloors: [floor],
+    };
+  }),
 ];
 
 const MOCK_ARTICLE: ArticleData = {

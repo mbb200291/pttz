@@ -4,7 +4,48 @@
  * 第一層推文以卡片式顯示；有 replyTo 的嵌套推文顯示在父推文下。
  */
 
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AggregatedPush } from "../lib/ptt/pushAggregator";
+
+export type ReplySortKey = "time" | "score";
+export type ReplySortDirection = "asc" | "desc";
+
+export interface ReplySortState {
+  key: ReplySortKey;
+  direction: ReplySortDirection;
+}
+
+export const DEFAULT_REPLY_SORT: ReplySortState = {
+  key: "time",
+  direction: "asc",
+};
+
+const INITIAL_VISIBLE_TOP_LEVEL_REPLIES = 30;
+const REPLY_RENDER_BATCH_SIZE = 30;
+
+function compareTopLevelReplies(
+  a: AggregatedPush,
+  b: AggregatedPush,
+  sort: ReplySortState,
+): number {
+  const direction = sort.direction === "asc" ? 1 : -1;
+  const primary =
+    sort.key === "score" ? a.score - b.score : a.anchorOrder - b.anchorOrder;
+
+  if (primary !== 0) return primary * direction;
+
+  const anchorTie = a.anchorOrder - b.anchorOrder;
+  if (anchorTie !== 0) return anchorTie;
+
+  return a.id.localeCompare(b.id);
+}
+
+export function sortTopLevelPushes(
+  pushes: AggregatedPush[],
+  sort: ReplySortState,
+): AggregatedPush[] {
+  return [...pushes].sort((a, b) => compareTopLevelReplies(a, b, sort));
+}
 
 interface PushItemProps {
   push: AggregatedPush;
@@ -147,23 +188,106 @@ function PushItem({
 interface PushThreadProps {
   pushes: AggregatedPush[];
   score: number;
+  onRefresh?: () => Promise<void> | void;
+  refreshing?: boolean;
+  initialVisibleTopLevelCount?: number;
+  renderBatchSize?: number;
 }
 
 export function PushThread({
   pushes,
   score,
+  onRefresh,
+  refreshing = false,
+  initialVisibleTopLevelCount = INITIAL_VISIBLE_TOP_LEVEL_REPLIES,
+  renderBatchSize = REPLY_RENDER_BATCH_SIZE,
 }: PushThreadProps) {
-  const childrenMap = new Map<string, AggregatedPush[]>();
-  for (const push of pushes) {
-    if (push.replyTo) {
-      const list = childrenMap.get(push.replyTo) ?? [];
-      list.push(push);
-      list.sort((a, b) => a.anchorOrder - b.anchorOrder);
-      childrenMap.set(push.replyTo, list);
+  const [sort, setSort] = useState<ReplySortState>(DEFAULT_REPLY_SORT);
+  const [visibleTopLevelCount, setVisibleTopLevelCount] = useState(
+    initialVisibleTopLevelCount,
+  );
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  const childrenMap = useMemo(() => {
+    const nextMap = new Map<string, AggregatedPush[]>();
+    for (const push of pushes) {
+      if (push.replyTo) {
+        const list = nextMap.get(push.replyTo) ?? [];
+        list.push(push);
+        list.sort((a, b) => a.anchorOrder - b.anchorOrder);
+        nextMap.set(push.replyTo, list);
+      }
     }
+    return nextMap;
+  }, [pushes]);
+
+  const topLevel = useMemo(
+    () => pushes.filter((push) => push.replyTo === null),
+    [pushes],
+  );
+  const sortedTopLevel = useMemo(
+    () => sortTopLevelPushes(topLevel, sort),
+    [sort, topLevel],
+  );
+  const visibleTopLevel = sortedTopLevel.slice(0, visibleTopLevelCount);
+  const hasMoreTopLevel = visibleTopLevel.length < sortedTopLevel.length;
+  const supportsIntersectionObserver =
+    typeof IntersectionObserver !== "undefined";
+
+  useEffect(() => {
+    setVisibleTopLevelCount(initialVisibleTopLevelCount);
+  }, [initialVisibleTopLevelCount, pushes, sort.direction, sort.key]);
+
+  useEffect(() => {
+    if (!hasMoreTopLevel || !supportsIntersectionObserver) return;
+
+    const target = sentinelRef.current;
+    if (!target) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      setVisibleTopLevelCount((current) =>
+        Math.min(current + renderBatchSize, sortedTopLevel.length),
+      );
+    });
+
+    observer.observe(target);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [
+    hasMoreTopLevel,
+    renderBatchSize,
+    sortedTopLevel.length,
+    supportsIntersectionObserver,
+  ]);
+
+  function setSortKey(key: ReplySortKey) {
+    setSort((current) => {
+      if (current.key === key) return current;
+      return { key, direction: key === "score" ? "desc" : "asc" };
+    });
   }
 
-  const topLevel = pushes.filter((push) => push.replyTo === null);
+  function toggleSortDirection() {
+    setSort((current) => ({
+      ...current,
+      direction: current.direction === "asc" ? "desc" : "asc",
+    }));
+  }
+
+  function showMoreTopLevel() {
+    setVisibleTopLevelCount((current) =>
+      Math.min(current + renderBatchSize, sortedTopLevel.length),
+    );
+  }
+
+  function handleRefresh() {
+    if (!onRefresh || refreshing) return;
+    void onRefresh();
+  }
+
   const scoreColor =
     score > 0 ? "text-green-400" : score < 0 ? "text-red-400" : "text-gray-400";
   const scoreLabel =
@@ -172,23 +296,83 @@ export function PushThread({
       : score <= -10
         ? "XX"
         : `${score > 0 ? "+" : ""}${score}`;
+  const directionLabel =
+    sort.key === "time"
+      ? sort.direction === "asc"
+        ? "舊到新"
+        : "新到舊"
+      : sort.direction === "asc"
+        ? "低到高"
+        : "高到低";
 
   return (
     <div className="mt-10 border-t border-gray-700 pt-6">
-      <div className="mb-4 flex items-center gap-3">
-        <span className="text-sm font-semibold tracking-wide text-gray-300">
-          討論串
-        </span>
-        <span
-          className={`rounded-full border border-current/20 px-2.5 py-1 text-sm font-bold ${scoreColor}`}
-        >
-          {scoreLabel}
-        </span>
-        <span className="text-xs text-gray-500">({topLevel.length} 則第一層回覆)</span>
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm font-semibold tracking-wide text-gray-300">
+            討論串
+          </span>
+          <span
+            className={`rounded-full border border-current/20 px-2.5 py-1 text-sm font-bold ${scoreColor}`}
+          >
+            {scoreLabel}
+          </span>
+          <span className="text-xs text-gray-500">
+            ({topLevel.length} 則第一層回覆)
+          </span>
+          <span className="text-xs text-gray-500">
+            已顯示 {visibleTopLevel.length} / {sortedTopLevel.length}{" "}
+            則第一層回覆
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex rounded-lg border border-gray-700 bg-gray-900/70 p-1">
+            <button
+              type="button"
+              onClick={() => setSortKey("time")}
+              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                sort.key === "time"
+                  ? "bg-sky-500/20 text-sky-200"
+                  : "text-gray-400 hover:text-gray-200"
+              }`}
+            >
+              時間
+            </button>
+            <button
+              type="button"
+              onClick={() => setSortKey("score")}
+              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                sort.key === "score"
+                  ? "bg-sky-500/20 text-sky-200"
+                  : "text-gray-400 hover:text-gray-200"
+              }`}
+            >
+              推噓分
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={toggleSortDirection}
+            className="rounded-lg border border-gray-700 bg-gray-900/70 px-2.5 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:border-gray-600 hover:text-white"
+          >
+            {directionLabel}
+          </button>
+          {onRefresh && (
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="rounded-lg border border-gray-700 bg-gray-900/70 px-2.5 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:border-gray-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {refreshing ? "更新中..." : "重新整理回文"}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="space-y-3">
-        {topLevel.map((push) => (
+        {visibleTopLevel.map((push) => (
           <PushItem
             key={push.id}
             push={push}
@@ -198,6 +382,19 @@ export function PushThread({
           />
         ))}
       </div>
+      {hasMoreTopLevel && (
+        <div ref={sentinelRef} className="mt-4 flex justify-center">
+          {!supportsIntersectionObserver && (
+            <button
+              type="button"
+              onClick={showMoreTopLevel}
+              className="rounded-lg border border-gray-700 bg-gray-900/70 px-3 py-2 text-xs font-medium text-gray-300 transition-colors hover:border-gray-600 hover:text-white"
+            >
+              顯示更多回覆
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

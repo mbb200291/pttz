@@ -99,6 +99,11 @@ function mapFailureReason(reason: LoginFailureReason): PttState {
   }
 }
 
+function mapConnectionStatus(status: ConnectionStatus): PttState {
+  if (status === "connected") return "need_login";
+  return status;
+}
+
 export function usePttSocket() {
   const pttState = usePttSocketStore((s) => s.pttState);
   const client = usePttSocketStore((s) => s.client);
@@ -118,7 +123,7 @@ export function usePttSocket() {
           ? "need_login"
           : adapter.getStatus() === "connecting"
             ? "connecting"
-            : adapter.getStatus(),
+            : mapConnectionStatus(adapter.getStatus()),
     );
     store.setRecentBuffer(adapter.getLastScreen());
 

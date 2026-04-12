@@ -96,6 +96,7 @@ PTTzzz 是一個純前端的 PTT 閱讀器。
 9. 文章層級編輯紀錄與作者編輯補充 reply
 10. 第一層文章總分計算
 11. 單則聚合推文的 score 計算
+12. 第一層聚合回文排序支援的穩定欄位
 
 ### 5. UI 呈現層
 
@@ -114,6 +115,9 @@ PTTzzz 是一個純前端的 PTT 閱讀器。
 3. 文章閱讀
 4. 討論串顯示
 5. 回文 score、IP、OP、作者編輯標籤
+6. 第一層回文依時間 / 推噓分排序
+7. 回文區塊 scroll lazy rendering
+8. 手動重新整理回文
 
 做成穩定可用版本。
 
@@ -133,6 +137,9 @@ PTTzzz 是一個純前端的 PTT 閱讀器。
 10. 回文 score 顯示
 11. 回文 IP 直接顯示
 12. 基本的看板與文章閱讀 UI
+13. 第一層聚合回文可依時間與推噓分排序
+14. 回文列表隨滾動逐步渲染已取得的第一層回文
+15. 討論串可手動重新整理，重新抓取文章取得新回文
 
 ## 目前保留的舊程式邏輯
 
@@ -183,6 +190,8 @@ PTTzzz 是一個純前端的 PTT 閱讀器。
 6. 舊 terminal 架構清理
 7. dev-only 文章 debug dump
 8. 登入時中斷其他連線改為使用者 opt-in
+9. 文章回文列表排序與 scroll lazy rendering
+10. 討論串手動重新整理回文
 
 ### 正在維護
 
@@ -190,6 +199,7 @@ PTTzzz 是一個純前端的 PTT 閱讀器。
 2. 文章與推文解析正確率
 3. 前端閱讀體驗
 4. 實站特殊推文格式的 parser / aggregator case
+5. 熱門文章回文列表的渲染效能與排序體驗
 
 ### 尚未開始
 
@@ -206,3 +216,4 @@ PTTzzz 是一個純前端的 PTT 閱讀器。
 1. [ptt-client-migration-notes.md](/Users/linbangqi/pttzzz/dev_notes/ptt-client-migration-notes.md)
 2. [goal-3-implementation-plan.md](/Users/linbangqi/pttzzz/dev_notes/goal-3-implementation-plan.md)
 3. [goal-3-implementation-notes.md](/Users/linbangqi/pttzzz/dev_notes/goal-3-implementation-notes.md)
+4. [goal-4-reply-sort-implementation-plan.md](/Users/linbangqi/pttzzz/dev_notes/goal-4-reply-sort-implementation-plan.md)

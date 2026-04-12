@@ -1,5 +1,6 @@
 import Ptt from "ptt-client";
 import sleep from "sleep-promise";
+import type PttConfig from "ptt-client/dist/config";
 import {
   aggregatePushes,
   calcArticleScore,
@@ -124,6 +125,18 @@ type BotLike = {
   getLine?: (n: number) => { str?: string };
 };
 
+type ArticleFetchBot = Partial<
+  Pick<
+    BotLike,
+    | "enterBoardByName"
+    | "send"
+    | "getLines"
+    | "getLine"
+    | "getArticle"
+    | "enterIndex"
+  >
+>;
+
 const PTT_WS_URL = import.meta.env.DEV
   ? typeof location !== "undefined"
     ? `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ptt-ws`
@@ -143,11 +156,21 @@ class PttClientAdapter implements PttAdapter {
   }
 
   private createBot(): BotLike {
-    const bot = new Ptt({
+    const config: PttConfig = {
+      name: "PTT",
       url: PTT_WS_URL,
       charset: "big5",
+      origin: "app://pcman",
       protocol: "websocket",
-    }) as unknown as BotLike;
+      timeout: 200,
+      blobSize: 1024,
+      preventIdleTimeout: 30,
+      terminal: {
+        columns: 80,
+        rows: 24,
+      },
+    };
+    const bot = new Ptt(config) as unknown as BotLike;
 
     bot
       .on("connect", () => {
@@ -686,10 +709,7 @@ export function createPttAdapter(): PttAdapter {
 }
 
 export async function fetchArticleFromBot(
-  bot: Pick<
-    BotLike,
-    "enterBoardByName" | "send" | "getLines" | "getLine" | "getArticle"
-  >,
+  bot: ArticleFetchBot,
   boardName: string,
   articleIndex: number,
 ): Promise<AdapterArticleData | null> {
@@ -742,7 +762,7 @@ export async function fetchArticleFromBot(
     }
   }
 
-  if (!bot.enterBoardByName || !bot.getLines) {
+  if (!bot.enterBoardByName || !bot.getLines || !bot.send) {
     throw new Error("Bot does not expose article navigation methods");
   }
 

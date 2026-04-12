@@ -59,7 +59,9 @@ export function Article({
   const {
     article: liveArticle,
     loading: liveLoading,
+    reloading: liveReloading,
     error: liveError,
+    reload: liveReload,
   } = useArticle(
     boardName,
     articleIndex,
@@ -145,6 +147,8 @@ export function Article({
             <PushThread
               pushes={article.pushes}
               score={article.score}
+              onRefresh={liveReload}
+              refreshing={liveReloading}
             />
           </>
         )}
