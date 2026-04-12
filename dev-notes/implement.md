@@ -213,7 +213,8 @@ PTTzzz 是一個純前端的 PTT 閱讀器。
 
 目前主要筆記：
 
-1. [ptt-client-migration-notes.md](/Users/linbangqi/pttzzz/dev_notes/ptt-client-migration-notes.md)
-2. [goal-3-implementation-plan.md](/Users/linbangqi/pttzzz/dev_notes/goal-3-implementation-plan.md)
-3. [goal-3-implementation-notes.md](/Users/linbangqi/pttzzz/dev_notes/goal-3-implementation-notes.md)
-4. [goal-4-reply-sort-implementation-plan.md](/Users/linbangqi/pttzzz/dev_notes/goal-4-reply-sort-implementation-plan.md)
+1. [ptt-client-migration-notes.md](ptt-client-migration-notes.md)
+2. [goal-3-implementation-plan.md](goal-3-implementation-plan.md)
+3. [goal-3-implementation-notes.md](goal-3-implementation-notes.md)
+4. [goal-4-reply-sort-implementation-plan.md](goal-4-reply-sort-implementation-plan.md)
+5. [goal-4-implementation-notes.md](goal-4-implementation-notes.md)

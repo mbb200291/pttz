@@ -169,11 +169,6 @@ children 應繼續只用 `anchorOrder` 遞增排序。
 
 ## Lazy 載入設計
 
-`spec.md` 的閱讀體驗寫到：
-
-- 開啟文章後看到內容的時間不能超過 0.5 秒
-- 下方回文區塊可能需要逐步渲染
-
 排序功能會增加一個明顯風險：如果熱門文章有大量聚合回文，每次切換排序都同步渲染完整 thread，可能造成卡頓。
 
 ### 第一版決策：UI-level incremental rendering + scroll sentinel
