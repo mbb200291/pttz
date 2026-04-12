@@ -207,6 +207,10 @@ PTTzzz 是一個純前端的 PTT 閱讀器。
 2. 更完整的論壇互動能力
 3. 更完整的產品化整理
 
+### Pending
+
+1. **目標 5：使用者頭像** — 原始方案（PTT 名片存 URL）因名片讀取速度問題放棄。確定改用 Cloudflare Workers + KV 作為頭像 registry，但身分驗證方案尚未定案，優先級較低，暫時 pending。
+
 ## 細節文件
 
 較細的開發事項請看 `dev_notes/`。
@@ -218,3 +222,5 @@ PTTzzz 是一個純前端的 PTT 閱讀器。
 3. [goal-3-implementation-notes.md](goal-3-implementation-notes.md)
 4. [goal-4-reply-sort-implementation-plan.md](goal-4-reply-sort-implementation-plan.md)
 5. [goal-4-implementation-notes.md](goal-4-implementation-notes.md)
+6. [goal-5-implementation-plan.md](goal-5-implementation-plan.md)
+7. [goal-5-implementation-notes.md](goal-5-implementation-notes.md)
