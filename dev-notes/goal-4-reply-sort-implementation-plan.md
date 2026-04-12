@@ -241,6 +241,40 @@ const REPLY_RENDER_BATCH_SIZE = 30;
 - 文章總分與高分排序需要完整第一層 score；若資料未完整聚合，高分排序會不穩定。
 - `ptt-client.getArticle()` 目前回傳整篇文章，資料來源不是現成的 paginated push API。
 
+### 後續目標：量測真實瓶頸
+
+目前的 lazy loading 只處理 UI render 數量，沒有證明實際瓶頸一定在 render。後續若要優化閱讀體驗，應先用 performance marks 分段量測，而不是直接重構資料層。
+
+建議量測分段：
+
+1. `getArticle`：從呼叫 `client.getArticle(boardName, articleIndex)` 到拿到 raw article data。
+2. `parse / aggregate`：從 raw article data 進入 parser / aggregator 到產出 `article.pushes`。
+3. `first article render`：React 拿到 article data 到文章 header / body 出現在畫面。
+4. `first thread render`：`PushThread` 初始批次 render 完成。
+5. `sort rerender`：切換時間 / 推噓分排序後，到目前可見批次 render 完成。
+6. `incremental render`：scroll sentinel 觸發後，到下一批回文 render 完成。
+
+建議第一版只在 dev 環境記錄：
+
+```ts
+performance.mark("pttzzz:article:get:start");
+performance.mark("pttzzz:article:get:end");
+performance.measure(
+  "pttzzz:article:get",
+  "pttzzz:article:get:start",
+  "pttzzz:article:get:end",
+);
+```
+
+可先輸出到 `console.table(performance.getEntriesByName(...))` 或 `window.pttzzzDebug`，不要先做正式 analytics。
+
+判讀方向：
+
+- 如果 `getArticle` 佔大頭，後續才研究 PTT 讀取策略、cache、背景 refresh 或資料層分段。
+- 如果 parse / aggregate 佔大頭，後續才研究 parser/aggregator chunking 或 worker。
+- 如果 first thread render / sort rerender 佔大頭，才繼續加強 UI virtualization、children lazy expand、memoization。
+- 如果 incremental render 仍卡，代表單批 30 則太大，或單一 top-level children 太多，需要調整 batch size 或做 children 收合。
+
 ## 需要釐清的問題
 
 這些不是第一版的硬 blocker，但實作前最好定義清楚：
