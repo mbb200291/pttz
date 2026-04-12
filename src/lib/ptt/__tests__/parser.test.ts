@@ -74,6 +74,35 @@ describe("parsePushBuffer", () => {
     });
   });
 
+  it("marks real-site full lines even when the IP padding is wider than three spaces", () => {
+    const pushes = parsePushBuffer(
+      "推 CMCC: 函釋是在說明可以列入，懂嗎？ 而非限制必須    42.73.44.229 04/12 08:43\n→ CMCC: 列入，因為政治獻金有稅法上優勢，所以釋法     42.73.44.229 04/12 08:43",
+    );
+
+    expect(pushes[0]).toMatchObject({
+      author: "CMCC",
+      content: "函釋是在說明可以列入，懂嗎？ 而非限制必須",
+      isFullWidthLine: true,
+    });
+    expect(pushes[1]).toMatchObject({
+      author: "CMCC",
+      content: "列入，因為政治獻金有稅法上優勢，所以釋法",
+      isFullWidthLine: true,
+    });
+  });
+
+  it("accounts for long author columns when marking visually full lines", () => {
+    const pushes = parsePushBuffer(
+      "推 alisabonsai: 候選人在選舉的時候只想要曝光換選       49.216.90.142 04/12 08:24\n→ alisabonsai: 票 會想要肖像權換鈔票的還是首見          49.216.90.142 04/12 08:24",
+    );
+
+    expect(pushes[0]).toMatchObject({
+      author: "alisabonsai",
+      content: "候選人在選舉的時候只想要曝光換選",
+      isFullWidthLine: true,
+    });
+  });
+
   it("parses padded author columns before the colon", () => {
     const pushes = parsePushBuffer(
       "推 wheat1130   : https://i.meee.com.tw/hC3mVOL.jpg                 04/11 19:46\n→ bb10181128  : 伊朗外長平常都穿西裝啊                            04/11 20:25",

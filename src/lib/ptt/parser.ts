@@ -11,6 +11,10 @@
 const ANSI_RE = /\x1b\[[0-9;]*[A-Za-z]/g;
 const PUSH_MARKER_PATTERN = "([推噓→])\\s+(\\S{2,12})\\s*:";
 const PUSH_MARKER_RE = new RegExp(PUSH_MARKER_PATTERN, "u");
+// PTT 推文內容區會受作者欄、IP 與時間欄擠壓；約 37 bytes 已會貼近 IP 欄。
+const MIN_FULL_PUSH_BYTES = 37;
+// 內容前綴（推/噓/→ + 作者 + 冒號）也會吃欄寬；48 columns 約剩一個半形 buffer。
+const MIN_FULL_PUSH_ROW_BYTES = 48;
 
 function stripBackspaces(text: string): string {
   const chars: string[] = [];
@@ -103,9 +107,19 @@ function countTrailingSpaces(value: string): number {
   return match?.[0].length ?? 0;
 }
 
+function approximateBytes(value: string): number {
+  let count = 0;
+  for (const char of value) {
+    count += char.codePointAt(0)! > 127 ? 2 : 1;
+  }
+  return count;
+}
+
 function isFullWidthPushRemainder(
   remainder: string,
   timeStartIndex: number,
+  marker: string,
+  author: string,
 ): boolean {
   const beforeTime = remainder.slice(0, timeStartIndex);
   const ipMatch = beforeTime.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b\s*$/u);
@@ -116,7 +130,12 @@ function isFullWidthPushRemainder(
 
   if (content.length === 0) return false;
 
-  return countTrailingSpaces(contentField) <= 3;
+  return (
+    countTrailingSpaces(contentField) <= 3 ||
+    approximateBytes(content) >= MIN_FULL_PUSH_BYTES ||
+    approximateBytes(`${marker} ${author}: ${content}`) >=
+      MIN_FULL_PUSH_ROW_BYTES
+  );
 }
 
 export function parsePushBuffer(raw: string): RawPush[] {
@@ -170,6 +189,8 @@ export function parsePushBuffer(raw: string): RawPush[] {
         isFullWidthLine: isFullWidthPushRemainder(
           remainder,
           timeMatch.index,
+          marker,
+          author,
         ),
       });
     }

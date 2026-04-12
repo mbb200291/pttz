@@ -75,15 +75,73 @@
 目前做法：
 
 - parser 在 `RawPush` 上標記 `isFullWidthLine`
-- 判斷依據是原始 PTT 行中 content 到 IP / time 欄前的 spacing
+- 判斷依據是原始 PTT 行中 content 到 IP / time 欄前的 spacing、content 近似 byte 長度、以及整列可見寬度
 - aggregator 優先使用 `isFullWidthLine`
 - 若 raw push 沒有 metadata，才 fallback 到近似 byte 長度
+
+目前實作細節：
+
+- `content` 到 IP 欄前的 padding 很短時，視為滿行
+- `content` 近似 Big5 byte 長度達滿行門檻時，視為滿行
+- `推/噓/→ + 作者 + 冒號 + content` 的整列可見寬度接近 IP 欄時，也視為滿行
+- 第三點是為了處理長作者 ID：作者欄吃掉更多半形欄寬時，content 本身 byte 數可能不高，但實際上已經只剩一個半形 buffer，塞不進下一個中文字
 
 這個設計的原因：
 
 - 真實 content 欄寬不是看板固定值
 - 會受到作者 ID 長度、IP 顯示、時間欄、字寬影響
 - parser 最接近原始行格式，最適合判斷「視覺上是否貼到欄位邊界」
+
+### 2026-04-12：IP 欄前 padding 稍寬但內容已滿行
+
+實站 case：
+
+```txt
+推 CMCC: 函釋是在說明可以列入，懂嗎？ 而非限制必須    42.73.44.229 04/12 08:43
+→ CMCC: 列入，因為政治獻金有稅法上優勢，所以釋法     42.73.44.229 04/12 08:43
+```
+
+問題：
+
+- 舊判斷只看 content 欄位到 IP 欄前的 trailing spaces 是否小於等於 3。
+- 這類行雖然視覺上已經滿行，但 IP 前可能仍有 4 個以上 padding spaces。
+- parser 會標成 `isFullWidthLine: false`，aggregator 因此在聚合後保留換行。
+
+目前做法：
+
+- parser 滿行判斷改為兩個條件任一成立即可：
+  - IP 前 padding 很短
+  - content 近似 Big5 byte 長度已達滿行門檻
+- 這讓「視覺上已滿但 padding 稍寬」的實站推文仍能正確標為滿行。
+
+### 2026-04-12：長作者 ID 會吃掉內容欄寬
+
+實站 case：
+
+```txt
+推 alisabonsai: 候選人在選舉的時候只想要曝光換選       49.216.90.142 04/12 08:24
+→ alisabonsai: 票 會想要肖像權換鈔票的還是首見          49.216.90.142 04/12 08:24
+```
+
+問題：
+
+- `候選人在選舉的時候只想要曝光換選` 的 content 近似 Big5 byte 長度只有 32。
+- 若只看 content byte 長度，會低於固定滿行門檻。
+- 但 `alisabonsai` 作者 ID 較長，`推 alisabonsai:` 本身會吃掉更多半形欄寬。
+- 此時內容後方即使還有一個半形空間，也塞不進下一個中文字，所以使用者視覺上會把它理解為滿行切斷。
+
+目前做法：
+
+- 滿行判斷再加入整列可見寬度：
+  - `推/噓/→ + 作者 + 冒號 + 內容`
+- 當整列寬度接近 IP 欄且只剩約一個半形 buffer 時，也標記為 `isFullWidthLine: true`。
+- 這比單純把 content byte 門檻調低更保守，因為短作者的短內容不會因此被誤判為滿行。
+
+測試覆蓋：
+
+- `parser.test.ts` 有 regression case 確認 CMCC 這類 IP 前 padding 稍寬的滿行會被標為 `isFullWidthLine: true`
+- `parser.test.ts` 有 regression case 確認 `alisabonsai` 這類長作者 ID 造成內容欄變短時，也會被標為 `isFullWidthLine: true`
+- `pushAggregator.test.ts` 既有 case 確認 `isFullWidthLine: true` 時，聚合後下一段會直接接續在同一行
 
 ---
 
