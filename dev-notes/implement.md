@@ -107,6 +107,12 @@ PTTzzz 是一個純前端的 PTT 閱讀器。
 3. [`src/components/ArticleList.tsx`](/Users/linbangqi/pttzzz/src/components/ArticleList.tsx)
 4. [`src/components/Article.tsx`](/Users/linbangqi/pttzzz/src/components/Article.tsx)
 5. [`src/components/PushThread.tsx`](/Users/linbangqi/pttzzz/src/components/PushThread.tsx)
+6. [`src/components/RichContent.tsx`](/Users/linbangqi/pttzzz/src/components/RichContent.tsx)
+7. [`src/components/MediaPreview.tsx`](/Users/linbangqi/pttzzz/src/components/MediaPreview.tsx)
+
+新增 lib / hook：
+
+1. [`src/lib/ptt/contentSegments.ts`](/Users/linbangqi/pttzzz/src/lib/ptt/contentSegments.ts)
 
 目前 UI 重點是先把：
 
@@ -118,6 +124,7 @@ PTTzzz 是一個純前端的 PTT 閱讀器。
 6. 第一層回文依時間 / 推噓分排序
 7. 回文區塊 scroll lazy rendering
 8. 手動重新整理回文
+9. 文章與推文的 imgur 圖片 / YouTube 影片 inline 預覽
 
 做成穩定可用版本。
 
@@ -140,6 +147,13 @@ PTTzzz 是一個純前端的 PTT 閱讀器。
 13. 第一層聚合回文可依時間與推噓分排序
 14. 回文列表隨滾動逐步渲染已取得的第一層回文
 15. 討論串可手動重新整理，重新抓取文章取得新回文
+16. 文章列表 IntersectionObserver scroll sentinel（自動觸發載入更多）
+17. 文章 progressive render：開始載入後約 200–400ms 即顯示標題、作者、正文，推文區待完整資料後再渲染
+18. 文章正文與推文內的 imgur 圖片 inline 顯示（lazy load、no-referrer、error fallback）
+19. 文章正文與推文內的 YouTube 影片 click-to-play 預覽（縮圖 + 點擊後展開 iframe）
+20. 看板文章標題關鍵字搜尋（PTT `/` 鍵，系列視圖）
+21. 看板文章推噓文數篩選（PTT `Z` 鍵，快選 ≥10 / ≥30 / ≥100 / 爆 + 可清除）
+22. 以 AID 直接跳轉文章（PTT `#` 鍵，搜尋欄輸入 #XXXXXXXX）
 
 ## 目前保留的舊程式邏輯
 
@@ -192,6 +206,10 @@ PTTzzz 是一個純前端的 PTT 閱讀器。
 8. 登入時中斷其他連線改為使用者 opt-in
 9. 文章回文列表排序與 scroll lazy rendering
 10. 討論串手動重新整理回文
+11. 文章列表 scroll sentinel（IntersectionObserver 自動載入更多）
+12. 文章 progressive render（partial screen parser + partialArticle hook 狀態）
+13. 文章 / 推文 rich content：imgur 圖片 + YouTube click-to-play
+14. 看板文章標題搜尋 + 推噓文數篩選 + AID 跳轉（adapter + useBoard filter + ArticleList UI）
 
 ### 正在維護
 
@@ -224,3 +242,5 @@ PTTzzz 是一個純前端的 PTT 閱讀器。
 5. [goal-4-implementation-notes.md](goal-4-implementation-notes.md)
 6. [goal-5-implementation-plan.md](goal-5-implementation-plan.md)
 7. [goal-5-implementation-notes.md](goal-5-implementation-notes.md)
+8. [goal-6-implementation-plan.md](goal-6-implementation-plan.md)
+9. [goal-6-implementation-notes.md](goal-6-implementation-notes.md)

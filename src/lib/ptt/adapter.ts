@@ -1,6 +1,7 @@
 import Ptt from "ptt-client";
 import sleep from "sleep-promise";
 import type PttConfig from "ptt-client/dist/config";
+import { substrWidth } from "ptt-client/dist/utils/char";
 import {
   aggregatePushes,
   calcArticleScore,
@@ -55,6 +56,22 @@ export interface AdapterArticleData {
   debug?: ArticleDebugDump;
 }
 
+export interface PartialArticleData {
+  title: string;
+  author: string;
+  date: string;
+  board: string;
+  body: string;
+  pushes?: AggregatedPush[];
+  articleNotes?: ArticleEditRecord[];
+  score?: number;
+}
+
+export interface ArticleFirstScreenSnapshot {
+  partial: PartialArticleData;
+  screenLines: string[];
+}
+
 export interface ArticleDebugDump {
   boardName: string;
   articleIndex: number;
@@ -78,6 +95,36 @@ export interface ArticleDebugDump {
   bottomStatusLine: string;
 }
 
+export interface ArticleOpenTraceEvent {
+  name: string;
+  atMs: number;
+  detail?: string;
+}
+
+export interface ArticleOpenTraceCandidate {
+  source: "wait_first_screen" | "progressive";
+  atMs: number;
+  title: string;
+  author: string;
+  board: string;
+  fingerprint: string;
+  accepted: boolean;
+  reason?: string;
+  firstLines: string[];
+}
+
+export interface ArticleOpenTrace {
+  boardName: string;
+  articleIndex: number;
+  startedAtIso: string;
+  events: ArticleOpenTraceEvent[];
+  partialCandidates: ArticleOpenTraceCandidate[];
+  previousFingerprint: string | null;
+  finalTitle?: string;
+  finalAuthor?: string;
+  finalBoard?: string;
+}
+
 export interface PttAdapter {
   send: (data: string) => Promise<boolean>;
   login: (
@@ -92,7 +139,23 @@ export interface PttAdapter {
   getArticle: (
     boardName: string,
     articleIndex: number,
+    onPartial?: (partial: PartialArticleData) => void,
   ) => Promise<AdapterArticleData | null>;
+  getArticleByAid: (
+    boardName: string,
+    aid: string,
+    onPartial?: (partial: PartialArticleData) => void,
+  ) => Promise<AdapterArticleData | null>;
+  searchArticles: (
+    boardName: string,
+    keyword: string,
+    beforeIndex?: number,
+  ) => Promise<ArticleSummary[]>;
+  filterArticlesByPush: (
+    boardName: string,
+    threshold: number,
+    beforeIndex?: number,
+  ) => Promise<ArticleSummary[]>;
   disconnect: () => Promise<void>;
   isLoggedIn: () => boolean;
   getStatus: () => ConnectionStatus;
@@ -103,15 +166,26 @@ export interface PttAdapter {
 
 type BotLike = {
   state: { connect?: boolean; login?: boolean };
-  _state?: { connect?: boolean; login?: boolean; position?: { boardname?: string } };
-  searchCondition?: { init?: () => void };
+  _state?: {
+    connect?: boolean;
+    login?: boolean;
+    position?: { boardname?: string };
+  };
+  searchCondition?: {
+    conditions: unknown[] | null;
+    init?: () => void;
+    add?: (type: "push" | "author" | "title", criteria: string) => void;
+  };
   socket?: { disconnect?: () => void };
   on: (event: string, listener: (...args: unknown[]) => void) => BotLike;
   send: (msg: string) => Promise<boolean>;
   getLines?: () => Promise<string[]>;
   enterBoardByName?: (boardName: string) => Promise<boolean>;
   enterIndex?: () => Promise<boolean>;
-  getArticles: (boardName: string, offset?: number) => Promise<PttClientArticleRow[]>;
+  getArticles: (
+    boardName: string,
+    offset?: number,
+  ) => Promise<PttClientArticleRow[]>;
   getArticle: (
     boardName: string,
     articleIndex: number,
@@ -137,6 +211,19 @@ type ArticleFetchBot = Partial<
   >
 >;
 
+type BoardFetchBot = Partial<
+  Pick<BotLike, "send" | "getLine" | "enterBoardByName" | "enterIndex">
+>;
+
+const PTT_KEY_PGDOWN = "\x1b[6~";
+const PTT_KEY_HOME = "\x1b[1~";
+const PTT_KEY_END = "\x1b[4~";
+const MAX_BOARD_SCREEN_INDEX_GAP = 50000;
+
+type AdapterDebugGlobal = typeof globalThis & {
+  __pttzzzLastArticleOpenTrace?: ArticleOpenTrace | null;
+};
+
 const PTT_WS_URL = import.meta.env.DEV
   ? typeof location !== "undefined"
     ? `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ptt-ws`
@@ -147,9 +234,16 @@ class PttClientAdapter implements PttAdapter {
   private bot: BotLike;
   private status: ConnectionStatus = "connecting";
   private lastScreen = "";
-  private readonly statusListeners = new Set<(status: ConnectionStatus) => void>();
+  private readonly statusListeners = new Set<
+    (status: ConnectionStatus) => void
+  >();
   private readonly screenListeners = new Set<(screen: string) => void>();
   private readonly runSerial = createSerialTaskRunner();
+  private lastFilterBoardName: string | null = null;
+  private lastFilterConditions: Array<{
+    type: "push" | "title";
+    criteria: string;
+  }> | null = null;
 
   constructor() {
     this.bot = this.createBot();
@@ -162,7 +256,7 @@ class PttClientAdapter implements PttAdapter {
       charset: "big5",
       origin: "app://pcman",
       protocol: "websocket",
-      timeout: 200,
+      timeout: 40,
       blobSize: 1024,
       preventIdleTimeout: 30,
       terminal: {
@@ -274,21 +368,130 @@ class PttClientAdapter implements PttAdapter {
     boardName: string,
     beforeIndex?: number,
   ): Promise<ArticleSummary[]> {
+    const wasFiltered = this.lastFilterBoardName !== null;
+    this.lastFilterBoardName = null;
+    this.lastFilterConditions = null;
     return this.runSerial(async () => {
-      const rows = await this.bot.getArticles(boardName, beforeIndex ?? 0);
-      return rows
-        .map(mapArticleRow)
-        .filter((article) => article.index > 0 && article.title.trim().length > 0)
-        .sort((a, b) => b.index - a.index);
+      return fetchBoardArticlesFromBotManually(
+        this.bot,
+        boardName,
+        beforeIndex ?? 0,
+        wasFiltered,
+      );
     });
   }
 
   async getArticle(
     boardName: string,
     articleIndex: number,
+    onPartial?: (partial: PartialArticleData) => void,
   ): Promise<AdapterArticleData | null> {
+    return this.runSerial(() => {
+      if (onPartial) {
+        return fetchArticleFromBotManually(this.bot, boardName, articleIndex, onPartial);
+      }
+      return fetchArticleFromBot(this.bot, boardName, articleIndex);
+    });
+  }
+
+  async getArticleByAid(
+    boardName: string,
+    aid: string,
+    onPartial?: (partial: PartialArticleData) => void,
+  ): Promise<AdapterArticleData | null> {
+    return this.runSerial(() => {
+      const doFetch = async (): Promise<AdapterArticleData | null> =>
+        fetchArticleByAidFromBotManually(this.bot, boardName, aid, onPartial);
+
+      if (!onPartial) return doFetch();
+
+      const screenHandler = (screen: string) => {
+        const partial = parsePartialScreen(screen);
+        if (partial) onPartial(partial);
+      };
+      this.screenListeners.add(screenHandler);
+      return doFetch().finally(() => {
+        this.screenListeners.delete(screenHandler);
+      });
+    });
+  }
+
+  private async listArticlesWithConditions(
+    boardName: string,
+    conditions: Array<{ type: "push" | "title"; criteria: string }>,
+    beforeIndex?: number,
+  ): Promise<ArticleSummary[]> {
+    if (!this.bot.send || !this.bot.getLine) {
+      throw new Error("Bot does not expose board navigation methods");
+    }
+
+    const conditionsKey = JSON.stringify(conditions);
+    const currentScreen = readVisibleScreen(this.bot);
+    const sameFilterActive =
+      this.lastFilterBoardName === boardName &&
+      JSON.stringify(this.lastFilterConditions) === conditionsKey &&
+      isFilterModeScreen(currentScreen) &&
+      extractCurrentBoardName(currentScreen)?.toLowerCase() ===
+        boardName.toLowerCase();
+
+    if (!sameFilterActive) {
+      // Enter normal board mode first (exits filter mode or article view)
+      const entered = await ensureNormalBoardView(this.bot, boardName);
+      if (!entered) throw new Error(`無法進入看板 ${boardName}`);
+
+      // Go to most recent articles
+      await this.bot.send(`${PTT_KEY_END}${PTT_KEY_END}`);
+      await sleep(150);
+
+      // Apply filter conditions — stay in filter mode, do NOT call enterIndex
+      for (const { type, criteria } of conditions) {
+        const prefix = type === "push" ? "Z" : "/";
+        await this.bot.send(`${prefix}${criteria}\r`);
+        await sleep(350);
+      }
+
+      this.lastFilterBoardName = boardName;
+      this.lastFilterConditions = conditions.map((c) => ({ ...c }));
+    }
+
+    // Navigate to beforeIndex within filter results if specified
+    if (beforeIndex && beforeIndex > 0) {
+      const offset = Math.max(beforeIndex - 9, 1);
+      await this.bot.send(`${PTT_KEY_END}${PTT_KEY_END}${offset}\r`);
+      await sleep(150);
+    }
+
+    const screen = readVisibleScreen(this.bot);
+    return parsePartialBoardScreen(screen)
+      .filter((a) => a.index > 0 && a.title.trim().length > 0)
+      .sort((a, b) => b.index - a.index);
+  }
+
+  async searchArticles(
+    boardName: string,
+    keyword: string,
+    beforeIndex?: number,
+  ): Promise<ArticleSummary[]> {
     return this.runSerial(() =>
-      fetchArticleFromBot(this.bot, boardName, articleIndex),
+      this.listArticlesWithConditions(
+        boardName,
+        [{ type: "title", criteria: keyword }],
+        beforeIndex,
+      ),
+    );
+  }
+
+  async filterArticlesByPush(
+    boardName: string,
+    threshold: number,
+    beforeIndex?: number,
+  ): Promise<ArticleSummary[]> {
+    return this.runSerial(() =>
+      this.listArticlesWithConditions(
+        boardName,
+        [{ type: "push", criteria: String(threshold) }],
+        beforeIndex,
+      ),
     );
   }
 
@@ -435,6 +638,9 @@ export function mapArticleRow(row: PttClientArticleRow): ArticleSummary {
       ? `Re: ${row.title.trim()}`
       : row.title?.trim() || "";
 
+  const fixed = Boolean(
+    (row as PttClientArticleRow & { fixed?: boolean }).fixed,
+  );
   return {
     index: row.id,
     mark: rawStatus === "R:" ? " " : rawStatus || " ",
@@ -442,7 +648,346 @@ export function mapArticleRow(row: PttClientArticleRow): ArticleSummary {
     date: row.date?.trim() || "",
     author: row.author?.trim() || "",
     title,
+    ...(fixed ? { fixed: true } : {}),
   };
+}
+
+function sortArticleSummaries(articles: ArticleSummary[]): ArticleSummary[] {
+  return [...articles].sort((a, b) => {
+    if (Boolean(a.fixed) !== Boolean(b.fixed)) {
+      return a.fixed ? -1 : 1;
+    }
+    return b.index - a.index;
+  });
+}
+
+function dropDisconnectedBoardTail(rows: ArticleSummary[]): ArticleSummary[] {
+  const kept: ArticleSummary[] = [];
+  let lastNormalIndex: number | null = null;
+
+  for (const row of rows) {
+    if (row.fixed) {
+      kept.push(row);
+      continue;
+    }
+
+    if (
+      lastNormalIndex !== null &&
+      Math.abs(row.index - lastNormalIndex) > MAX_BOARD_SCREEN_INDEX_GAP
+    ) {
+      continue;
+    }
+
+    kept.push(row);
+    lastNormalIndex = row.index;
+  }
+
+  return kept;
+}
+
+export function parsePartialBoardScreen(screen: string): ArticleSummary[] {
+  const plain = stripAnsi(screen).replace(/\r/g, "");
+  const rows: ArticleSummary[] = [];
+  const boardDateRe = /^\d{1,2}\/\d{1,2}$/;
+
+  for (const line of plain.split("\n")) {
+    const trimmed = line.trim();
+    if (
+      !trimmed ||
+      trimmed.startsWith("看板《") ||
+      trimmed.startsWith("系列《")
+    ) {
+      continue;
+    }
+    if (line.length < 32) continue;
+    const indexRaw = substrWidth("dbcs", line, 1, 7).trim();
+    const pushCount = substrWidth("dbcs", line, 9, 2).trim();
+    const date = substrWidth("dbcs", line, 11, 5).trim();
+    const author = substrWidth("dbcs", line, 17, 12).trim();
+    const rawStatus = substrWidth("dbcs", line, 30, 2).trim();
+    const titleCell = substrWidth("dbcs", line, 32).trim();
+    const title =
+      rawStatus === "R:" && titleCell ? `Re: ${titleCell}` : titleCell;
+    const index = Number(indexRaw.replace(/[^\d]/g, ""));
+    const fixed = /[^\d\s]/u.test(indexRaw);
+
+    if (!title || !boardDateRe.test(date) || author.length === 0) continue;
+
+    rows.push({
+      index: Number.isNaN(index) ? 0 : index,
+      mark: rawStatus === "R:" ? " " : rawStatus || " ",
+      pushCount,
+      date,
+      author,
+      title,
+      ...(fixed ? { fixed: true } : {}),
+    });
+  }
+
+  if (rows.length >= 2 && rows[0].index === 0) {
+    for (let index = 1; index < rows.length; index += 1) {
+      if (rows[index].index <= 0) continue;
+      rows[0].index = rows[index].index - index;
+      break;
+    }
+  }
+
+  for (let index = 1; index < rows.length; index += 1) {
+    if (rows[index].index > 0 || rows[index - 1].index <= 0) continue;
+    rows[index].index = rows[index - 1].index + 1;
+  }
+
+  return dropDisconnectedBoardTail(
+    rows.filter((row) => row.index > 0),
+  ).reverse();
+}
+
+export function createPartialArticleFingerprint(
+  partial: PartialArticleData,
+): string {
+  return [
+    partial.board.trim(),
+    partial.title.trim(),
+    partial.author.trim(),
+    partial.date.trim(),
+  ].join("|");
+}
+
+function createArticleOpenTrace(
+  boardName: string,
+  articleIndex: number,
+  previousFingerprint: string | null,
+): ArticleOpenTrace {
+  const trace: ArticleOpenTrace = {
+    boardName,
+    articleIndex,
+    startedAtIso: new Date().toISOString(),
+    events: [],
+    partialCandidates: [],
+    previousFingerprint,
+  };
+  (globalThis as AdapterDebugGlobal).__pttzzzLastArticleOpenTrace = trace;
+  return trace;
+}
+
+function recordArticleOpenTraceEvent(
+  trace: ArticleOpenTrace | null | undefined,
+  name: string,
+  startedAt: number,
+  detail?: string,
+): void {
+  if (!trace) return;
+  trace.events.push({
+    name,
+    atMs: Math.round((Date.now() - startedAt) * 10) / 10,
+    detail,
+  });
+}
+
+function recordArticleOpenTraceCandidate(
+  trace: ArticleOpenTrace | null | undefined,
+  partial: PartialArticleData,
+  source: ArticleOpenTraceCandidate["source"],
+  startedAt: number,
+  accepted: boolean,
+  firstLines: string[],
+  reason?: string,
+): void {
+  if (!trace) return;
+  trace.partialCandidates.push({
+    source,
+    atMs: Math.round((Date.now() - startedAt) * 10) / 10,
+    title: partial.title,
+    author: partial.author,
+    board: partial.board,
+    fingerprint: createPartialArticleFingerprint(partial),
+    accepted,
+    reason,
+    firstLines,
+  });
+}
+
+export function getLastArticleOpenTrace(): ArticleOpenTrace | null {
+  return (
+    (globalThis as AdapterDebugGlobal).__pttzzzLastArticleOpenTrace ?? null
+  );
+}
+
+export function clearLastArticleOpenTrace(): void {
+  (globalThis as AdapterDebugGlobal).__pttzzzLastArticleOpenTrace = null;
+}
+
+function readVisibleScreen(bot: Pick<BoardFetchBot, "getLine">): string {
+  const lines: string[] = [];
+  for (let index = 0; index < 24; index += 1) {
+    lines.push(bot.getLine?.(index)?.str ?? "");
+  }
+  return lines.join("\n");
+}
+
+function isBoardListScreen(screen: string): boolean {
+  return parsePartialBoardScreen(screen).length > 0;
+}
+
+function isFilterModeScreen(screen: string): boolean {
+  return stripAnsi(screen)
+    .replace(/\r/g, "")
+    .split("\n")
+    .some((line) => line.trim().startsWith("系列《"));
+}
+
+export function extractCurrentBoardName(screen: string): string | null {
+  const plain = stripAnsi(screen).replace(/\r/g, "");
+  const articleMatch = plain.match(/^.*看板\s+([A-Za-z0-9_+\-]+).*$/mu);
+  if (articleMatch?.[1]) return articleMatch[1].trim();
+
+  const boardMatch = plain.match(/《([^》]+)》/u);
+  if (boardMatch?.[1]) return boardMatch[1].trim();
+
+  return null;
+}
+
+async function waitForBoardListScreen(
+  bot: Pick<BoardFetchBot, "getLine">,
+  boardName: string,
+  timeoutMs = 600,
+): Promise<string | null> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt <= timeoutMs) {
+    const screen = readVisibleScreen(bot);
+    if (
+      extractCurrentBoardName(screen)?.toLowerCase() === boardName.toLowerCase() &&
+      isBoardListScreen(screen)
+    ) {
+      return screen;
+    }
+    await sleep(20);
+  }
+  return null;
+}
+
+async function ensureBoardView(
+  bot: BoardFetchBot,
+  boardName: string,
+  requireListView = false,
+): Promise<boolean> {
+  const visibleScreen = readVisibleScreen(bot);
+  const currentBoard = extractCurrentBoardName(visibleScreen);
+  const alreadyOnBoard =
+    currentBoard?.toLowerCase() === boardName.toLowerCase();
+  if (
+    alreadyOnBoard &&
+    (!requireListView || isBoardListScreen(visibleScreen))
+  ) {
+    return true;
+  }
+
+  // If we're on the right board but not in list view (e.g., article body),
+  // press q to return to board list — this preserves filter mode if applicable.
+  if (alreadyOnBoard && requireListView && !isBoardListScreen(visibleScreen)) {
+    await bot.send?.("q");
+    const afterQ = bot.getLine
+      ? await waitForBoardListScreen(bot, boardName, 600)
+      : null;
+    if (afterQ !== null) return true;
+  }
+
+  if (bot.enterBoardByName) {
+    try {
+      const entered = await bot.enterBoardByName(boardName);
+      if (entered) return true;
+    } catch {
+      // Fall back to a manual enter sequence below.
+    }
+  }
+
+  if (!bot.send) return false;
+
+  await bot.send(`s${boardName}\r ${PTT_KEY_HOME}${PTT_KEY_END}`);
+  await sleep(120);
+
+  return (
+    extractCurrentBoardName(readVisibleScreen(bot))?.toLowerCase() ===
+    boardName.toLowerCase()
+  );
+}
+
+// Enters board in normal (non-filter) mode, exiting any current view including filter.
+async function ensureNormalBoardView(
+  bot: BoardFetchBot,
+  boardName: string,
+  forceReenter = false,
+): Promise<boolean> {
+  let screen = readVisibleScreen(bot);
+  const onBoard =
+    extractCurrentBoardName(screen)?.toLowerCase() === boardName.toLowerCase();
+
+  if (onBoard) {
+    if (!isBoardListScreen(screen)) {
+      // Article view: q exits to board list — poll for it rather than a fixed sleep.
+      await bot.send?.("q");
+      const afterQ = bot.getLine
+        ? await waitForBoardListScreen(bot, boardName, 600)
+        : null;
+      screen = afterQ ?? (await sleep(200), readVisibleScreen(bot));
+    }
+    if (isFilterModeScreen(screen)) {
+      // Title-search filter list: exit to board category level, re-enter normally
+      await bot.enterIndex?.();
+      await sleep(200);
+      // Fall through to enterBoardByName to re-enter in normal mode
+    } else if (isBoardListScreen(screen) && !forceReenter) {
+      // Already in normal board list — nothing to do (unless caller forces re-entry
+      // to escape push-filter mode, which looks identical to normal mode)
+      return true;
+    }
+  }
+
+  if (bot.enterBoardByName) {
+    try {
+      const entered = await bot.enterBoardByName(boardName);
+      if (entered) return true;
+    } catch {
+      // fall back
+    }
+  }
+
+  if (!bot.send) return false;
+  await bot.send(`s${boardName}\r ${PTT_KEY_HOME}${PTT_KEY_END}`);
+  await sleep(150);
+
+  return (
+    extractCurrentBoardName(readVisibleScreen(bot))?.toLowerCase() ===
+    boardName.toLowerCase()
+  );
+}
+
+export async function fetchBoardArticlesFromBotManually(
+  bot: BoardFetchBot,
+  boardName: string,
+  beforeIndex = 0,
+  forceReenter = false,
+): Promise<ArticleSummary[]> {
+  if (!bot.send || !bot.getLine) {
+    throw new Error("Bot does not expose board navigation methods");
+  }
+
+  const entered = await ensureNormalBoardView(bot, boardName, forceReenter);
+  if (!entered) {
+    throw new Error(`無法進入看板 ${boardName}`);
+  }
+
+  if (beforeIndex > 0) {
+    const offset = Math.max(beforeIndex - 9, 1);
+    await bot.send(`${PTT_KEY_END}${PTT_KEY_END}${offset}\r`);
+    await sleep(120);
+  }
+
+  return sortArticleSummaries(
+    parsePartialBoardScreen(readVisibleScreen(bot)).filter(
+      (article) => article.index > 0 && article.title.trim().length > 0,
+    ),
+  );
 }
 
 function normalizeText(raw: string): string {
@@ -567,7 +1112,9 @@ function collectAnchoredPushes(raw: string): AnchoredRawPush[] {
     }
 
     const parsedPushes = parsePushBuffer(raw.slice(current.start, end));
-    const anchorOffsets = findPushMarkerRawOffsets(raw.slice(current.start, end));
+    const anchorOffsets = findPushMarkerRawOffsets(
+      raw.slice(current.start, end),
+    );
 
     for (let pushIndex = 0; pushIndex < parsedPushes.length; pushIndex += 1) {
       const parsed = parsedPushes[pushIndex];
@@ -626,6 +1173,235 @@ function buildArticleThread(rawFull: string, author: string) {
   };
 }
 
+function buildPartialArticleFromRawLines(
+  rawLines: string[],
+  fallbackBoardName: string,
+): PartialArticleData | null {
+  if (rawLines.length === 0) return null;
+
+  const rawFull = rawLines.join("\n");
+  const parsedHeader = parseArticleHeaderBlock(rawFull);
+  if (!parsedHeader.author && !parsedHeader.title) return null;
+  const { body } = splitArticleBody(rawFull);
+  const parsedBody = parseArticleHeaderBlock(body);
+  const hasPushOrEditLines = rawLines.some(
+    (line) => isPushLine(line) || isEditNoteLine(line),
+  );
+  const thread = hasPushOrEditLines
+    ? buildArticleThread(rawFull, parsedHeader.author)
+    : null;
+
+  return {
+    title: parsedHeader.title,
+    author: parsedHeader.author,
+    date: parsedHeader.date,
+    board: parsedHeader.board || fallbackBoardName,
+    body: parsedBody.content,
+    pushes: thread?.pushes ?? [],
+    articleNotes: thread?.articleNotes ?? [],
+    score: thread?.score ?? 0,
+  };
+}
+
+function appendUniqueArticleScreenLines(
+  lines: string[],
+  screen: string[],
+): number {
+  let contentLines = screen.slice(0, 23);
+  if (
+    lines.length > 0 &&
+    contentLines[0]?.trimStart().startsWith("作者") &&
+    contentLines[1]?.trimStart().startsWith("標題") &&
+    contentLines[2]?.trimStart().startsWith("時間")
+  ) {
+    const separatorIndex = contentLines.findIndex(
+      (line, index) => index >= 3 && /^─{5,}/u.test(stripAnsi(line).trim()),
+    );
+    if (separatorIndex >= 0) {
+      contentLines = contentLines.slice(separatorIndex + 1);
+    }
+  }
+
+  // Trim trailing blank lines from the screen content so that blank fill-lines
+  // at the bottom of a PTT terminal page don't count as "new" content and
+  // prevent the end-of-article early break.
+  while (contentLines.length > 0 && contentLines[contentLines.length - 1].trim() === "") {
+    contentLines.pop();
+  }
+
+  if (lines.length === 0) {
+    lines.push(...contentLines);
+    return contentLines.length;
+  }
+
+  while (lines.length > 0 && lines[lines.length - 1].trim() === "") {
+    lines.pop();
+  }
+
+  const maxOverlap = Math.min(lines.length, contentLines.length);
+  let overlap = 0;
+  for (let size = maxOverlap; size > 0; size -= 1) {
+    if (
+      lines.slice(lines.length - size).join("\n") ===
+      contentLines.slice(0, size).join("\n")
+    ) {
+      overlap = size;
+      break;
+    }
+  }
+
+  const toAppend = contentLines.slice(overlap);
+  lines.push(...toAppend);
+  return toAppend.length;
+}
+
+async function readArticleLinesProgressively(
+  bot: Pick<ArticleFetchBot, "send" | "getLine">,
+  boardName: string,
+  onPartial: (partial: PartialArticleData) => void,
+  trace?: ArticleOpenTrace | null,
+  traceStartedAt = Date.now(),
+  initialScreen?: string[] | null,
+  initialPartialAlreadyEmitted = false,
+): Promise<string[]> {
+  if (!bot.send || !bot.getLine) {
+    throw new Error("Progressive article reading requires send/getLine");
+  }
+
+  const readScreen = () => {
+    const screenLines: string[] = [];
+    for (let index = 0; index < 24; index += 1) {
+      screenLines.push(bot.getLine?.(index)?.str ?? "");
+    }
+    return screenLines;
+  };
+
+  const lines: string[] = [];
+  let screen = initialScreen ?? readScreen();
+  const maxPages = 300;
+
+  for (let page = 0; page < maxPages; page += 1) {
+    const appended = appendUniqueArticleScreenLines(lines, screen);
+    const partial = buildPartialArticleFromRawLines(lines, boardName);
+    if (partial && !(page === 0 && initialPartialAlreadyEmitted)) {
+      recordArticleOpenTraceCandidate(
+        trace,
+        partial,
+        "progressive",
+        traceStartedAt,
+        true,
+        screen.slice(0, 6),
+      );
+      onPartial(partial);
+      await sleep(16);
+    }
+
+    if ((screen[23] ?? "").includes("此文章無內容")) break;
+
+    // End-of-article: page added nothing new — no need to navigate further.
+    if (page >= 1 && appended === 0) break;
+
+    // Stop at 100% after the first page: pressing PgDown at 100% would either
+    // do nothing (causing a 1200ms waitForScreenChange timeout) or exit the article.
+    // At page=0 we allow one PgDown in case PTT opened at the last page and more
+    // content is visible after navigating. Mirrors ptt-client getLines() semantics.
+    if (page >= 1 && stripAnsi(screen[23] ?? "").includes("100%")) break;
+
+    await bot.send(PTT_KEY_PGDOWN);
+    const nextScreen = await waitForScreenChange(bot, screen);
+    if (nextScreen.join("\n") === screen.join("\n")) {
+      break;
+    }
+    // If PTT exited the article back to the board list, stop reading.
+    if (isBoardListScreen(nextScreen.join("\n"))) {
+      break;
+    }
+    screen = nextScreen;
+  }
+
+  while (lines.length > 0 && lines[lines.length - 1] === "") {
+    lines.pop();
+  }
+
+  await bot.send(PTT_KEY_HOME);
+  return lines;
+}
+
+function readScreenLines(bot: Pick<ArticleFetchBot, "getLine">): string[] {
+  const screenLines: string[] = [];
+  for (let index = 0; index < 24; index += 1) {
+    screenLines.push(bot.getLine?.(index)?.str ?? "");
+  }
+  return screenLines;
+}
+
+async function waitForScreenChange(
+  bot: Pick<ArticleFetchBot, "getLine">,
+  previousScreen: string[],
+  timeoutMs = 400,
+): Promise<string[]> {
+  const startedAt = Date.now();
+  const previousKey = previousScreen.join("\n");
+
+  while (Date.now() - startedAt <= timeoutMs) {
+    const nextScreen = readScreenLines(bot);
+    if (nextScreen.join("\n") !== previousKey) {
+      return nextScreen;
+    }
+    await sleep(20);
+  }
+
+  return readScreenLines(bot);
+}
+
+export async function waitForArticleFirstScreen(
+  bot: Pick<ArticleFetchBot, "getLine">,
+  boardName: string,
+  options:
+    | number
+    | {
+        timeoutMs?: number;
+        previousFingerprint?: string | null;
+        trace?: ArticleOpenTrace | null;
+        traceStartedAt?: number;
+      } = 1800,
+): Promise<ArticleFirstScreenSnapshot | null> {
+  if (!bot.getLine) return null;
+
+  const timeoutMs =
+    typeof options === "number" ? options : (options.timeoutMs ?? 1800);
+  const trace = typeof options === "number" ? null : (options.trace ?? null);
+  const traceStartedAt =
+    typeof options === "number"
+      ? Date.now()
+      : (options.traceStartedAt ?? Date.now());
+
+  const startedAt = Date.now();
+  while (Date.now() - startedAt <= timeoutMs) {
+    const screenLines = readScreenLines(bot);
+    const partial =
+      parsePartialScreen(screenLines.join("\n")) ??
+      buildPartialArticleFromRawLines(screenLines, boardName);
+    if (partial) {
+      recordArticleOpenTraceCandidate(
+        trace,
+        partial,
+        "wait_first_screen",
+        traceStartedAt,
+        true,
+        screenLines.slice(0, 6),
+      );
+      return {
+        partial,
+        screenLines,
+      };
+    }
+    await sleep(50);
+  }
+
+  return null;
+}
+
 function buildArticleDebugDump(params: {
   boardName: string;
   articleIndex: number;
@@ -637,8 +1413,15 @@ function buildArticleDebugDump(params: {
 }): ArticleDebugDump | undefined {
   if (!import.meta.env.DEV) return undefined;
 
-  const { boardName, articleIndex, title, author, rawLines, pushes, articleNotes } =
-    params;
+  const {
+    boardName,
+    articleIndex,
+    title,
+    author,
+    rawLines,
+    pushes,
+    articleNotes,
+  } = params;
   const parsedLastPushes = pushes.slice(-12).map((push) => ({
     id: push.id,
     type: push.type,
@@ -665,6 +1448,60 @@ function buildArticleDebugDump(params: {
   };
 }
 
+export function parsePartialScreen(
+  rawScreen: string,
+): PartialArticleData | null {
+  const plain = stripAnsi(rawScreen).replace(/\r/g, "");
+  const lines = plain.split("\n");
+
+  const authorLine = lines[0] ?? "";
+  const titleLine = lines[1] ?? "";
+  const timeLine = lines[2] ?? "";
+
+  if (
+    !authorLine.trim().startsWith("作者") ||
+    !titleLine.trim().startsWith("標題") ||
+    !timeLine.trim().startsWith("時間")
+  ) {
+    return null;
+  }
+
+  const author =
+    authorLine
+      .replace(/^.*?作者\s+/, "")
+      .replace(/\s+看板.*$/, "")
+      .trim() || "";
+
+  const board = authorLine.replace(/^.*?看板\s+/, "").trim() || "";
+
+  const title = titleLine.replace(/^.*?標題\s+/, "").trim() || "";
+
+  const date = timeLine.replace(/^.*?時間\s+/, "").trim() || "";
+
+  if (!title && !author) return null;
+
+  const rawArticle = lines.slice(0, -1).join("\n");
+  const { body: rawBody } = splitArticleBody(rawArticle);
+  const parsedBody = parseArticleHeaderBlock(rawBody);
+  const hasPushOrEditLines = lines.some(
+    (line) => isPushLine(line) || isEditNoteLine(line),
+  );
+  const thread = hasPushOrEditLines
+    ? buildArticleThread(rawArticle, author)
+    : null;
+
+  return {
+    author,
+    board,
+    title,
+    date,
+    body: parsedBody.content,
+    pushes: thread?.pushes ?? [],
+    articleNotes: thread?.articleNotes ?? [],
+    score: thread?.score ?? 0,
+  };
+}
+
 export function parseArticleHeaderBlock(body: string): {
   author: string;
   title: string;
@@ -686,17 +1523,17 @@ export function parseArticleHeaderBlock(body: string): {
 
   return {
     author:
-      headerBlock.match(/作者\s+(.+?)(?=\s+看板\s+|\s+標題\s+|\s+時間\s+|$)/u)?.[1]?.trim() ??
-      findField("作者"),
+      headerBlock
+        .match(/作者\s+(.+?)(?=\s+看板\s+|\s+標題\s+|\s+時間\s+|$)/u)?.[1]
+        ?.trim() ?? findField("作者"),
     board:
-      headerBlock.match(/看板\s+(.+?)(?=\s+標題\s+|\s+時間\s+|$)/u)?.[1]?.trim() ??
-      findField("看板"),
+      headerBlock
+        .match(/看板\s+(.+?)(?=\s+標題\s+|\s+時間\s+|$)/u)?.[1]
+        ?.trim() ?? findField("看板"),
     title:
       headerBlock.match(/標題\s+(.+?)(?=\s+時間\s+|$)/u)?.[1]?.trim() ??
       findField("標題"),
-    date:
-      headerBlock.match(/時間\s+(.+)$/u)?.[1]?.trim() ??
-      findField("時間"),
+    date: headerBlock.match(/時間\s+(.+)$/u)?.[1]?.trim() ?? findField("時間"),
     content: lines.slice(contentStart).join("\n").trim(),
   };
 }
@@ -712,6 +1549,7 @@ export async function fetchArticleFromBot(
   bot: ArticleFetchBot,
   boardName: string,
   articleIndex: number,
+  onPartial?: (partial: PartialArticleData) => void,
 ): Promise<AdapterArticleData | null> {
   if (typeof bot.getArticle === "function") {
     const botWithGetArticle = bot as Pick<BotLike, "getArticle" | "enterIndex">;
@@ -722,10 +1560,27 @@ export async function fetchArticleFromBot(
     }
 
     try {
-      const article = await botWithGetArticle.getArticle(boardName, articleIndex);
+      const article = await botWithGetArticle.getArticle(
+        boardName,
+        articleIndex,
+      );
       const rawLines = article?.lines;
 
       if (!Array.isArray(rawLines) || rawLines.length === 0) return null;
+
+      if (onPartial) {
+        await emitProgressivePartialsFromRawLines(
+          rawLines,
+          boardName,
+          {
+            title: article.title,
+            author: article.author,
+            date: article.timestamp,
+            board: article.boardname,
+          },
+          onPartial,
+        );
+      }
 
       const rawFull = rawLines.join("\n");
       const { body } = splitArticleBody(rawFull);
@@ -762,15 +1617,199 @@ export async function fetchArticleFromBot(
     }
   }
 
-  if (!bot.enterBoardByName || !bot.getLines || !bot.send) {
+  return fetchArticleFromBotManually(bot, boardName, articleIndex, onPartial);
+}
+
+
+async function emitProgressivePartialsFromRawLines(
+  rawLines: string[],
+  boardName: string,
+  fallbackMeta: {
+    title?: string;
+    author?: string;
+    date?: string;
+    board?: string;
+  },
+  onPartial: (partial: PartialArticleData) => void,
+): Promise<void> {
+  const pageSize = 22;
+  const accumulated: string[] = [];
+  let lastFingerprint: string | null = null;
+
+  for (let index = 0; index < rawLines.length; index += pageSize) {
+    accumulated.push(...rawLines.slice(index, index + pageSize));
+    const partial =
+      buildPartialArticleFromRawLines(accumulated, boardName) ??
+      buildFallbackPartialArticleFromRawLines(accumulated, boardName, fallbackMeta);
+    if (!partial) continue;
+
+    const fingerprint = [
+      createPartialArticleFingerprint(partial),
+      partial.body.length,
+      partial.pushes?.length ?? 0,
+      partial.articleNotes?.length ?? 0,
+    ].join("|");
+    if (fingerprint === lastFingerprint) continue;
+    lastFingerprint = fingerprint;
+    onPartial(partial);
+    await sleep(8);
+  }
+}
+
+function buildFallbackPartialArticleFromRawLines(
+  rawLines: string[],
+  fallbackBoardName: string,
+  fallbackMeta: {
+    title?: string;
+    author?: string;
+    date?: string;
+    board?: string;
+  },
+): PartialArticleData | null {
+  if (rawLines.length === 0) return null;
+  const rawFull = rawLines.join("\n");
+  const { body } = splitArticleBody(rawFull);
+  const parsedBody = parseArticleHeaderBlock(body);
+  const author = fallbackMeta.author?.trim() ?? "";
+  const hasPushOrEditLines = rawLines.some(
+    (line) => isPushLine(line) || isEditNoteLine(line),
+  );
+  const thread = hasPushOrEditLines ? buildArticleThread(rawFull, author) : null;
+  const content = parsedBody.content.trim() || normalizeText(body).trim();
+
+  if (!content && (thread?.pushes.length ?? 0) === 0) return null;
+
+  return {
+    title: fallbackMeta.title?.trim() ?? "",
+    author,
+    date: fallbackMeta.date?.trim() ?? "",
+    board: fallbackMeta.board?.trim() || fallbackBoardName,
+    body: content,
+    pushes: thread?.pushes ?? [],
+    articleNotes: thread?.articleNotes ?? [],
+    score: thread?.score ?? 0,
+  };
+}
+
+export async function fetchArticleFromBotManually(
+  bot: ArticleFetchBot,
+  boardName: string,
+  articleIndex: number,
+  onPartial?: (partial: PartialArticleData) => void,
+): Promise<AdapterArticleData | null> {
+  return fetchArticleFromBotManuallyWithOpen(
+    bot,
+    boardName,
+    articleIndex,
+    () => bot.send?.(`${articleIndex}\r\r`) ?? Promise.resolve(false),
+    onPartial,
+  );
+}
+
+export async function fetchArticleByAidFromBotManually(
+  bot: ArticleFetchBot,
+  boardName: string,
+  aid: string,
+  onPartial?: (partial: PartialArticleData) => void,
+): Promise<AdapterArticleData | null> {
+  return fetchArticleFromBotManuallyWithOpen(
+    bot,
+    boardName,
+    0,
+    () => bot.send?.(`#${aid}\r`) ?? Promise.resolve(false),
+    onPartial,
+  );
+}
+
+async function fetchArticleFromBotManuallyWithOpen(
+  bot: ArticleFetchBot,
+  boardName: string,
+  articleIndex: number,
+  openArticle: () => Promise<boolean>,
+  onPartial?: (partial: PartialArticleData) => void,
+): Promise<AdapterArticleData | null> {
+  if (!bot.send) {
     throw new Error("Bot does not expose article navigation methods");
   }
 
-  await bot.enterBoardByName(boardName);
-  await bot.send(`${articleIndex}\r\r`);
-  await sleep(180);
+  const previousScreen = bot.getLine ? readScreenLines(bot).join("\n") : "";
+  const previousPartial = previousScreen
+    ? buildPartialArticleFromRawLines(previousScreen.split("\n"), boardName)
+    : null;
+  const traceStartedAt = Date.now();
+  const trace = createArticleOpenTrace(
+    boardName,
+    articleIndex,
+    previousPartial ? createPartialArticleFingerprint(previousPartial) : null,
+  );
+  recordArticleOpenTraceEvent(
+    trace,
+    "open_started",
+    traceStartedAt,
+    previousPartial?.title ??
+      extractCurrentBoardName(previousScreen) ??
+      undefined,
+  );
 
-  const rawLines = await bot.getLines();
+  const entered = await ensureBoardView(bot, boardName, true);
+  if (!entered) {
+    recordArticleOpenTraceEvent(trace, "ensure_board_failed", traceStartedAt);
+    throw new Error(`無法進入看板 ${boardName}`);
+  }
+  recordArticleOpenTraceEvent(trace, "ensure_board_done", traceStartedAt);
+  await openArticle();
+  recordArticleOpenTraceEvent(trace, "send_open_done", traceStartedAt);
+
+  let firstScreen: ArticleFirstScreenSnapshot | null = null;
+  let initialScreenForProgressiveRead: string[] | null = null;
+  if (onPartial && bot.getLine) {
+    firstScreen = await waitForArticleFirstScreen(bot, boardName, {
+      // Avoid blocking progressive paging for too long when terminal snapshots lag.
+      timeoutMs: 350,
+      previousFingerprint: trace.previousFingerprint,
+      trace,
+      traceStartedAt,
+    });
+    if (firstScreen) {
+      recordArticleOpenTraceEvent(
+        trace,
+        "first_screen_detected",
+        traceStartedAt,
+        firstScreen.partial.title,
+      );
+      onPartial(firstScreen.partial);
+      initialScreenForProgressiveRead = firstScreen.screenLines;
+    } else {
+      recordArticleOpenTraceEvent(
+        trace,
+        "first_screen_timeout",
+        traceStartedAt,
+      );
+      initialScreenForProgressiveRead = readScreenLines(bot);
+    }
+  }
+
+  const rawLines =
+    onPartial && bot.getLine
+      ? await readArticleLinesProgressively(
+          bot,
+          boardName,
+          onPartial,
+          trace,
+          traceStartedAt,
+          initialScreenForProgressiveRead,
+          Boolean(firstScreen),
+        )
+      : await bot.getLines?.();
+  recordArticleOpenTraceEvent(
+    trace,
+    "progressive_read_done",
+    traceStartedAt,
+    Array.isArray(rawLines) ? `${rawLines.length} lines` : "no lines",
+  );
+
+  // Exit article view so the bot is in board list when the next serial task starts.
+  await bot.send?.("q");
 
   if (!Array.isArray(rawLines) || rawLines.length === 0) return null;
 
@@ -781,6 +1820,12 @@ export async function fetchArticleFromBot(
   const title = parsed.title;
   const date = parsed.date;
   const thread = buildArticleThread(rawFull, author);
+  recordArticleOpenTraceEvent(
+    trace,
+    "thread_build_done",
+    traceStartedAt,
+    `${thread.pushes.length} pushes`,
+  );
   const debug = buildArticleDebugDump({
     boardName,
     articleIndex,
@@ -790,6 +1835,15 @@ export async function fetchArticleFromBot(
     pushes: thread.pushes,
     articleNotes: thread.articleNotes,
   });
+  trace.finalTitle = title;
+  trace.finalAuthor = author;
+  trace.finalBoard = parsed.board || boardName;
+  recordArticleOpenTraceEvent(
+    trace,
+    "final_article_settled",
+    traceStartedAt,
+    title,
+  );
 
   return {
     title,

@@ -8,7 +8,7 @@ import type { ArticleSummary } from "./lib/ptt/parser";
 import type { ArticleData } from "./hooks/useArticle";
 import type { AggregatedPush } from "./lib/ptt/pushAggregator";
 import type { PttState } from "./hooks/usePttSocket";
-import { getSafeViewForPttState, type AppView } from "./lib/ptt/viewState";
+import { getSafeViewForPttState, type AppView, type BoardFilter } from "./lib/ptt/viewState";
 
 type PreviewMode = "home" | "board" | "article" | "login";
 
@@ -170,6 +170,7 @@ export default function App() {
       return { type: "article", board: "Gossiping", index: 30215 };
     return { type: "home" };
   });
+  const [boardFilter, setBoardFilter] = useState<BoardFilter | null>(null);
 
   const isPreview = previewMode !== null;
   const effectivePttState: PttState = isPreview ? "ready" : pttState;
@@ -199,9 +200,20 @@ export default function App() {
       {view.type === "board" && (
         <ArticleList
           boardName={view.name}
+          initialFilter={view.filter}
+          onActiveFilterChange={setBoardFilter}
           onBack={() => setView({ type: "home" })}
-          onSelectArticle={(index) =>
-            setView({ type: "article", board: view.name, index })
+          onSelectArticle={(article) =>
+            setView({
+              type: "article",
+              board: view.name,
+              index: article.index,
+              summary: article,
+              filter: boardFilter,
+            })
+          }
+          onSelectArticleByAid={(aid) =>
+            setView({ type: "article-by-aid", board: view.name, aid })
           }
           mockArticles={isPreview ? MOCK_ARTICLES : undefined}
         />
@@ -211,8 +223,18 @@ export default function App() {
         <Article
           boardName={view.board}
           articleIndex={view.index}
-          onBack={() => setView({ type: "board", name: view.board })}
+          initialArticleSummary={view.summary}
+          onBack={() => setView({ type: "board", name: view.board, filter: view.filter })}
           mockArticle={isPreview ? MOCK_ARTICLE : undefined}
+        />
+      )}
+
+      {view.type === "article-by-aid" && (
+        <Article
+          boardName={view.board}
+          articleIndex={0}
+          articleAid={view.aid}
+          onBack={() => setView({ type: "board", name: view.board })}
         />
       )}
     </>

@@ -222,4 +222,15 @@ describe("PushThread", () => {
     expect(html).toContain("推噓分");
     expect(html).not.toContain("推文數");
   });
+
+  it("shows an end-of-thread message when all replies are visible", () => {
+    const html = renderToStaticMarkup(
+      <PushThread
+        score={0}
+        pushes={[push({ id: "push-0", content: "only", anchorOrder: 10 })]}
+      />,
+    );
+
+    expect(html).toContain("沒有新回文");
+  });
 });

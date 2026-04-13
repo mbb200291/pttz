@@ -6,6 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AggregatedPush } from "../lib/ptt/pushAggregator";
+import { RichContent } from "./RichContent";
 
 export type ReplySortKey = "time" | "score";
 export type ReplySortDirection = "asc" | "desc";
@@ -161,10 +162,8 @@ function PushItem({
           ) : null}
         </div>
 
-        <div className="pl-1">
-          <p className="whitespace-pre-wrap break-words text-sm leading-6 text-gray-200">
-            {push.content}
-          </p>
+        <div className="pl-1 text-sm leading-6 text-gray-200">
+          <RichContent text={push.content} variant="inline" />
         </div>
 
         {children.length > 0 && (
@@ -393,6 +392,11 @@ export function PushThread({
               顯示更多回覆
             </button>
           )}
+        </div>
+      )}
+      {!hasMoreTopLevel && (
+        <div className="mt-5 border-t border-gray-800 pt-5 text-center text-sm text-gray-500">
+          沒有新回文
         </div>
       )}
     </div>

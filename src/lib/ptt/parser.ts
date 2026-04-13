@@ -43,6 +43,7 @@ export interface ArticleSummary {
   date: string;
   author: string;
   title: string;
+  fixed?: boolean;
 }
 
 export type PushType = "push" | "boo" | "neutral" | "edit";
