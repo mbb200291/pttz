@@ -177,9 +177,10 @@ function VoterPopover({ anchorRect, count, type, seed }: VoterPopoverProps) {
       </p>
     );
   } else if (count > OVERFLOW_HIDE) {
+    const overflowLabel = type === "push" ? "推爆" : "噓爆";
     body = (
       <p className={`text-xs py-1 ${colorClass}`}>
-        推爆 · 共 {count} 人，不顯示完整名單
+        {overflowLabel} · 共 {count} 人，不顯示完整名單
       </p>
     );
   } else {
@@ -204,28 +205,21 @@ function VoterPopover({ anchorRect, count, type, seed }: VoterPopoverProps) {
 
   const style: React.CSSProperties = above
     ? {
-        position: "fixed",
-        left: anchorRect.left,
         top: anchorRect.top - 8,
-        transform: "translateY(-100%)",
-        zIndex: 9999,
-        minWidth: 160,
-        maxWidth: 260,
+        left: anchorRect.left,
       }
     : {
-        position: "fixed",
-        left: anchorRect.left,
         top: anchorRect.bottom + 8,
-        zIndex: 9999,
-        minWidth: 160,
-        maxWidth: 260,
+        left: anchorRect.left,
       };
+
+  const positionClass = above ? "-translate-y-full" : "";
 
   return ReactDOM.createPortal(
     <div
       ref={popoverRef}
       style={style}
-      className="rounded-xl border border-gray-700 bg-gray-800 shadow-xl px-3 py-2 pointer-events-none"
+      className={`fixed z-[9999] min-w-[160px] max-w-[260px] rounded-xl border border-gray-700 bg-gray-800 shadow-xl px-3 py-2 pointer-events-none ${positionClass}`}
     >
       <p className="text-gray-500 text-xs mb-1 font-medium">{label}文者</p>
       {body}
