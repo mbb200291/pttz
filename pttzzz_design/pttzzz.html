@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>pttzzz — 現代化 PTT 閱讀器</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body, #root { height: 100%; }
+  html { scrollbar-gutter: stable; }
+  body { margin: 0; padding: 0; -webkit-font-smoothing: antialiased; }
+  button { font-family: inherit; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  ::selection { background: oklch(0.68 0.16 270 / 0.35); }
+</style>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="data.jsx"></script>
+<script type="text/babel" src="theme.jsx"></script>
+<script type="text/babel" src="ui-kit.jsx"></script>
+<script type="text/babel" src="screen-home.jsx"></script>
+<script type="text/babel" src="screen-board.jsx"></script>
+<script type="text/babel" src="composer.jsx"></script>
+<script type="text/babel" src="screen-compose.jsx"></script>
+<script type="text/babel" src="screen-article.jsx"></script>
+<script type="text/babel" src="screen-login.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+
+<script type="text/babel" data-presets="env,react">
+const { buildTheme } = window.PTTZZZ_THEME;
+const Home = window.PTTZZZ_HOME;
+const Board = window.PTTZZZ_BOARD;
+const ArticleScreen = window.PTTZZZ_ARTICLE;
+const Login = window.PTTZZZ_LOGIN;
+const ComposeScreen = window.PTTZZZ_COMPOSE;
+const { TweaksPanel, useTweaks, TweakSection, TweakRadio, TweakSelect, TweakToggle } = window;
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "mode": "light",
+  "accent": "emerald",
+  "density": "comfortable",
+  "threadLayout": "messaging",
+  "showAuthor": true
+}/*EDITMODE-END*/;
+
+function App() {
+  const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const t = React.useMemo(
+    () => buildTheme({ mode: tweaks.mode, accentKey: tweaks.accent, density: tweaks.density }),
+    [tweaks.mode, tweaks.accent, tweaks.density]
+  );
+
+  // Navigation: home → board → article (deterministic; mock board name flows through)
+  const [view, setView] = React.useState({ kind: "home" });
+  const [loggedIn, setLoggedIn] = React.useState(false);
+  const goBoard = (name) => setView({ kind: "board", name: name || "Gossiping" });
+  const goArticle = (a) => setView({ kind: "article", a });
+  const goHome = () => setView({ kind: "home" });
+  const goLogin = () => setView({ kind: "login" });
+  const goCompose = (boardName) => setView({ kind: "compose", board: boardName || "Gossiping" });
+  const goEdit = (articleSrc) => setView({ kind: "compose-edit", article: articleSrc || window.PTTZZZ_DATA.ARTICLE });
+
+  React.useEffect(() => {
+    document.body.style.background = t.bg;
+    document.body.style.color = t.text;
+    document.body.style.fontFamily = t.font;
+  }, [t]);
+
+  let label = "01 Home";
+  if (view.kind === "board") label = "02 Board";
+  if (view.kind === "article") label = "03 Article";
+  if (view.kind === "login") label = "04 Login";
+  if (view.kind === "compose") label = "05 Compose";
+  if (view.kind === "compose-edit") label = "06 Edit Article";
+
+  return (
+    <div data-screen-label={label} style={{ minHeight: "100vh", background: t.bg, color: t.text }}>
+      {view.kind === "home" && <Home t={t} onPick={goBoard} onLogin={goLogin} loggedIn={loggedIn} />}
+      {view.kind === "login" && <Login t={t}
+        onCancel={goHome}
+        onSubmit={() => { setLoggedIn(true); goHome(); }} />}
+      {view.kind === "board" && <Board t={t} boardName={view.name}
+        density={tweaks.density} showAuthor={tweaks.showAuthor}
+        onBack={goHome} onOpen={goArticle} onCompose={() => goCompose(view.name)} />}
+      {view.kind === "article" && <ArticleScreen t={t}
+        layout={tweaks.threadLayout} density={tweaks.density}
+        onBack={() => setView({ kind: "board", name: "Gossiping" })}
+        onEditArticle={goEdit} />}
+      {view.kind === "compose" && <ComposeScreen t={t} mode="post"
+        initial={{ board: view.board }}
+        onCancel={() => setView({ kind: "board", name: view.board })}
+        onSubmit={() => setView({ kind: "board", name: view.board })} />}
+      {view.kind === "compose-edit" && <ComposeScreen t={t} mode="edit-article"
+        initial={{
+          board: view.article.board,
+          category: view.article.category,
+          title: (view.article.title || "").replace(/^\[.+?\]\s*/, ""),
+          body: view.article.body,
+        }}
+        onCancel={() => setView({ kind: "article" })}
+        onSubmit={() => setView({ kind: "article" })} />}
+
+      <TweaksPanel title="Tweaks">
+        <TweakSection title="主題">
+          <TweakRadio label="模式" value={tweaks.mode} onChange={v => setTweak("mode", v)}
+            options={[{ value: "dark", label: "深色" }, { value: "light", label: "淺色" }]} />
+          <TweakSelect label="主色" value={tweaks.accent} onChange={v => setTweak("accent", v)}
+            options={[
+              { value: "indigo",  label: "靛紫 Indigo"  },
+              { value: "amber",   label: "琥珀 Amber"   },
+              { value: "emerald", label: "翠綠 Emerald" },
+              { value: "rose",    label: "玫瑰 Rose"    },
+              { value: "cyan",    label: "青藍 Cyan"    },
+            ]} />
+        </TweakSection>
+        <TweakSection title="排版">
+          <TweakRadio label="密度" value={tweaks.density} onChange={v => setTweak("density", v)}
+            options={[
+              { value: "compact",     label: "緊湊" },
+              { value: "comfortable", label: "舒適" },
+              { value: "roomy",       label: "寬鬆" },
+            ]} />
+          <TweakRadio label="討論串" value={tweaks.threadLayout} onChange={v => setTweak("threadLayout", v)}
+            options={[
+              { value: "threaded",  label: "卡片巢狀" },
+              { value: "messaging", label: "訊息式"  },
+            ]} />
+          <TweakToggle label="文章列表顯示作者" value={tweaks.showAuthor}
+            onChange={v => setTweak("showAuthor", v)} />
+        </TweakSection>
+        <TweakSection title="跳轉">
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <button onClick={goHome} style={tweakBtn(view.kind === "home")}>首頁</button>
+            <button onClick={() => goBoard("Gossiping")} style={tweakBtn(view.kind === "board")}>看板</button>
+            <button onClick={() => setView({ kind: "article", a: window.PTTZZZ_DATA.ARTICLES[0] })} style={tweakBtn(view.kind === "article")}>文章</button>
+            <button onClick={() => goCompose("Gossiping")} style={tweakBtn(view.kind === "compose")}>發文</button>
+            <button onClick={() => goEdit()} style={tweakBtn(view.kind === "compose-edit")}>編輯文章</button>
+            <button onClick={goLogin} style={tweakBtn(view.kind === "login")}>登入</button>
+          </div>
+        </TweakSection>
+      </TweaksPanel>
+    </div>
+  );
+}
+
+function tweakBtn(active) {
+  return {
+    padding: "6px 12px", borderRadius: 7, fontSize: 12, fontWeight: 600,
+    border: `1px solid ${active ? "rgba(99,102,241,0.6)" : "rgba(255,255,255,0.12)"}`,
+    background: active ? "rgba(99,102,241,0.18)" : "transparent",
+    color: active ? "#a5b4fc" : "#cbd5e1",
+    cursor: "pointer",
+  };
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
+</script>
+</body>
+</html>

@@ -1,1 +1,58 @@
 @import "tailwindcss";
+
+:root {
+  /* Surfaces */
+  --bg:             oklch(0.165 0.006 260);
+  --bg-subtle:      oklch(0.195 0.006 260);
+  --surface:        oklch(0.215 0.006 260);
+  --surface-2:      oklch(0.245 0.006 260);
+  --border:         oklch(1 0 0 / 0.08);
+  --border-strong:  oklch(1 0 0 / 0.14);
+
+  /* Text */
+  --text:       oklch(0.97 0.005 260);
+  --text-muted: oklch(0.72 0.008 260);
+  --text-dim:   oklch(0.55 0.008 260);
+
+  /* Vote colors */
+  --push-fg:    oklch(0.82 0.14 155);
+  --push-bg:    oklch(0.82 0.14 155 / 0.10);
+  --boo-fg:     oklch(0.78 0.16 25);
+  --boo-bg:     oklch(0.78 0.16 25 / 0.10);
+  --neutral-fg: oklch(0.78 0.02 260);
+  --neutral-bg: oklch(0.78 0.02 260 / 0.08);
+
+  /* OP / edit */
+  --op-fg:   oklch(0.86 0.14 90);
+  --op-bg:   oklch(0.86 0.14 90 / 0.12);
+  --edit-fg: oklch(0.86 0.14 90);
+
+  /* Accent (indigo) */
+  --accent:        oklch(0.68 0.16 270);
+  --accent-soft:   oklch(0.68 0.16 270 / 0.14);
+  --accent-border: oklch(0.68 0.16 270 / 0.32);
+  --accent-ink:    oklch(0.92 0.096 270);
+  --accent-on:     oklch(0.12 0.005 260);
+
+  /* Typography */
+  --font:      "Inter", "Noto Sans TC", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+}
+
+@keyframes voter-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes voter-fade-in-up {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

@@ -4,9 +4,11 @@
  * 第一層推文以卡片式顯示；有 replyTo 的嵌套推文顯示在父推文下。
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AggregatedPush } from "../lib/ptt/pushAggregator";
 import { RichContent } from "./RichContent";
+import { VotePair } from "./VotePair";
+import { Monogram } from "./Monogram";
 
 export type ReplySortKey = "time" | "score";
 export type ReplySortDirection = "asc" | "desc";
@@ -20,6 +22,21 @@ export const DEFAULT_REPLY_SORT: ReplySortState = {
   key: "time",
   direction: "asc",
 };
+
+export interface VoteCount {
+  push: number;
+  boo: number;
+}
+
+export interface PushEditRecord {
+  time: string;    // display timestamp
+  content: string; // content at that version
+}
+
+export interface PushEditData {
+  content: string;
+  history: PushEditRecord[];
+}
 
 const INITIAL_VISIBLE_TOP_LEVEL_REPLIES = 30;
 const REPLY_RENDER_BATCH_SIZE = 30;
@@ -48,59 +65,232 @@ export function sortTopLevelPushes(
   return [...pushes].sort((a, b) => compareTopLevelReplies(a, b, sort));
 }
 
+// ─── Inline SVG icons ──────────────────────────────────────────────────────────
+
+function PencilIcon() {
+  return (
+    <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+    </svg>
+  );
+}
+
+function HistoryIcon() {
+  return (
+    <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="1 4 1 10 7 10" />
+      <path d="M3.51 15a9 9 0 1 0 .49-4.5" />
+      <polyline points="12 7 12 12 15 14" />
+    </svg>
+  );
+}
+
+function ReplyIcon() {
+  return (
+    <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="9 17 4 12 9 7" />
+      <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+    </svg>
+  );
+}
+
+// ─── PushBadge ────────────────────────────────────────────────────────────────
+
+function PushBadge({ type }: { type: AggregatedPush["type"] }) {
+  const config: Record<string, { bg: string; fg: string; label: string }> = {
+    push:    { bg: "var(--push-bg)",    fg: "var(--push-fg)",    label: "推" },
+    boo:     { bg: "var(--boo-bg)",     fg: "var(--boo-fg)",     label: "噓" },
+    neutral: { bg: "var(--neutral-bg)", fg: "var(--neutral-fg)", label: "→" },
+    edit:    { bg: "var(--accent-soft)", fg: "var(--edit-fg)",   label: "編" },
+  };
+  const { bg, fg, label } = config[type] ?? config.neutral;
+  return (
+    <span style={{
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      minWidth: 22,
+      height: 22,
+      padding: "0 6px",
+      borderRadius: 6,
+      fontFamily: "var(--font-mono)",
+      fontWeight: 700,
+      fontSize: 11,
+      background: bg,
+      color: fg,
+    }}>
+      {label}
+    </span>
+  );
+}
+
+// ─── FloorChip ────────────────────────────────────────────────────────────────
+
+function FloorChip({ floor }: { floor: number }) {
+  if (!floor) return null;
+  return (
+    <span style={{
+      fontFamily: "var(--font-mono)",
+      fontSize: 10.5,
+      color: "var(--text-dim)",
+      padding: "2px 6px",
+      borderRadius: 5,
+      background: "var(--surface)",
+      border: "1px solid var(--border)",
+    }}>
+      {floor}F
+    </span>
+  );
+}
+
+// ─── ghostBtn style factory ───────────────────────────────────────────────────
+
+function ghostBtnStyle(active = false): React.CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    padding: "5px 9px",
+    borderRadius: 7,
+    border: `1px solid ${active ? "var(--accent-border)" : "var(--border)"}`,
+    background: active ? "var(--accent-soft)" : "transparent",
+    color: active ? "var(--accent-ink)" : "var(--text-muted)",
+    fontSize: 11.5,
+    fontWeight: 600,
+    cursor: "pointer",
+    fontFamily: "inherit",
+  };
+}
+
+// ─── EditHistoryPanel ─────────────────────────────────────────────────────────
+
+function EditHistoryPanel({
+  editData,
+  onClose,
+}: {
+  editData: PushEditData;
+  onClose: () => void;
+}) {
+  const count = editData.history.length;
+  return (
+    <div style={{
+      marginTop: 8,
+      marginLeft: 32,
+      background: "var(--bg-subtle)",
+      border: "1px dashed var(--accent-border)",
+      borderRadius: 10,
+      padding: 12,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "var(--accent-ink)" }}>
+          編輯歷史 · {count} 個版本
+        </span>
+        <button type="button" onClick={onClose} style={ghostBtnStyle()}>
+          收起
+        </button>
+      </div>
+      <ol style={{ listStyle: "none", margin: 0, padding: 0 }}>
+        {editData.history.map((record, i) => {
+          const isLast = i === editData.history.length - 1;
+          const isFirst = i === 0;
+          return (
+            <li key={i} style={{
+              position: "relative",
+              paddingLeft: 18,
+              paddingBottom: 10,
+              borderLeft: `1.5px solid ${isLast ? "var(--accent)" : "var(--border)"}`,
+            }}>
+              {/* Dot */}
+              <span style={{
+                position: "absolute",
+                left: -5,
+                top: 4,
+                width: 8,
+                height: 8,
+                borderRadius: 4,
+                background: isLast ? "var(--accent)" : "var(--border-strong)",
+              }} />
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                <span style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 11,
+                  color: "var(--text-dim)",
+                }}>
+                  {record.time}
+                </span>
+                {isLast && (
+                  <span style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: "var(--accent-ink)",
+                    background: "var(--accent-soft)",
+                    borderRadius: 4,
+                    padding: "1px 5px",
+                  }}>
+                    目前版本
+                  </span>
+                )}
+                {isFirst && !isLast && (
+                  <span style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: "var(--text-dim)",
+                    background: "var(--surface-2)",
+                    borderRadius: 4,
+                    padding: "1px 5px",
+                  }}>
+                    原始
+                  </span>
+                )}
+                {isFirst && isLast && (
+                  <span style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: "var(--text-dim)",
+                    background: "var(--surface-2)",
+                    borderRadius: 4,
+                    padding: "1px 5px",
+                  }}>
+                    原始
+                  </span>
+                )}
+              </div>
+              <p style={{
+                margin: 0,
+                fontSize: 12,
+                color: "var(--text)",
+                lineHeight: 1.6,
+              }}>
+                {record.content}
+              </p>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
+// ─── PushItem ─────────────────────────────────────────────────────────────────
+
 interface PushItemProps {
   push: AggregatedPush;
   children?: AggregatedPush[];
   childrenMap?: Map<string, AggregatedPush[]>;
   depth?: number;
-}
-
-function PushBadge({ type }: { type: AggregatedPush["type"] }) {
-  if (type === "edit") {
-    return (
-      <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-bold text-amber-300">
-        編
-      </span>
-    );
-  }
-  if (type === "push") {
-    return (
-      <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-bold text-green-300">
-        推
-      </span>
-    );
-  }
-  if (type === "boo") {
-    return (
-      <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-xs font-bold text-red-300">
-        噓
-      </span>
-    );
-  }
-  return (
-    <span className="rounded-full bg-gray-700/70 px-2 py-0.5 text-xs text-gray-300">
-      →
-    </span>
-  );
-}
-
-function ScoreBadge({ score }: { score: number }) {
-  if (score === 0) return null;
-  const color =
-    score > 0
-      ? "border-green-500/20 bg-green-500/10 text-green-300"
-      : "border-red-500/20 bg-red-500/10 text-red-300";
-  const label = score > 0 ? "推" : "噓";
-  const sign = score > 0 ? "+" : "";
-  return (
-    <span
-      title="此回文收到的巢狀推噓分數"
-      className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${color}`}
-    >
-      {label} {sign}
-      {score}
-    </span>
-  );
+  currentUser?: string;
+  onReply?: (push: AggregatedPush) => void;
+  onEdit?: (push: AggregatedPush) => void;
+  voteState?: { value: -1 | 0 | 1; count: VoteCount };
+  onVote?: (next: -1 | 0 | 1) => void;
+  editData?: PushEditData;
+  pushVotes?: Map<string, { value: -1 | 0 | 1; count: VoteCount }>;
+  pushEdits?: Map<string, PushEditData>;
+  onVoteRaw?: (pushId: string, next: -1 | 0 | 1) => void;
 }
 
 function PushItem({
@@ -108,66 +298,219 @@ function PushItem({
   children = [],
   childrenMap,
   depth = 0,
+  currentUser,
+  onReply,
+  onEdit,
+  voteState,
+  onVote,
+  editData,
+  pushVotes,
+  pushEdits,
+  onVoteRaw,
 }: PushItemProps) {
+  const [showHistory, setShowHistory] = useState(false);
+  const toggleHistory = useCallback(() => setShowHistory(v => !v), []);
+
   const visualDepth = Math.min(depth, 3);
-  const indent = visualDepth * 20;
+  const indent = visualDepth * 12;
   const ipLabel =
     push.ipAddresses.length === 0 ? null : push.ipAddresses.join(", ");
   const isEditNode = push.type === "edit";
 
+  const cardBorder = isEditNode
+    ? "1px solid var(--accent-border)"
+    : "1px solid var(--border)";
+  const cardBackground = depth === 0 ? "var(--surface)" : "var(--surface-2)";
+
+  const scoreAbs = Math.abs(push.score);
+  const scoreLabel = push.score > 0 ? `推 +${scoreAbs}` : `噓 -${scoreAbs}`;
+  const scoreFg = push.score > 0 ? "var(--push-fg)" : "var(--boo-fg)";
+  const scoreBg = push.score > 0 ? "var(--push-bg)" : "var(--boo-bg)";
+
   return (
-    <div style={{ marginLeft: indent }} className="relative">
+    <div style={{ marginLeft: indent, position: "relative" }}>
       {depth > 0 && (
-        <div className="absolute bottom-0 left-0 top-0 w-px bg-gray-700/70" />
+        <div style={{
+          position: "absolute",
+          left: -14,
+          top: 16,
+          bottom: 8,
+          width: 2,
+          background: "var(--border)",
+        }} />
       )}
 
-      <div
-        className={`rounded-2xl border px-4 py-3 shadow-sm ${
-          isEditNode
-            ? "border-amber-500/30 bg-amber-500/5"
-            : depth === 0
-            ? "border-gray-700 bg-gray-800/80"
-            : depth <= 3
-              ? "border-gray-800 bg-gray-900/85"
-              : "border-gray-800/90 bg-gray-950/90"
-        }`}
-      >
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <PushBadge type={push.type} />
-            <div className="flex min-w-0 items-baseline gap-2">
-              <span className="truncate text-sm font-semibold text-sky-300">
-                {push.author}
-              </span>
-              {ipLabel && (
-                <span className="shrink-0 text-[11px] text-gray-500">
-                  {ipLabel}
-                </span>
-              )}
-            </div>
-            {push.isOP && (
-              <span className="rounded-full border border-yellow-500/30 bg-yellow-500/10 px-2 py-0.5 text-[11px] font-medium text-yellow-300">
-                OP
+      <div style={{
+        border: cardBorder,
+        borderRadius: 12,
+        padding: 14,
+        marginBottom: 8,
+        background: cardBackground,
+      }}>
+        {/* Card header */}
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          marginBottom: 8,
+          flexWrap: "wrap",
+        }}>
+          <Monogram name={push.author} size={24} />
+
+          <span style={{ fontWeight: 700, fontSize: 13, color: "var(--text)" }}>
+            {push.author}
+          </span>
+
+          {push.isOP && (
+            <span style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: "var(--op-fg)",
+              background: "var(--op-bg)",
+              borderRadius: 5,
+              padding: "1px 6px",
+            }}>
+              OP · 原PO
+            </span>
+          )}
+
+          {isEditNode && push.marker && (
+            <span style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: "var(--edit-fg)",
+              background: "var(--accent-soft)",
+              borderRadius: 5,
+              padding: "1px 6px",
+            }}>
+              {push.marker.trim()}
+            </span>
+          )}
+
+          <PushBadge type={push.type} />
+
+          {push.score !== 0 && !isEditNode && (
+            <span style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: scoreFg,
+              background: scoreBg,
+              borderRadius: 5,
+              padding: "1px 6px",
+            }}
+              title="此回文收到的巢狀推噓分數"
+            >
+              {scoreLabel}
+            </span>
+          )}
+
+          {/* Right side: floor chip, time, ip */}
+          <div style={{
+            marginLeft: "auto",
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
+            flexWrap: "wrap",
+          }}>
+            {push.floorNumber > 0 && (
+              <FloorChip floor={push.floorNumber} />
+            )}
+            {push.time && (
+              <span style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: 11,
+                color: "var(--text-dim)",
+              }}>
+                {push.time}
               </span>
             )}
-            {!isEditNode && <ScoreBadge score={push.score} />}
-            {push.marker && (
-              <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-300">
-                {push.marker.trim()}
+            {ipLabel && (
+              <span style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: 11,
+                color: "var(--text-dim)",
+              }}>
+                {ipLabel}
               </span>
             )}
           </div>
-          {push.time ? (
-            <span className="shrink-0 text-xs text-gray-500">{push.time}</span>
-          ) : null}
         </div>
 
-        <div className="pl-1 text-sm leading-6 text-gray-200">
+        {/* Content */}
+        <div style={{
+          fontSize: 14,
+          lineHeight: 1.65,
+          color: isEditNode ? "var(--edit-fg)" : "var(--text)",
+          paddingLeft: 32,
+          fontStyle: isEditNode ? "italic" : undefined,
+        }}>
           <RichContent text={push.content} variant="inline" />
         </div>
 
+        {/* Action row */}
+        {!isEditNode && (
+          <div style={{
+            paddingLeft: 32,
+            marginTop: 8,
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}>
+            {voteState && onVote && (
+              <VotePair
+                value={voteState.value}
+                count={voteState.count}
+                voters={{ push: push.pushVoters, boo: push.booVoters }}
+                myVote={voteState.value}
+                onPush={() => onVote(1)}
+                onBoo={() => onVote(-1)}
+                size="sm"
+              />
+            )}
+
+            {onReply && (
+              <button
+                type="button"
+                onClick={() => onReply(push)}
+                style={ghostBtnStyle()}
+              >
+                <ReplyIcon />
+                回覆
+              </button>
+            )}
+
+            {onEdit && currentUser && push.author === currentUser && push.type !== "edit" && (
+              <button
+                type="button"
+                onClick={() => onEdit(push)}
+                style={ghostBtnStyle()}
+              >
+                <PencilIcon />
+                編輯
+              </button>
+            )}
+
+            {editData && editData.history.length > 1 && (
+              <button
+                type="button"
+                onClick={toggleHistory}
+                style={ghostBtnStyle(showHistory)}
+              >
+                <HistoryIcon />
+                {showHistory ? "收起歷史" : "編輯歷史"}
+              </button>
+            )}
+          </div>
+        )}
+
+        {showHistory && editData && (
+          <EditHistoryPanel editData={editData} onClose={toggleHistory} />
+        )}
+
+        {/* Nested children */}
         {children.length > 0 && (
-          <div className="mt-3 space-y-2 border-t border-gray-800/80 pt-3">
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
             {children.map((child) => (
               <PushItem
                 key={child.id}
@@ -175,6 +518,15 @@ function PushItem({
                 children={childrenMap?.get(child.id) ?? []}
                 childrenMap={childrenMap}
                 depth={depth + 1}
+                currentUser={currentUser}
+                onReply={onReply}
+                onEdit={onEdit}
+                voteState={pushVotes?.get(child.id)}
+                editData={pushEdits?.get(child.id)}
+                pushVotes={pushVotes}
+                pushEdits={pushEdits}
+                onVote={onVoteRaw ? (next) => onVoteRaw(child.id, next) : undefined}
+                onVoteRaw={onVoteRaw}
               />
             ))}
           </div>
@@ -184,6 +536,8 @@ function PushItem({
   );
 }
 
+// ─── PushThread ───────────────────────────────────────────────────────────────
+
 interface PushThreadProps {
   pushes: AggregatedPush[];
   score: number;
@@ -191,6 +545,12 @@ interface PushThreadProps {
   refreshing?: boolean;
   initialVisibleTopLevelCount?: number;
   renderBatchSize?: number;
+  currentUser?: string;
+  onReply?: (push: AggregatedPush) => void;
+  onEdit?: (push: AggregatedPush) => void;
+  pushVotes?: Map<string, { value: -1 | 0 | 1; count: VoteCount }>;
+  onVote?: (pushId: string, next: -1 | 0 | 1) => void;
+  pushEdits?: Map<string, PushEditData>;
 }
 
 export function PushThread({
@@ -200,6 +560,12 @@ export function PushThread({
   refreshing = false,
   initialVisibleTopLevelCount = INITIAL_VISIBLE_TOP_LEVEL_REPLIES,
   renderBatchSize = REPLY_RENDER_BATCH_SIZE,
+  currentUser,
+  onReply,
+  onEdit,
+  pushVotes,
+  onVote,
+  pushEdits,
 }: PushThreadProps) {
   const [sort, setSort] = useState<ReplySortState>(DEFAULT_REPLY_SORT);
   const [visibleTopLevelCount, setVisibleTopLevelCount] = useState(
@@ -288,7 +654,7 @@ export function PushThread({
   }
 
   const scoreColor =
-    score > 0 ? "text-green-400" : score < 0 ? "text-red-400" : "text-gray-400";
+    score > 0 ? "var(--push-fg)" : score < 0 ? "var(--boo-fg)" : "var(--text-muted)";
   const scoreLabel =
     score >= 100
       ? "爆"
@@ -304,65 +670,109 @@ export function PushThread({
         ? "低到高"
         : "高到低";
 
+  // Sort selector pill button style
+  function sortBtnStyle(active: boolean): React.CSSProperties {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      padding: "4px 10px",
+      borderRadius: 6,
+      border: 0,
+      background: active ? "var(--accent-soft)" : "transparent",
+      color: active ? "var(--accent-ink)" : "var(--text-muted)",
+      fontSize: 12,
+      fontWeight: 600,
+      cursor: "pointer",
+      fontFamily: "inherit",
+    };
+  }
+
+  function ctrlBtnStyle(): React.CSSProperties {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      padding: "5px 10px",
+      borderRadius: 7,
+      border: "1px solid var(--border)",
+      background: "var(--surface)",
+      color: "var(--text-muted)",
+      fontSize: 12,
+      fontWeight: 600,
+      cursor: "pointer",
+      fontFamily: "inherit",
+    };
+  }
+
   return (
-    <div className="mt-10 border-t border-gray-700 pt-6">
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-sm font-semibold tracking-wide text-gray-300">
+    <div style={{ marginTop: 40, borderTop: "1px solid var(--border)", paddingTop: 24 }}>
+      {/* Sort + stats */}
+      <div style={{ marginBottom: 16, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>
             討論串
           </span>
-          <span
-            className={`rounded-full border border-current/20 px-2.5 py-1 text-sm font-bold ${scoreColor}`}
-          >
+          <span style={{
+            fontSize: 13,
+            fontWeight: 700,
+            color: scoreColor,
+            border: "1px solid currentColor",
+            borderRadius: 20,
+            padding: "2px 8px",
+            opacity: 0.8,
+          }}>
             {scoreLabel}
           </span>
-          <span className="text-xs text-gray-500">
+          <span style={{ fontSize: 12, color: "var(--text-dim)" }}>
             ({topLevel.length} 則第一層回覆)
           </span>
-          <span className="text-xs text-gray-500">
-            已顯示 {visibleTopLevel.length} / {sortedTopLevel.length}{" "}
-            則第一層回覆
+          <span style={{ fontSize: 12, color: "var(--text-dim)" }}>
+            已顯示 {visibleTopLevel.length} / {sortedTopLevel.length} 則第一層回覆
           </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-lg border border-gray-700 bg-gray-900/70 p-1">
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+          {/* Sort selector */}
+          <div style={{
+            display: "inline-flex",
+            padding: 3,
+            background: "var(--surface)",
+            borderRadius: 8,
+            border: "1px solid var(--border)",
+          }}>
             <button
               type="button"
               onClick={() => setSortKey("time")}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                sort.key === "time"
-                  ? "bg-sky-500/20 text-sky-200"
-                  : "text-gray-400 hover:text-gray-200"
-              }`}
+              style={sortBtnStyle(sort.key === "time")}
             >
               時間
             </button>
             <button
               type="button"
               onClick={() => setSortKey("score")}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                sort.key === "score"
-                  ? "bg-sky-500/20 text-sky-200"
-                  : "text-gray-400 hover:text-gray-200"
-              }`}
+              style={sortBtnStyle(sort.key === "score")}
             >
               推噓分
             </button>
           </div>
+
           <button
             type="button"
             onClick={toggleSortDirection}
-            className="rounded-lg border border-gray-700 bg-gray-900/70 px-2.5 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:border-gray-600 hover:text-white"
+            style={ctrlBtnStyle()}
           >
             {directionLabel}
           </button>
+
           {onRefresh && (
             <button
               type="button"
               onClick={handleRefresh}
               disabled={refreshing}
-              className="rounded-lg border border-gray-700 bg-gray-900/70 px-2.5 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:border-gray-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+              style={{
+                ...ctrlBtnStyle(),
+                opacity: refreshing ? 0.6 : 1,
+                cursor: refreshing ? "not-allowed" : "pointer",
+              }}
             >
               {refreshing ? "更新中..." : "重新整理回文"}
             </button>
@@ -370,7 +780,8 @@ export function PushThread({
         </div>
       </div>
 
-      <div className="space-y-3">
+      {/* Push cards */}
+      <div>
         {visibleTopLevel.map((push) => (
           <PushItem
             key={push.id}
@@ -378,24 +789,42 @@ export function PushThread({
             children={childrenMap.get(push.id) ?? []}
             childrenMap={childrenMap}
             depth={0}
+            currentUser={currentUser}
+            onReply={onReply}
+            onEdit={onEdit}
+            voteState={pushVotes?.get(push.id)}
+            onVote={onVote ? (next) => onVote(push.id, next) : undefined}
+            onVoteRaw={onVote}
+            editData={pushEdits?.get(push.id)}
+            pushVotes={pushVotes}
+            pushEdits={pushEdits}
           />
         ))}
       </div>
+
       {hasMoreTopLevel && (
-        <div ref={sentinelRef} className="mt-4 flex justify-center">
+        <div ref={sentinelRef} style={{ marginTop: 16, display: "flex", justifyContent: "center" }}>
           {!supportsIntersectionObserver && (
             <button
               type="button"
               onClick={showMoreTopLevel}
-              className="rounded-lg border border-gray-700 bg-gray-900/70 px-3 py-2 text-xs font-medium text-gray-300 transition-colors hover:border-gray-600 hover:text-white"
+              style={ctrlBtnStyle()}
             >
               顯示更多回覆
             </button>
           )}
         </div>
       )}
+
       {!hasMoreTopLevel && (
-        <div className="mt-5 border-t border-gray-800 pt-5 text-center text-sm text-gray-500">
+        <div style={{
+          marginTop: 20,
+          paddingTop: 20,
+          borderTop: "1px solid var(--border)",
+          textAlign: "center",
+          fontSize: 13,
+          color: "var(--text-dim)",
+        }}>
           沒有新回文
         </div>
       )}

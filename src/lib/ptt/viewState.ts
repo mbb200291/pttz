@@ -9,7 +9,9 @@ export type AppView =
   | { type: "home" }
   | { type: "board"; name: string; filter?: BoardFilter | null }
   | { type: "article"; board: string; index: number; summary?: ArticleSummary; filter?: BoardFilter | null }
-  | { type: "article-by-aid"; board: string; aid: string };
+  | { type: "article-by-aid"; board: string; aid: string }
+  | { type: "compose"; board: string; categoryOptions?: string[] }
+  | { type: "compose-edit"; board: string; articleIndex: number };
 
 export function getSafeViewForPttState(view: AppView, pttState: PttState): AppView {
   if (pttState === "ready" || view.type === "home") {
@@ -27,9 +29,6 @@ export function getSafeViewForPttState(view: AppView, pttState: PttState): AppVi
   ) {
     return { type: "home" };
   }
-
-  // article-by-aid view also safe when ready
-  if (view.type === "article-by-aid") return view;
 
   return view;
 }

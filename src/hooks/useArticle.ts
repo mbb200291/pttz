@@ -123,7 +123,8 @@ export function useArticle(
   articleAid?: string,
   expectedSummary?: ArticleSummary,
 ): UseArticleReturn {
-  const { client, pttState } = usePttSocketStore();
+  const client = usePttSocketStore((s) => s.client);
+  const pttState = usePttSocketStore((s) => s.pttState);
   const [article, setArticle] = useState<ArticleData | null>(null);
   const [partialArticle, setPartialArticle] = useState<PartialArticleData | null>(null);
   const [cachedArticle, setCachedArticle] = useState<PartialArticleData | null>(null);

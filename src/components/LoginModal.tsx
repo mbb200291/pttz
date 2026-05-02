@@ -6,6 +6,7 @@
  */
 
 import { useState } from "react";
+import type { CSSProperties } from "react";
 import {
   submitDuplicateLoginDecision,
   submitLogin,
@@ -56,15 +57,114 @@ export function LoginModal({ pttState, wsStatus }: Props) {
     submitLogin("guest", "", false);
   };
 
+  const inputStyle: CSSProperties = {
+    width: "100%",
+    padding: "11px 12px",
+    background: "var(--bg-subtle)",
+    border: "1px solid var(--border)",
+    borderRadius: 10,
+    color: "var(--text)",
+    fontSize: 14,
+    fontFamily: "var(--font-mono)",
+    outline: "none",
+    boxSizing: "border-box",
+  };
+
+  const primaryButtonStyle: CSSProperties = {
+    border: "1px solid var(--accent)",
+    background: "var(--accent)",
+    color: "var(--accent-on)",
+    borderRadius: 10,
+    fontSize: 13,
+    fontWeight: 700,
+    fontFamily: "var(--font)",
+    cursor: "pointer",
+  };
+
+  const secondaryButtonStyle: CSSProperties = {
+    border: "1px solid var(--border)",
+    background: "var(--bg-subtle)",
+    color: "var(--text-muted)",
+    borderRadius: 10,
+    fontSize: 13,
+    fontWeight: 600,
+    fontFamily: "var(--font)",
+    cursor: "pointer",
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="w-full max-w-sm bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl p-8">
-        <h2 className="text-xl font-bold text-white mb-1">登入 PTT</h2>
-        <p className="text-sm text-gray-400 mb-6">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{
+        background: "oklch(0 0 0 / 0.62)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        padding: 20,
+        fontFamily: "var(--font)",
+      }}
+    >
+      <div
+        className="w-full max-w-sm"
+        style={{
+          background: "var(--surface)",
+          border: "1px solid var(--border-strong)",
+          borderRadius: 16,
+          boxShadow: "0 24px 64px -32px oklch(0 0 0 / 0.55)",
+          padding: 24,
+          color: "var(--text)",
+        }}
+      >
+        <div style={{ textAlign: "center", marginBottom: 22 }}>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 46,
+              height: 46,
+              borderRadius: 14,
+              background:
+                "linear-gradient(135deg, var(--accent), oklch(0.55 0.18 320))",
+              color: "var(--accent-on)",
+              fontWeight: 800,
+              fontSize: 20,
+              letterSpacing: "-0.04em",
+              marginBottom: 14,
+            }}
+          >
+            p
+          </div>
+          <h2
+            style={{
+              color: "var(--text)",
+              fontSize: 22,
+              fontWeight: 700,
+              letterSpacing: "-0.025em",
+              margin: "0 0 6px",
+            }}
+          >
+            登入 PTT
+          </h2>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>
+            帳號密碼會直接傳到 ws.ptt.cc
+          </p>
+        </div>
+        <p
+          className="mb-6"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+            fontFamily: "var(--font-mono)",
+            fontSize: 11.5,
+            color: "var(--text-dim)",
+          }}
+        >
           {wsStatus === "connected" ? (
-            <span className="text-green-400">● 已連線</span>
+            <span style={{ color: "var(--push-fg)" }}>● 已連線</span>
           ) : (
-            <span className="text-yellow-400 animate-pulse">● 連線中…</span>
+            <span style={{ color: "oklch(0.86 0.16 75)" }}>● 連線中…</span>
           )}
         </p>
 
@@ -78,6 +178,7 @@ export function LoginModal({ pttState, wsStatus }: Props) {
                 type="button"
                 onClick={handleGuest}
                 className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-500 rounded-lg text-sm font-medium transition-colors"
+                style={primaryButtonStyle}
               >
                 重試訪客登入
               </button>
@@ -85,6 +186,7 @@ export function LoginModal({ pttState, wsStatus }: Props) {
                 type="button"
                 onClick={() => setPttState("need_login")}
                 className="flex-1 py-2.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-gray-200 transition-colors"
+                style={secondaryButtonStyle}
               >
                 改用帳號登入
               </button>
@@ -100,6 +202,11 @@ export function LoginModal({ pttState, wsStatus }: Props) {
                 type="button"
                 onClick={() => submitDuplicateLoginDecision(true)}
                 className="flex-1 py-2.5 bg-red-600 hover:bg-red-500 rounded-lg text-sm font-medium transition-colors"
+                style={{
+                  ...primaryButtonStyle,
+                  background: "var(--boo-fg)",
+                  borderColor: "var(--boo-fg)",
+                }}
               >
                 踢掉其他連線（是）
               </button>
@@ -107,6 +214,7 @@ export function LoginModal({ pttState, wsStatus }: Props) {
                 type="button"
                 onClick={() => submitDuplicateLoginDecision(false)}
                 className="flex-1 py-2.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-gray-200 transition-colors"
+                style={secondaryButtonStyle}
               >
                 保留其他連線（否）
               </button>
@@ -123,6 +231,7 @@ export function LoginModal({ pttState, wsStatus }: Props) {
               type="button"
               onClick={() => setPttState("need_login")}
               className="w-full py-2.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-gray-200 transition-colors"
+              style={secondaryButtonStyle}
             >
               重新登入
             </button>
@@ -136,6 +245,7 @@ export function LoginModal({ pttState, wsStatus }: Props) {
               type="button"
               onClick={() => setPttState("need_login")}
               className="w-full py-2.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-gray-200 transition-colors"
+              style={secondaryButtonStyle}
             >
               返回登入
             </button>
@@ -146,45 +256,56 @@ export function LoginModal({ pttState, wsStatus }: Props) {
             <div className="mb-3">驗證中，請稍候…</div>
             <div className="text-xs text-gray-500 mb-2">若卡住可手動送指令</div>
             <div className="flex flex-wrap justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => client?.send("\r")}
+              className="px-2.5 py-1 rounded bg-gray-700 hover:bg-gray-600 text-xs text-gray-200"
+              style={secondaryButtonStyle}
+            >
+              送 Enter
+            </button>
               <button
-                type="button"
-                onClick={() => client?.send("\r")}
-                className="px-2.5 py-1 rounded bg-gray-700 hover:bg-gray-600 text-xs text-gray-200"
-              >
-                送 Enter
-              </button>
+              type="button"
+              onClick={() => client?.send(" ")}
+              className="px-2.5 py-1 rounded bg-gray-700 hover:bg-gray-600 text-xs text-gray-200"
+              style={secondaryButtonStyle}
+            >
+              送空白
+            </button>
               <button
-                type="button"
-                onClick={() => client?.send(" ")}
-                className="px-2.5 py-1 rounded bg-gray-700 hover:bg-gray-600 text-xs text-gray-200"
-              >
-                送空白
-              </button>
+              type="button"
+              onClick={() => client?.send("y\r")}
+              className="px-2.5 py-1 rounded bg-gray-700 hover:bg-gray-600 text-xs text-gray-200"
+              style={secondaryButtonStyle}
+            >
+              送 y
+            </button>
               <button
-                type="button"
-                onClick={() => client?.send("y\r")}
-                className="px-2.5 py-1 rounded bg-gray-700 hover:bg-gray-600 text-xs text-gray-200"
-              >
-                送 y
-              </button>
-              <button
-                type="button"
-                onClick={() => setPttState("need_login")}
-                className="px-2.5 py-1 rounded bg-gray-800 hover:bg-gray-700 text-xs text-gray-300"
-              >
-                重新登入
-              </button>
+              type="button"
+              onClick={() => setPttState("need_login")}
+              className="px-2.5 py-1 rounded bg-gray-800 hover:bg-gray-700 text-xs text-gray-300"
+              style={secondaryButtonStyle}
+            >
+              重新登入
+            </button>
             </div>
           </div>
         ) : (
           <form onSubmit={handleLogin} className="space-y-4">
             {loginError && (
-              <div className="rounded-lg border border-amber-700/60 bg-amber-950/40 px-4 py-2.5 text-sm text-amber-300">
+              <div
+                className="rounded-lg px-4 py-2.5 text-sm"
+                style={{
+                  border: "1px solid oklch(0.86 0.16 75 / 0.45)",
+                  background: "oklch(0.86 0.16 75 / 0.10)",
+                  color: "oklch(0.86 0.16 75)",
+                }}
+              >
                 {loginError}
               </div>
             )}
             <div>
-              <label className="block text-sm text-gray-400 mb-1">帳號</label>
+              <label className="block mb-1" style={{ color: "var(--text-muted)", fontSize: 12, fontWeight: 600 }}>帳號</label>
               <input
                 autoFocus
                 type="text"
@@ -192,19 +313,29 @@ export function LoginModal({ pttState, wsStatus }: Props) {
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="PTT 帳號"
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-sky-500"
+                style={inputStyle}
               />
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">密碼</label>
+              <label className="block mb-1" style={{ color: "var(--text-muted)", fontSize: 12, fontWeight: 600 }}>密碼</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="PTT 密碼"
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-sky-500"
+                style={inputStyle}
               />
             </div>
-            <label className="flex items-start gap-3 rounded-lg border border-gray-800 bg-gray-950/40 px-3 py-2.5 text-sm text-gray-300">
+            <label
+              className="flex items-start gap-3 px-3 py-2.5 text-sm"
+              style={{
+                border: `1px solid ${kickOthers ? "var(--accent-border)" : "var(--border)"}`,
+                background: kickOthers ? "var(--accent-soft)" : "var(--bg-subtle)",
+                borderRadius: 10,
+                color: "var(--text)",
+              }}
+            >
               <input
                 type="checkbox"
                 checked={kickOthers}
@@ -212,10 +343,10 @@ export function LoginModal({ pttState, wsStatus }: Props) {
                 className="mt-0.5 h-4 w-4 rounded border-gray-600 bg-gray-800 text-sky-500 focus:ring-sky-500"
               />
               <span>
-                <span className="block font-medium text-gray-200">
+                <span className="block font-medium" style={{ color: "var(--text)" }}>
                   中斷其他連線
                 </span>
-                <span className="block text-xs text-gray-500">
+                <span className="block text-xs" style={{ color: "var(--text-dim)" }}>
                   預設保留其他已登入的 PTT 連線；勾選後才會回答「是」。
                 </span>
               </span>
@@ -226,6 +357,11 @@ export function LoginModal({ pttState, wsStatus }: Props) {
                 type="submit"
                 disabled={!username.trim()}
                 className="flex-1 py-2.5 bg-sky-600 hover:bg-sky-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-sm font-medium transition-colors"
+                style={{
+                  ...primaryButtonStyle,
+                  opacity: username.trim() ? 1 : 0.45,
+                  cursor: username.trim() ? "pointer" : "not-allowed",
+                }}
               >
                 登入
               </button>
@@ -233,6 +369,7 @@ export function LoginModal({ pttState, wsStatus }: Props) {
                 type="button"
                 onClick={handleGuest}
                 className="px-4 py-2.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-gray-300 transition-colors"
+                style={secondaryButtonStyle}
               >
                 訪客
               </button>
@@ -240,7 +377,7 @@ export function LoginModal({ pttState, wsStatus }: Props) {
           </form>
         )}
 
-        <p className="mt-4 text-xs text-gray-600 text-center">
+        <p className="mt-4 text-xs text-center" style={{ color: "var(--text-dim)" }}>
           密碼僅存於記憶體，不會上傳任何伺服器
         </p>
       </div>

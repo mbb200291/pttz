@@ -93,6 +93,36 @@ describe("ptt adapter module", () => {
     });
   });
 
+  it("maps hot board rows into homepage popular board data", async () => {
+    const mod = await import("../adapter");
+
+    expect(
+      mod.mapHotBoardRow({
+        name: " Gossiping ",
+        title: " 八卦 ",
+        users: " 28420 ",
+      }),
+    ).toEqual({
+      name: "Gossiping",
+      title: "八卦",
+      users: "28420",
+    });
+  });
+
+  it("parses category options from the real post prompt screen", async () => {
+    const mod = await import("../adapter");
+
+    expect(
+      mod.parsePostCategoryOptions(
+        [
+          "發表文章於 UnknownBoard",
+          "請選擇標題種類： 1.[問題] 2.[情報] 3.[心得] 4.[閒聊]",
+          "請按 1-4 選擇，或 Ctrl-C 取消",
+        ].join("\n"),
+      ),
+    ).toEqual(["問題", "情報", "心得", "閒聊"]);
+  });
+
   it("restores Re: prefix when ptt-client splits it into the status field", async () => {
     const mod = await import("../adapter");
 

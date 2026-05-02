@@ -20,6 +20,25 @@ describe("LoginModal", () => {
     expect(html).toContain("預設保留其他已登入的 PTT 連線");
   });
 
+  it("uses the tokenized login dialog surface from the design", async () => {
+    Object.defineProperty(globalThis, "location", {
+      configurable: true,
+      value: {
+        protocol: "http:",
+        host: "127.0.0.1:4173",
+      },
+    });
+
+    const { LoginModal } = await import("../LoginModal");
+    const html = renderToStaticMarkup(
+      <LoginModal pttState={"need_login" as never} wsStatus="connected" />,
+    );
+
+    expect(html).toContain("var(--surface)");
+    expect(html).toContain("var(--border-strong)");
+    expect(html).toContain("var(--accent)");
+  });
+
   it("shows a syncing message when PTT is updating online users and friends", async () => {
     Object.defineProperty(globalThis, "location", {
       configurable: true,

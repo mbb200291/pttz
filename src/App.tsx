@@ -1,14 +1,21 @@
-import { useEffect, useState } from "react";
-import { usePttSocket } from "./hooks/usePttSocket";
+import { useEffect, useMemo, useState } from "react";
+import {
+  useHotBoards,
+  useRecentBoards,
+  usePttSocket,
+  usePttSocketStore,
+} from "./hooks/usePttSocket";
 import { BoardInput } from "./components/BoardInput";
 import { ArticleList } from "./components/ArticleList";
 import { Article } from "./components/Article";
 import { LoginModal } from "./components/LoginModal";
+import { ComposeScreen } from "./components/ComposeScreen";
 import type { ArticleSummary } from "./lib/ptt/parser";
 import type { ArticleData } from "./hooks/useArticle";
 import type { AggregatedPush } from "./lib/ptt/pushAggregator";
 import type { PttState } from "./hooks/usePttSocket";
 import { getSafeViewForPttState, type AppView, type BoardFilter } from "./lib/ptt/viewState";
+import { resolveBoardCategoryOptions } from "./lib/ptt/boardCategories";
 
 type PreviewMode = "home" | "board" | "article" | "login";
 
@@ -74,6 +81,8 @@ const MOCK_PUSHES: AggregatedPush[] = [
     floorNumber: 0,
     anchorOrder: 10,
     sourceFloors: [1],
+    pushVoters: [],
+    booVoters: [],
   },
   {
     id: "push-2",
@@ -88,6 +97,8 @@ const MOCK_PUSHES: AggregatedPush[] = [
     floorNumber: 0,
     anchorOrder: 20,
     sourceFloors: [2],
+    pushVoters: [],
+    booVoters: [],
   },
   {
     id: "edit-1",
@@ -103,6 +114,8 @@ const MOCK_PUSHES: AggregatedPush[] = [
     anchorOrder: 25,
     sourceFloors: [],
     marker: "作者編輯",
+    pushVoters: [],
+    booVoters: [],
   },
   {
     id: "push-3",
@@ -117,6 +130,8 @@ const MOCK_PUSHES: AggregatedPush[] = [
     floorNumber: 1,
     anchorOrder: 30,
     sourceFloors: [3],
+    pushVoters: [],
+    booVoters: [],
   },
   ...Array.from({ length: 36 }, (_, index): AggregatedPush => {
     const scores = [10, -3, 0, 5, 1, -1];
@@ -140,6 +155,8 @@ const MOCK_PUSHES: AggregatedPush[] = [
       floorNumber: floor - 1,
       anchorOrder: 40 + index * 10,
       sourceFloors: [floor],
+      pushVoters: [],
+      booVoters: [],
     };
   }),
 ];
@@ -162,8 +179,21 @@ const MOCK_ARTICLE: ArticleData = {
   score: 1,
 };
 
+function sameStringList(a?: readonly string[], b?: readonly string[]): boolean {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  return a.every((value, index) => value === b[index]);
+}
+
 export default function App() {
-  const { wsStatus, pttState } = usePttSocket();
+  const isPreview = previewMode !== null;
+  const { wsStatus, pttState, client } = usePttSocket();
+  const { boards: hotBoards, loading: hotBoardsLoading } = useHotBoards(!isPreview);
+  const { recent: recentBoards, addRecent } = useRecentBoards(5);
+  const currentUser = usePttSocketStore((s) => s.credentials?.username);
+  const [postCategoryOptionsByBoard, setPostCategoryOptionsByBoard] = useState<
+    Record<string, string[]>
+  >({});
   const [view, setView] = useState<AppView>(() => {
     if (previewMode === "board") return { type: "board", name: "Gossiping" };
     if (previewMode === "article")
@@ -172,17 +202,78 @@ export default function App() {
   });
   const [boardFilter, setBoardFilter] = useState<BoardFilter | null>(null);
 
-  const isPreview = previewMode !== null;
   const effectivePttState: PttState = isPreview ? "ready" : pttState;
   const effectiveWsStatus = isPreview ? "connected" : wsStatus;
   const modalPttState: PttState =
     previewMode === "login" ? "need_login" : effectivePttState;
+  const popularBoards = useMemo(
+    () =>
+      hotBoards?.map((board) => ({
+        name: board.name,
+        zh: board.title,
+        online: board.users,
+      })),
+    [hotBoards],
+  );
+  const composeBoard = view.type === "compose" ? view.board : null;
 
   useEffect(() => {
     if (isPreview) return;
 
     setView((current) => getSafeViewForPttState(current, pttState));
   }, [isPreview, pttState]);
+
+  useEffect(() => {
+    if (isPreview || !composeBoard || effectivePttState !== "ready") return;
+    const boardKey = composeBoard.trim().toLowerCase();
+    if (!boardKey || !client) return;
+
+    if (Object.prototype.hasOwnProperty.call(postCategoryOptionsByBoard, boardKey)) {
+      const cachedOptions = postCategoryOptionsByBoard[boardKey] ?? [];
+      setView((current) =>
+        current.type === "compose" &&
+        current.board.trim().toLowerCase() === boardKey &&
+        !sameStringList(current.categoryOptions, cachedOptions)
+          ? { ...current, categoryOptions: cachedOptions }
+          : current,
+      );
+      return;
+    }
+
+    let cancelled = false;
+    client
+      .getPostCategoryOptions(composeBoard)
+      .then((options) => {
+        if (cancelled) return;
+        setPostCategoryOptionsByBoard((current) => ({
+          ...current,
+          [boardKey]: options,
+        }));
+        setView((current) =>
+          current.type === "compose" &&
+          current.board.trim().toLowerCase() === boardKey
+            ? { ...current, categoryOptions: options }
+            : current,
+        );
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPostCategoryOptionsByBoard((current) => ({
+          ...current,
+          [boardKey]: [],
+        }));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    client,
+    effectivePttState,
+    isPreview,
+    composeBoard,
+    postCategoryOptionsByBoard,
+  ]);
 
   return (
     <>
@@ -193,7 +284,13 @@ export default function App() {
         <BoardInput
           pttState={effectivePttState}
           wsStatus={effectiveWsStatus}
-          onEnter={(board) => setView({ type: "board", name: board })}
+          popularBoards={isPreview ? undefined : popularBoards}
+          popularBoardsLoading={!isPreview && hotBoardsLoading}
+          recentBoards={isPreview ? undefined : recentBoards}
+          onEnter={(board) => {
+            addRecent(board);
+            setView({ type: "board", name: board });
+          }}
         />
       )}
 
@@ -215,6 +312,12 @@ export default function App() {
           onSelectArticleByAid={(aid) =>
             setView({ type: "article-by-aid", board: view.name, aid })
           }
+          onCompose={
+            !isPreview && effectivePttState === "ready"
+              ? (categoryOptions) =>
+                  setView({ type: "compose", board: view.name, categoryOptions })
+              : undefined
+          }
           mockArticles={isPreview ? MOCK_ARTICLES : undefined}
         />
       )}
@@ -224,7 +327,11 @@ export default function App() {
           boardName={view.board}
           articleIndex={view.index}
           initialArticleSummary={view.summary}
+          currentUser={currentUser}
           onBack={() => setView({ type: "board", name: view.board, filter: view.filter })}
+          onEditArticle={() =>
+            setView({ type: "compose-edit", board: view.board, articleIndex: view.index })
+          }
           mockArticle={isPreview ? MOCK_ARTICLE : undefined}
         />
       )}
@@ -234,7 +341,30 @@ export default function App() {
           boardName={view.board}
           articleIndex={0}
           articleAid={view.aid}
+          currentUser={currentUser}
           onBack={() => setView({ type: "board", name: view.board })}
+        />
+      )}
+
+      {view.type === "compose" && (
+        <ComposeScreen
+          mode="post"
+          initial={{ board: view.board }}
+          categoryOptions={resolveBoardCategoryOptions(view.board, view.categoryOptions)}
+          currentUser={currentUser}
+          onCancel={() => setView({ type: "board", name: view.board })}
+          onSubmit={() => setView({ type: "board", name: view.board })}
+        />
+      )}
+
+      {view.type === "compose-edit" && (
+        <ComposeScreen
+          mode="edit-article"
+          initial={{ board: view.board }}
+          categoryOptions={resolveBoardCategoryOptions(view.board)}
+          currentUser={currentUser}
+          onCancel={() => setView({ type: "board", name: view.board })}
+          onSubmit={() => setView({ type: "board", name: view.board })}
         />
       )}
     </>

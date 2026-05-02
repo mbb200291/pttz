@@ -4,13 +4,21 @@
  * 完整資料回來後切換到完整版（含推文討論串）。
  */
 
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useArticle } from "../hooks/useArticle";
 import { PushThread } from "./PushThread";
 import { RichContent } from "./RichContent";
 import type { ArticleData, PartialArticleData } from "../hooks/useArticle";
 import type { ArticleEditRecord, ArticleSummary } from "../lib/ptt/parser";
+import type { AggregatedPush } from "../lib/ptt/pushAggregator";
 import { getLastArticleOpenTrace } from "../lib/ptt/adapter";
+import { VotePair } from "./VotePair";
+import type { VoteCount, PushEditData } from "./PushThread";
+import { Composer } from "./Composer";
+import type { ComposerMode, ComposerInitial } from "./Composer";
+import { canVote, usePttActions } from "../hooks/usePttActions";
+import { Monogram } from "./Monogram";
+import { ScoreOrb } from "./ScoreOrb";
 
 declare global {
   interface Window {
@@ -31,25 +39,41 @@ interface ArticleProps {
   onBack: () => void;
   mockArticle?: ArticleData | null;
   mockLoading?: boolean;
+  currentUser?: string;
+  onEditArticle?: () => void;
 }
 
 function ArticleEditRecords({ records }: { records: ArticleEditRecord[] }) {
   if (records.length === 0) return null;
 
   return (
-    <section className="mb-8 space-y-2 rounded-2xl border border-gray-700/70 bg-gray-900/60 p-3">
-      <div className="text-xs font-semibold tracking-wide text-gray-400">
+    <section style={{
+      marginBottom: 32,
+      background: "var(--surface)",
+      border: "1px solid var(--border)",
+      borderRadius: 10,
+      padding: "10px 14px",
+    }}>
+      <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", color: "var(--text-dim)", marginBottom: 8 }}>
         文章編輯紀錄
       </div>
       {records.map((record, index) => (
         <div
           key={`${record.markerOffset}-${index}`}
-          className="rounded-xl border border-gray-700/80 bg-gray-950/40 px-3 py-2 text-xs leading-5 text-gray-400"
+          style={{
+            borderRadius: 8,
+            border: "1px solid var(--border)",
+            padding: "6px 10px",
+            marginBottom: index < records.length - 1 ? 6 : 0,
+            fontSize: 12,
+            lineHeight: 1.5,
+            color: "var(--text-dim)",
+          }}
         >
-          <div className="mb-1 font-medium text-gray-500">
+          <div style={{ fontWeight: 500, color: "var(--text-muted)", marginBottom: 2 }}>
             {record.marker.trim()}
           </div>
-          <p className="whitespace-pre-wrap break-words text-gray-300">
+          <p style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", color: "var(--text)", margin: 0 }}>
             {record.content}
           </p>
         </div>
@@ -58,29 +82,74 @@ function ArticleEditRecords({ records }: { records: ArticleEditRecord[] }) {
   );
 }
 
+function parseCategory(title: string): { category: string | null; displayTitle: string } {
+  const match = title.match(/^\[([^\]]+)\]\s*/);
+  if (match) {
+    return { category: match[1], displayTitle: title.slice(match[0].length) };
+  }
+  return { category: null, displayTitle: title };
+}
+
 function ArticleHeader({
   title,
   author,
   board,
   date,
+  score,
 }: {
   title: string;
   author: string;
   board: string;
   date: string;
+  score?: number;
 }) {
+  const { category, displayTitle } = parseCategory(title);
+
   return (
-    <div className="mb-6 pb-4 border-b border-gray-700">
-      <h1 className="text-xl font-semibold text-white mb-2 leading-snug">
-        {title || "(無標題)"}
-      </h1>
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-400">
-        <span>
-          作者{" "}
-          <span className="text-sky-300 font-medium">{author}</span>
+    <div style={{ marginBottom: 24 }}>
+      {/* Top row: category chip + date */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+        {category && (
+          <span style={{
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: "0.04em",
+            color: "var(--accent-ink)",
+            padding: "3px 8px",
+            borderRadius: 5,
+            background: "var(--accent-soft)",
+          }}>
+            {category}
+          </span>
+        )}
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--text-dim)" }}>
+          {date}
         </span>
-        <span>看板 {board}</span>
-        <span>{date}</span>
+      </div>
+
+      {/* h1 title */}
+      <h1 style={{
+        fontSize: 30,
+        fontWeight: 700,
+        lineHeight: 1.2,
+        letterSpacing: "-0.025em",
+        margin: 0,
+        marginBottom: 18,
+        color: "var(--text)",
+      }}>
+        {displayTitle || "(無標題)"}
+      </h1>
+
+      {/* Author row */}
+      <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 0 }}>
+        <Monogram name={author} size={36} />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{author}</div>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--text-dim)", marginTop: 2 }}>
+            {board}
+          </div>
+        </div>
+        <ScoreOrb score={score ?? 0} size={56} />
       </div>
     </div>
   );
@@ -160,6 +229,34 @@ function PartialArticleView({ partial }: { partial: PartialArticleData }) {
   );
 }
 
+type PushTypeBadgeType = "push" | "boo" | "neutral";
+
+function PushTypeBadge({ type }: { type: PushTypeBadgeType }) {
+  const config: Record<PushTypeBadgeType, { fg: string; bg: string; label: string }> = {
+    push: { fg: "var(--push-fg)", bg: "var(--push-bg)", label: "推" },
+    boo: { fg: "var(--boo-fg)", bg: "var(--boo-bg)", label: "噓" },
+    neutral: { fg: "var(--neutral-fg)", bg: "var(--neutral-bg)", label: "→" },
+  };
+  const { fg, bg, label } = config[type];
+  return (
+    <span style={{
+      display: "inline-flex",
+      width: 22,
+      height: 22,
+      borderRadius: 6,
+      fontSize: 11,
+      fontWeight: 700,
+      fontFamily: "var(--font-mono)",
+      alignItems: "center",
+      justifyContent: "center",
+      color: fg,
+      background: bg,
+    }}>
+      {label}
+    </span>
+  );
+}
+
 export function Article({
   boardName,
   articleIndex,
@@ -168,6 +265,8 @@ export function Article({
   onBack,
   mockArticle,
   mockLoading,
+  currentUser,
+  onEditArticle,
 }: ArticleProps) {
   const {
     article: liveArticle,
@@ -182,6 +281,81 @@ export function Article({
   const article = mockArticle ?? liveArticle;
   const loading = mockLoading ?? liveLoading;
   const error = liveError;
+
+  // Article-level vote (optimistic UI)
+  const [articleVote, setArticleVote] = useState<{ value: -1 | 0 | 1; count: VoteCount }>({
+    value: 0,
+    count: { push: 0, boo: 0 },
+  });
+
+  // Per-push votes (optimistic UI): pushId → { value, count }
+  const [pushVotes, setPushVotes] = useState<Map<string, { value: -1 | 0 | 1; count: VoteCount }>>(new Map());
+
+  // Current user's vote per push (for dedup)
+  const [myPushVotes, setMyPushVotes] = useState<Map<string, -1 | 0 | 1>>(new Map());
+
+  // Local push edit records
+  const [pushEdits, _setPushEdits] = useState<Map<string, PushEditData>>(new Map());
+
+  // Composer state: null = closed
+  const [composer, setComposer] = useState<{ mode: ComposerMode; initial: ComposerInitial } | null>(null);
+
+  const { isLoggedIn } = usePttActions();
+
+  const handleArticleVote = useCallback((direction: "push" | "boo") => {
+    if (!canVote(articleVote.value, direction)) return;
+    const next: -1 | 0 | 1 = direction === "push" ? 1 : -1;
+    setArticleVote(prev => ({
+      value: next,
+      count: {
+        push: prev.count.push + (direction === "push" ? 1 : 0),
+        boo: prev.count.boo + (direction === "boo" ? 1 : 0),
+      },
+    }));
+  }, [articleVote.value]);
+
+  const handlePushVote = useCallback((pushId: string, next: -1 | 0 | 1) => {
+    const myVote = myPushVotes.get(pushId) ?? 0;
+    const direction = next === 1 ? "push" : "boo";
+    if (!canVote(myVote, direction)) return;
+
+    setMyPushVotes(prev => new Map(prev).set(pushId, next));
+    setPushVotes(prev => {
+      const current = prev.get(pushId) ?? { value: 0 as -1 | 0 | 1, count: { push: 0, boo: 0 } };
+      const updated = {
+        value: next,
+        count: {
+          push: current.count.push + (next === 1 ? 1 : 0),
+          boo: current.count.boo + (next === -1 ? 1 : 0),
+        },
+      };
+      return new Map(prev).set(pushId, updated);
+    });
+  }, [myPushVotes]);
+
+  const openReply = useCallback(() => {
+    setComposer({ mode: "reply", initial: {} });
+  }, []);
+
+  const openReplyPush = useCallback((push: AggregatedPush) => {
+    setComposer({ mode: "reply-push", initial: { body: `回${push.floorNumber + 1}樓：` } });
+  }, []);
+
+  const openEditPush = useCallback((push: AggregatedPush) => {
+    setComposer({ mode: "edit-push", initial: { body: push.content } });
+  }, []);
+
+  const handleComposerClose = useCallback(() => {
+    setComposer(null);
+  }, []);
+
+  const handleComposerSubmit = useCallback((_payload: import("./Composer").ComposerPayload) => {
+    if (composer?.mode === "edit-push") {
+      // TODO: update pushEdits Map with old content in history once adapter integration is done
+    }
+    setComposer(null);
+  }, [composer]);
+
   const initialArticle =
     initialArticleSummary && !articleAid
       ? {
@@ -222,20 +396,103 @@ export function Article({
     };
   }, [article, articleIndex, boardName]);
 
+  // Compute push/boo/neutral counts for stats bar
+  const pushCount = article ? article.pushes.filter(p => p.type === "push").length : 0;
+  const booCount = article ? article.pushes.filter(p => p.type === "boo").length : 0;
+  const neutralCount = article ? article.pushes.filter(p => p.type === "neutral").length : 0;
+
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-100">
+    <div style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--text)" }}>
       {/* 頂部導覽 */}
-      <div className="sticky top-0 z-10 bg-gray-800 border-b border-gray-700 px-4 py-3 flex items-center gap-3">
-        <button
-          onClick={onBack}
-          className="text-sky-400 hover:text-sky-300 transition-colors text-sm"
-        >
-          ← 返回
-        </button>
-        <span className="text-gray-400 text-sm">{boardName}</span>
+      <div style={{
+        position: "sticky",
+        top: 0,
+        zIndex: 20,
+        background: "oklch(0.165 0.006 260 / 0.94)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        borderBottom: "1px solid var(--border)",
+      }}>
+        <div style={{
+          maxWidth: 820,
+          margin: "0 auto",
+          padding: "14px 24px",
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          minHeight: 52,
+        }}>
+          {/* Left side */}
+          <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 12 }}>
+            <button
+              onClick={onBack}
+              style={{
+                background: "transparent",
+                border: 0,
+                cursor: "pointer",
+                color: "var(--text-muted)",
+                fontFamily: "var(--font)",
+                fontSize: 13,
+                fontWeight: 600,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "5px 0",
+              }}
+            >
+              ← 返回
+            </button>
+            <span style={{ color: "var(--border)", fontSize: 14 }}>|</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--text-muted)" }}>
+              {boardName}
+            </span>
+          </div>
+          {/* Right side */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {article && currentUser && article.author === currentUser && onEditArticle && (
+              <button
+                type="button"
+                onClick={onEditArticle}
+                style={{
+                  background: "transparent",
+                  color: "var(--text-muted)",
+                  border: "1px solid var(--border)",
+                  padding: "7px 13px",
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                修改
+              </button>
+            )}
+            {isLoggedIn && (
+              <button
+                type="button"
+                onClick={openReply}
+                style={{
+                  background: "var(--accent)",
+                  color: "var(--accent-on, #fff)",
+                  border: "1px solid var(--accent)",
+                  padding: "7px 13px",
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                回文
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
-      <div className="max-w-3xl mx-auto px-4 py-6">
+      <div style={{ maxWidth: 820, margin: "0 auto", padding: "32px 24px 80px" }}>
         {/* 初次 loading，但有 partialArticle 可先顯示 */}
         {loading && partialArticle && (
           <PartialArticleView partial={partialArticle} />
@@ -247,12 +504,12 @@ export function Article({
 
         {/* 初次 loading，尚無任何內容 */}
         {loading && !partialArticle && !cachedArticle && !initialArticle && (
-          <div className="text-center py-16 text-gray-400">載入中…</div>
+          <div style={{ textAlign: "center", padding: "64px 0", color: "var(--text-dim)" }}>載入中…</div>
         )}
 
         {/* 載入完成但失敗 */}
         {!loading && !article && (
-          <div className="text-center py-16 text-gray-500">
+          <div style={{ textAlign: "center", padding: "64px 0", color: "var(--text-dim)" }}>
             {error ?? "無法載入文章"}
           </div>
         )}
@@ -265,18 +522,83 @@ export function Article({
               author={article.author}
               board={article.board}
               date={article.date}
+              score={article.score}
             />
             <ArticleBody body={article.body} />
             <ArticleEditRecords records={article.articleNotes} />
+
+            {/* Stats bar */}
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 16,
+              padding: "16px 0",
+              borderTop: "1px solid var(--border)",
+              borderBottom: "1px solid var(--border)",
+              marginBottom: 24,
+              flexWrap: "wrap",
+            }}>
+              {/* push count */}
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <PushTypeBadge type="push" />
+                <span style={{ fontWeight: 700, fontSize: 14, color: "var(--push-fg)", fontFamily: "var(--font-mono)" }}>{pushCount}</span>
+                <span style={{ fontSize: 12, color: "var(--text-dim)" }}>推</span>
+              </div>
+              {/* boo count */}
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <PushTypeBadge type="boo" />
+                <span style={{ fontWeight: 700, fontSize: 14, color: "var(--boo-fg)", fontFamily: "var(--font-mono)" }}>{booCount}</span>
+                <span style={{ fontSize: 12, color: "var(--text-dim)" }}>噓</span>
+              </div>
+              {/* neutral count */}
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <PushTypeBadge type="neutral" />
+                <span style={{ fontWeight: 700, fontSize: 14, color: "var(--neutral-fg)", fontFamily: "var(--font-mono)" }}>{neutralCount}</span>
+                <span style={{ fontSize: 12, color: "var(--text-dim)" }}>中立</span>
+              </div>
+            </div>
+
+            {/* Article-level VotePair */}
+            <div style={{ margin: "0 0 24px", display: "flex", alignItems: "center", gap: 12 }}>
+              <VotePair
+                value={articleVote.value}
+                count={articleVote.count}
+                voters={{ push: [], boo: [] }}
+                myVote={articleVote.value}
+                onPush={() => handleArticleVote("push")}
+                onBoo={() => handleArticleVote("boo")}
+                size="lg"
+              />
+              {isLoggedIn && (
+                <button type="button" onClick={openReply}
+                  className="px-4 py-2 rounded-xl border border-gray-700 text-sm text-gray-300 hover:text-white hover:border-gray-500 transition-colors">
+                  回覆此文
+                </button>
+              )}
+            </div>
             <PushThread
               pushes={article.pushes}
               score={article.score}
               onRefresh={liveReload}
               refreshing={liveReloading}
+              currentUser={currentUser}
+              onReply={openReplyPush}
+              onEdit={openEditPush}
+              pushVotes={pushVotes}
+              onVote={handlePushVote}
+              pushEdits={pushEdits}
             />
           </>
         )}
       </div>
+      {composer && (
+        <Composer
+          mode={composer.mode}
+          initial={composer.initial}
+          onClose={handleComposerClose}
+          onSubmit={handleComposerSubmit}
+        />
+      )}
     </div>
   );
 }

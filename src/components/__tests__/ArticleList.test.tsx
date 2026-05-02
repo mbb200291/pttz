@@ -1,5 +1,12 @@
-import { describe, expect, it } from "vitest";
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+
+afterEach(() => {
+  cleanup();
+});
 
 describe("ArticleList", () => {
   it("preloads more articles before the list bottom reaches the viewport", async () => {
@@ -67,7 +74,8 @@ describe("ArticleList", () => {
 
     expect(html).toContain('data-fixed-article="true"');
     expect(html).toContain("置頂");
-    expect(html).toContain("bg-amber-950/20");
+    // New design uses CSS var accent-soft for pinned background instead of Tailwind
+    expect(html).toContain("var(--accent-soft)");
   });
 
   it("shows article indexes in list rows", async () => {
@@ -148,5 +156,70 @@ describe("ArticleList", () => {
     expect(html).toContain("看板");
     expect(html).not.toContain("推文數");
     expect(html).not.toContain("系列《");
+  });
+
+  it("uses design-token surfaces for the board shell and toolbar", async () => {
+    const { ArticleList } = await import("../ArticleList");
+    const html = renderToStaticMarkup(
+      <ArticleList
+        boardName="Gossiping"
+        onBack={() => {}}
+        onSelectArticle={() => {}}
+        onSelectArticleByAid={() => {}}
+        onCompose={() => {}}
+        mockArticles={[]}
+        mockLoading={false}
+      />,
+    );
+
+    expect(html).toContain("var(--bg)");
+    expect(html).toContain("var(--surface)");
+    expect(html).toContain("var(--accent)");
+    expect(html).toContain("發文");
+  });
+
+  it("passes categories observed from the current board articles to compose", async () => {
+    const { ArticleList } = await import("../ArticleList");
+    const onCompose = vi.fn();
+    render(
+      <ArticleList
+        boardName="Stock"
+        onBack={() => {}}
+        onSelectArticle={() => {}}
+        onSelectArticleByAid={() => {}}
+        onCompose={onCompose}
+        mockArticles={[
+          {
+            index: 1,
+            mark: "",
+            pushCount: "10",
+            date: "5/01",
+            author: "a",
+            title: "[標的] 2330 台積電",
+          },
+          {
+            index: 2,
+            mark: "",
+            pushCount: "3",
+            date: "5/01",
+            author: "b",
+            title: "[請益] 新手請問",
+          },
+          {
+            index: 3,
+            mark: "",
+            pushCount: "1",
+            date: "5/01",
+            author: "c",
+            title: "Re: [標的] 2330 台積電",
+          },
+        ]}
+        mockLoading={false}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /發文/ }));
+
+    expect(onCompose).toHaveBeenCalledWith(["標的", "請益"]);
   });
 });

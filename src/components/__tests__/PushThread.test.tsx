@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import {
   DEFAULT_REPLY_SORT,
   PushThread,
@@ -21,11 +23,17 @@ function push(overrides: Partial<AggregatedPush>): AggregatedPush {
     floorNumber: 0,
     anchorOrder: 0,
     sourceFloors: [],
+    pushVoters: [],
+    booVoters: [],
     ...overrides,
   };
 }
 
 describe("PushThread", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   it("sorts top-level replies by time ascending by default", () => {
     const sorted = sortTopLevelPushes(
       [
@@ -232,5 +240,118 @@ describe("PushThread", () => {
     );
 
     expect(html).toContain("沒有新回文");
+  });
+
+  // ─── Action row tests ────────────────────────────────────────────────────────
+
+  it("renders 回覆 button when onReply is provided", () => {
+    render(
+      <PushThread
+        score={0}
+        pushes={[push({ id: "push-0", content: "hello", anchorOrder: 10 })]}
+        onReply={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "回覆" })).toBeDefined();
+  });
+
+  it("calls onReply with the correct push when 回覆 is clicked", () => {
+    const onReply = vi.fn();
+    const p = push({ id: "push-0", author: "alice", content: "hello", anchorOrder: 10 });
+
+    render(
+      <PushThread
+        score={0}
+        pushes={[p]}
+        onReply={onReply}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "回覆" }));
+    expect(onReply).toHaveBeenCalledTimes(1);
+    expect(onReply).toHaveBeenCalledWith(expect.objectContaining({ id: "push-0", author: "alice" }));
+  });
+
+  it("shows 編輯 button when push.author === currentUser", () => {
+    render(
+      <PushThread
+        score={0}
+        pushes={[push({ id: "push-0", author: "alice", content: "hello", anchorOrder: 10 })]}
+        currentUser="alice"
+        onEdit={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "編輯" })).toBeDefined();
+  });
+
+  it("does NOT show 編輯 button when push.author !== currentUser", () => {
+    render(
+      <PushThread
+        score={0}
+        pushes={[push({ id: "push-0", author: "alice", content: "hello", anchorOrder: 10 })]}
+        currentUser="bob"
+        onEdit={() => {}}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "編輯" })).toBeNull();
+  });
+
+  it("shows 編輯歷史 button when editData has history entries", () => {
+    const editData = {
+      content: "current content",
+      history: [
+        { time: "2024/01/01", content: "original" },
+        { time: "2024/01/02", content: "current content" },
+      ],
+    };
+
+    render(
+      <PushThread
+        score={0}
+        pushes={[push({ id: "push-0", content: "current content", anchorOrder: 10 })]}
+        pushEdits={new Map([["push-0", editData]])}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "編輯歷史" })).toBeDefined();
+  });
+
+  it("shows EditHistoryPanel after clicking 編輯歷史, hides after clicking 收起歷史", () => {
+    const editData = {
+      content: "current content",
+      history: [
+        { time: "2024/01/01", content: "original" },
+        { time: "2024/01/02", content: "current content" },
+      ],
+    };
+
+    render(
+      <PushThread
+        score={0}
+        pushes={[push({ id: "push-0", content: "current content", anchorOrder: 10 })]}
+        pushEdits={new Map([["push-0", editData]])}
+      />,
+    );
+
+    // Panel history records should not be visible initially (panel is closed)
+    expect(screen.queryByText("原始")).toBeNull();
+
+    // Click to show
+    fireEvent.click(screen.getByRole("button", { name: "編輯歷史" }));
+
+    // History record badges should now be visible inside the panel
+    expect(screen.getByText("原始")).toBeDefined();
+    expect(screen.getByText("目前版本")).toBeDefined();
+    // Button text should change to 收起歷史
+    expect(screen.getByRole("button", { name: "收起歷史" })).toBeDefined();
+
+    // Click to hide using the inline 收起 button inside the panel
+    fireEvent.click(screen.getByRole("button", { name: "收起" }));
+
+    // Panel content should be hidden again
+    expect(screen.queryByText("原始")).toBeNull();
   });
 });

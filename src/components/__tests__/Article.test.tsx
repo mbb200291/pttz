@@ -23,8 +23,10 @@ describe("Article", () => {
       />,
     );
 
-    expect(html).toContain("[問卦] optimistic header");
-    expect(html).not.toContain('text-center py-16 text-gray-400">載入中…');
+    // New design: category shown as chip, title shown in h1 — check both parts
+    expect(html).toContain("問卦");
+    expect(html).toContain("optimistic header");
+    expect(html).not.toContain(">載入中…<");
   });
 
   it("uses lightweight article rendering while partial content is still loading", async () => {
@@ -75,7 +77,9 @@ describe("Article", () => {
       />,
     );
 
-    expect(html).toContain("[新聞] partial article");
+    // New design: category chip + h1 title shown separately
+    expect(html).toContain("新聞");
+    expect(html).toContain("partial article");
     expect(html).toContain("https://youtu.be/dQw4w9WgXcQ");
     expect(html).not.toContain("播放 YouTube 影片");
     expect(html).not.toContain("時間");

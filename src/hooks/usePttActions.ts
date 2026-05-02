@@ -71,6 +71,16 @@ export function formatPushVote(floor: number, kind: "push" | "boo"): string {
   return formatArticleVote(floor, kind);
 }
 
+/**
+ * Returns whether a vote in the given direction is allowed given the user's current vote.
+ * Blocks re-voting in the same direction (dedup rule).
+ */
+export function canVote(myVote: -1 | 0 | 1, direction: "push" | "boo"): boolean {
+  if (myVote === 1 && direction === "push") return false;
+  if (myVote === -1 && direction === "boo") return false;
+  return true;
+}
+
 export interface PttActionsResult {
   isLoggedIn: boolean;
   replyToArticle(

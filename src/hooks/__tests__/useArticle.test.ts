@@ -174,6 +174,8 @@ describe("useArticle helpers", () => {
           floorNumber: 0,
           anchorOrder: 10,
           sourceFloors: [1],
+          pushVoters: [],
+          booVoters: [],
         },
       ],
       articleNotes: [],

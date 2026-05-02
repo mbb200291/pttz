@@ -144,7 +144,8 @@ export function useBoard(
   boardName: string,
   filter?: BoardFilter | null,
 ): UseBoardReturn {
-  const { client, pttState } = usePttSocketStore();
+  const client = usePttSocketStore((s) => s.client);
+  const pttState = usePttSocketStore((s) => s.pttState);
   const [articles, setArticles] = useState<ArticleSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

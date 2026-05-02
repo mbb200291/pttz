@@ -1,0 +1,84 @@
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { Composer } from "../Composer";
+
+afterEach(() => {
+  cleanup();
+});
+
+const defaultProps = {
+  mode: "reply" as const,
+  initial: {},
+  onClose: vi.fn(),
+  onSubmit: vi.fn(),
+};
+
+describe("Composer", () => {
+  it("renders 回文 title when mode=reply", () => {
+    render(<Composer {...defaultProps} mode="reply" />);
+    // getByText throws if not found — sufficient to prove it renders
+    expect(screen.getByText("回文")).toBeTruthy();
+  });
+
+  it("submit button is disabled when body is empty", () => {
+    render(<Composer {...defaultProps} />);
+    const btn = screen.getByRole("button", { name: /送出/ }) as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+  });
+
+  it("submit button is enabled after typing in textarea", async () => {
+    render(<Composer {...defaultProps} />);
+    const textarea = screen.getByRole("textbox");
+    await userEvent.type(textarea, "hello");
+    const btn = screen.getByRole("button", { name: /送出/ }) as HTMLButtonElement;
+    expect(btn.disabled).toBe(false);
+  });
+
+  it("clicking backdrop calls onClose", async () => {
+    const onClose = vi.fn();
+    render(<Composer {...defaultProps} onClose={onClose} />);
+    const backdrop = screen.getByTestId("composer-backdrop");
+    await userEvent.click(backdrop);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("onSubmit is called with correct body when submitted", async () => {
+    const onSubmit = vi.fn();
+    render(<Composer {...defaultProps} onSubmit={onSubmit} />);
+    const textarea = screen.getByRole("textbox");
+    await userEvent.type(textarea, "test message");
+    await userEvent.click(screen.getByRole("button", { name: /送出/ }));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ body: "test message" }),
+    );
+  });
+
+  it("push type selector is shown for mode=reply", () => {
+    render(<Composer {...defaultProps} mode="reply" />);
+    expect(screen.getByRole("button", { name: "推" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "→" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "噓" })).toBeTruthy();
+  });
+
+  it("edit mode selector is shown for mode=edit-push", () => {
+    render(
+      <Composer
+        {...defaultProps}
+        mode="edit-push"
+        initial={{ body: "original", editMode: "補充" }}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "補充" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "更正" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "撤回" })).toBeTruthy();
+  });
+
+  it("pressing Escape calls onClose", async () => {
+    const onClose = vi.fn();
+    render(<Composer {...defaultProps} onClose={onClose} />);
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});

@@ -65,3 +65,35 @@ describe("usePttActions format helpers", () => {
     expect(mod.formatPushVote(3, "boo")).toBe("噓3樓");
   });
 });
+
+describe("canVote", () => {
+  it("returns true when no previous vote and direction is push", async () => {
+    const { canVote } = await import("../usePttActions");
+    expect(canVote(0, "push")).toBe(true);
+  });
+
+  it("returns true when no previous vote and direction is boo", async () => {
+    const { canVote } = await import("../usePttActions");
+    expect(canVote(0, "boo")).toBe(true);
+  });
+
+  it("returns false when already pushed and direction is push", async () => {
+    const { canVote } = await import("../usePttActions");
+    expect(canVote(1, "push")).toBe(false);
+  });
+
+  it("returns true when already pushed and direction is boo", async () => {
+    const { canVote } = await import("../usePttActions");
+    expect(canVote(1, "boo")).toBe(true);
+  });
+
+  it("returns false when already booed and direction is boo", async () => {
+    const { canVote } = await import("../usePttActions");
+    expect(canVote(-1, "boo")).toBe(false);
+  });
+
+  it("returns true when already booed and direction is push", async () => {
+    const { canVote } = await import("../usePttActions");
+    expect(canVote(-1, "push")).toBe(true);
+  });
+});

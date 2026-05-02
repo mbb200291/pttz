@@ -8,7 +8,7 @@
  */
 
 import type { KeyboardEvent, MouseEvent } from "react";
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useMemo, useState } from "react";
 import { useBoard } from "../hooks/useBoard";
 import type { BoardFilter } from "../lib/ptt/viewState";
 import type { ArticleSummary } from "../lib/ptt/parser";
@@ -48,25 +48,82 @@ interface ArticleListProps {
   onBack: () => void;
   initialFilter?: BoardFilter | null;
   onActiveFilterChange?: (filter: BoardFilter | null) => void;
+  onCompose?: (categoryOptions: string[]) => void;
   mockArticles?: ArticleSummary[];
   mockLoading?: boolean;
   mockError?: string | null;
   onMockLoadMore?: () => void;
 }
 
-function PushCountBadge({ count }: { count: string }) {
+function getPushBadgeStyle(count: string): {
+  label: string;
+  fg: string;
+  bg: string;
+} {
+  if (!count || count.trim() === "") {
+    return { label: "·", fg: "var(--text-dim)", bg: "transparent" };
+  }
+  if (count === "爆") {
+    return {
+      label: "爆",
+      fg: "oklch(0.95 0.18 75)",
+      bg: "oklch(0.95 0.18 75 / 0.12)",
+    };
+  }
   const num = parseInt(count, 10);
-  const isBoom = count === "爆";
-  const isNeg = count.startsWith("X") || num < 0;
+  if (count.startsWith("X") || num < 0) {
+    return { label: count, fg: "var(--boo-fg)", bg: "var(--boo-bg)" };
+  }
+  if (num >= 100) {
+    return {
+      label: count,
+      fg: "oklch(0.95 0.18 75)",
+      bg: "oklch(0.95 0.18 75 / 0.10)",
+    };
+  }
+  if (num >= 50) {
+    return {
+      label: count,
+      fg: "oklch(0.85 0.16 60)",
+      bg: "oklch(0.85 0.16 60 / 0.10)",
+    };
+  }
+  if (num >= 10) {
+    return { label: count, fg: "var(--push-fg)", bg: "var(--push-bg)" };
+  }
+  return { label: count, fg: "var(--text-muted)", bg: "transparent" };
+}
 
-  let className = "text-xs font-bold w-8 text-right ";
-  if (isBoom) className += "text-yellow-400";
-  else if (isNeg) className += "text-red-400";
-  else if (num >= 50) className += "text-orange-400";
-  else if (num >= 10) className += "text-green-400";
-  else className += "text-gray-400";
+// Extract [Category] prefix from title, e.g. "[討論] something" → { category: "討論", rest: "something" }
+function parseTitle(title: string): { category: string | null; displayTitle: string; isRe: boolean } {
+  const isRe = title.startsWith("Re:");
+  // Strip leading "Re: " for further parsing
+  let stripped = isRe ? title.slice(3).trimStart() : title;
 
-  return <span className={className}>{count || "　"}</span>;
+  const catMatch = stripped.match(/^\[([^\]]+)\]\s*/);
+  const category = catMatch ? catMatch[1] : null;
+  if (catMatch) {
+    stripped = stripped.slice(catMatch[0].length);
+  }
+
+  const displayTitle = isRe ? `Re: ${stripped}` : stripped;
+  return { category, displayTitle, isRe };
+}
+
+export function extractCategoryOptionsFromArticles(
+  articles: ArticleSummary[],
+): string[] {
+  const seen = new Set<string>();
+  const categories: string[] = [];
+
+  for (const article of articles) {
+    const { category } = parseTitle(article.title);
+    if (!category || seen.has(category)) continue;
+    seen.add(category);
+    categories.push(category);
+  }
+
+  return categories;
 }
 
 function ArticleRow({
@@ -76,9 +133,10 @@ function ArticleRow({
   article: ArticleSummary;
   onClick: (index: number, element: HTMLButtonElement) => void;
 }) {
-  const isRe = article.title.startsWith("Re:");
   const isDeleted = article.title.includes("(已被刪除)");
   const isFixed = Boolean(article.fixed);
+  const { category, displayTitle, isRe } = parseTitle(article.title);
+
   const handleClick = (event: MouseEvent<HTMLButtonElement>) => {
     const nextIndex = Number(event.currentTarget.dataset.articleIndex);
     onClick(
@@ -87,6 +145,8 @@ function ArticleRow({
     );
   };
 
+  const badgeStyle = isFixed ? null : getPushBadgeStyle(article.pushCount);
+
   return (
     <button
       type="button"
@@ -94,49 +154,174 @@ function ArticleRow({
       data-fixed-article={isFixed ? "true" : undefined}
       onClick={handleClick}
       disabled={isDeleted}
-      className={`w-full text-left px-4 py-3 border-b transition-colors flex items-baseline gap-3 ${
-        isFixed
-          ? "border-amber-900/40 bg-amber-950/20 hover:bg-amber-950/35"
-          : "border-gray-800 hover:bg-gray-800"
-      } ${
-        isDeleted ? "opacity-40 cursor-not-allowed" : ""
-      }`}
+      style={{
+        display: "grid",
+        gridTemplateColumns: "44px 56px 1fr auto",
+        gap: 14,
+        padding: "10px 20px",
+        background: isFixed ? "var(--accent-soft)" : "transparent",
+        borderBottom: "1px solid var(--border)",
+        width: "100%",
+        textAlign: "left",
+        cursor: isDeleted ? "not-allowed" : "pointer",
+        opacity: isDeleted ? 0.4 : 1,
+        alignItems: "center",
+        transition: "background 0.15s",
+      }}
+      onMouseEnter={(e) => {
+        if (!isFixed && !isDeleted) {
+          (e.currentTarget as HTMLButtonElement).style.background =
+            "var(--surface)";
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!isFixed && !isDeleted) {
+          (e.currentTarget as HTMLButtonElement).style.background =
+            "transparent";
+        }
+      }}
     >
-      {isFixed ? (
-        <span className="w-8 shrink-0 rounded border border-amber-700/50 bg-amber-900/30 px-1 py-0.5 text-center text-[10px] font-semibold text-amber-300">
-          置頂
-        </span>
-      ) : (
-        <PushCountBadge count={article.pushCount} />
-      )}
-      <span className="text-xs text-gray-500 w-10 shrink-0">
-        {article.date}
-      </span>
-      <span
-        className={`w-16 shrink-0 text-right font-mono text-xs tabular-nums ${
-          isFixed ? "text-amber-300/60" : "text-gray-600"
-        }`}
+      {/* Column 1: Push badge */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {isFixed ? (
+          <span
+            style={{
+              minWidth: 36,
+              height: 24,
+              padding: "0 8px",
+              borderRadius: 6,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontFamily: "var(--font-mono)",
+              fontWeight: 700,
+              fontSize: 12,
+              letterSpacing: "-0.02em",
+              color: "var(--accent-ink)",
+              background: "var(--accent-soft)",
+            }}
+          >
+            置頂
+          </span>
+        ) : (
+          <span
+            style={{
+              minWidth: 36,
+              height: 24,
+              padding: "0 8px",
+              borderRadius: 6,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontFamily: "var(--font-mono)",
+              fontWeight: 700,
+              fontSize: 12,
+              letterSpacing: "-0.02em",
+              color: badgeStyle!.fg,
+              background: badgeStyle!.bg,
+            }}
+          >
+            {badgeStyle!.label}
+          </span>
+        )}
+      </div>
+
+      {/* Column 2: Date + index stacked */}
+      <div
+        style={{
+          fontFamily: "var(--font-mono)",
+          fontSize: 11.5,
+          color: "var(--text-dim)",
+          lineHeight: 1.4,
+        }}
       >
-        #{article.index}
-      </span>
-      <span
-        className={`flex-1 text-sm truncate ${
-          isFixed
-            ? "font-medium text-amber-100"
-            : isRe
-              ? "text-gray-400"
-              : "text-gray-100"
-        }`}
+        <div>{article.date}</div>
+        <div style={{ fontSize: 10, opacity: 0.7 }}>#{article.index}</div>
+      </div>
+
+      {/* Column 3: Title + meta */}
+      <div style={{ minWidth: 0 }}>
+        {/* Title row */}
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            minWidth: 0,
+          }}
+        >
+          {isFixed && !category && (
+            <span
+              style={{
+                fontSize: 10.5,
+                fontWeight: 700,
+                color: "var(--accent-ink)",
+                padding: "2px 6px",
+                borderRadius: 4,
+                background: "var(--accent-soft)",
+                flexShrink: 0,
+              }}
+            >
+              置頂
+            </span>
+          )}
+          {category && (
+            <span
+              style={{
+                fontSize: 10.5,
+                fontWeight: 700,
+                color: "var(--accent-ink)",
+                padding: "2px 6px",
+                borderRadius: 4,
+                background: "var(--accent-soft)",
+                flexShrink: 0,
+              }}
+            >
+              {category}
+            </span>
+          )}
+          <span
+            style={{
+              fontSize: 14,
+              fontWeight: isRe ? 500 : 600,
+              color: isRe ? "var(--text-muted)" : "var(--text)",
+              letterSpacing: "-0.01em",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              minWidth: 0,
+              flex: 1,
+            }}
+          >
+            {displayTitle}
+          </span>
+        </div>
+        {/* Meta row */}
+        {article.author && (
+          <div
+            style={{
+              fontSize: 11.5,
+              color: "var(--text-dim)",
+              fontFamily: "var(--font-mono)",
+              marginTop: 2,
+            }}
+          >
+            {article.author}
+          </div>
+        )}
+      </div>
+
+      {/* Column 4: Right arrow hint */}
+      <div
+        style={{
+          color: "var(--text-dim)",
+          fontSize: 11,
+          fontFamily: "var(--font-mono)",
+          paddingRight: 4,
+        }}
       >
-        {article.title}
-      </span>
-      <span
-        className={`text-xs shrink-0 hidden sm:block ${
-          isFixed ? "text-amber-300/70" : "text-gray-500"
-        }`}
-      >
-        {article.author}
-      </span>
+        →
+      </div>
     </button>
   );
 }
@@ -157,6 +342,7 @@ export function ArticleList({
   onBack,
   initialFilter,
   onActiveFilterChange,
+  onCompose,
   mockArticles,
   mockLoading,
   mockError,
@@ -182,6 +368,10 @@ export function ArticleList({
   const error = mockError ?? liveError;
   const hasMore = mockArticles ? true : liveHasMore;
   const handleLoadMore = onMockLoadMore ?? loadMore;
+  const observedCategoryOptions = useMemo(
+    () => extractCategoryOptionsFromArticles(articles),
+    [articles],
+  );
 
   const mountedBoardNameRef = useRef(boardName);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -332,61 +522,211 @@ export function ArticleList({
         : null;
 
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-100">
-      {/* 頂部 */}
-      <div className="sticky top-0 z-10 bg-gray-800 border-b border-gray-700">
-        <div className="px-4 py-3 flex items-center gap-3">
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "var(--bg)",
+        color: "var(--text)",
+        fontFamily: "var(--font)",
+      }}
+    >
+      <div
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 20,
+          background: "oklch(0.165 0.006 260 / 0.94)",
+          backdropFilter: "blur(12px)",
+          WebkitBackdropFilter: "blur(12px)",
+          borderBottom: "1px solid var(--border)",
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 1100,
+            margin: "0 auto",
+            padding: "14px 24px 10px",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            minHeight: 52,
+          }}
+        >
           <button
             onClick={onBack}
-            className="text-sky-400 hover:text-sky-300 transition-colors text-sm shrink-0"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              background: "transparent",
+              border: "1px solid transparent",
+              borderRadius: 8,
+              color: "var(--text-muted)",
+              cursor: "pointer",
+              fontFamily: "var(--font)",
+              fontSize: 13,
+              fontWeight: 600,
+              padding: "5px 0",
+              flexShrink: 0,
+            }}
           >
             ← 返回
           </button>
-          <h1 className="text-lg font-semibold shrink-0">
+          <span style={{ width: 1, height: 18, background: "var(--border)" }} />
+          <h1
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              gap: 10,
+              margin: 0,
+              minWidth: 0,
+              flex: 1,
+              fontSize: 14,
+              fontWeight: 700,
+              fontFamily: "var(--font-mono)",
+              color: "var(--text)",
+            }}
+          >
             {boardName}
-            {filterLabel ? (
-              <span className="ml-2 text-sm font-normal text-sky-300">
-                {filterLabel}
-              </span>
-            ) : (
-              <span className="ml-2 text-sm font-normal text-gray-400">
-                看板
-              </span>
-            )}
+            <span
+              style={{
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                fontFamily: "var(--font)",
+                fontSize: 13,
+                fontWeight: 500,
+                color: filterLabel ? "var(--accent-ink)" : "var(--text-muted)",
+              }}
+            >
+              {filterLabel ?? "看板"}
+            </span>
           </h1>
           {filterLabel && (
             <button
               onClick={handleClearFilter}
-              className="ml-auto text-xs text-gray-400 hover:text-gray-200 transition-colors"
+              style={{
+                background: "transparent",
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+                color: "var(--text-muted)",
+                cursor: "pointer",
+                fontFamily: "var(--font)",
+                fontSize: 12,
+                fontWeight: 600,
+                padding: "6px 10px",
+              }}
             >
-              ✕ 清除
+              清除
+            </button>
+          )}
+          {onCompose && (
+            <button
+              type="button"
+              onClick={() => onCompose(observedCategoryOptions)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                background: "var(--accent)",
+                border: "1px solid var(--accent)",
+                borderRadius: 8,
+                color: "var(--accent-on)",
+                cursor: "pointer",
+                fontFamily: "var(--font)",
+                fontSize: 13,
+                fontWeight: 700,
+                padding: "7px 13px",
+              }}
+            >
+              ✎ 發文
             </button>
           )}
         </div>
 
-        {/* 搜尋列 */}
-        <div className="px-4 pb-3 flex flex-wrap items-center gap-2">
-          <div className="flex flex-1 min-w-0 items-center gap-1">
+        <div
+          style={{
+            maxWidth: 1100,
+            margin: "0 auto",
+            padding: "0 24px 16px",
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: 10,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 0,
+              flex: 1,
+              minWidth: 240,
+              border: "1px solid var(--border)",
+              borderRadius: 10,
+              background: "var(--surface)",
+            }}
+          >
+            <span
+              style={{
+                padding: "0 6px 0 11px",
+                color: "var(--text-dim)",
+                display: "inline-flex",
+              }}
+            >
+              ⌕
+            </span>
             <input
               type="text"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={handleSearchKeyDown}
-              placeholder="搜尋標題 or #AID"
-              className="flex-1 min-w-0 bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-sky-600"
+              placeholder="搜尋標題  或  #AID"
+              style={{
+                flex: 1,
+                minWidth: 0,
+                padding: "8px 10px",
+                background: "transparent",
+                border: 0,
+                outline: "none",
+                color: "var(--text)",
+                fontFamily: "var(--font)",
+                fontSize: 13.5,
+              }}
             />
             <button
               type="button"
               onClick={handleSearchCommit}
               disabled={!searchInput.trim()}
-              className="shrink-0 px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+              style={{
+                marginRight: 4,
+                padding: "6px 11px",
+                borderRadius: 7,
+                border: "1px solid transparent",
+                background: searchInput.trim() ? "var(--accent)" : "transparent",
+                color: searchInput.trim() ? "var(--accent-on)" : "var(--text-dim)",
+                cursor: searchInput.trim() ? "pointer" : "not-allowed",
+                fontFamily: "var(--font)",
+                fontSize: 12,
+                fontWeight: 700,
+                opacity: searchInput.trim() ? 1 : 0.55,
+              }}
             >
               搜尋
             </button>
           </div>
 
-          {/* 推噓文數快選 */}
-          <div className="flex items-center gap-1">
+          <div
+            style={{
+              display: "inline-flex",
+              gap: 1,
+              padding: 3,
+              background: "var(--surface)",
+              borderRadius: 10,
+              border: "1px solid var(--border)",
+            }}
+          >
             {PUSH_QUICK_FILTERS.map(({ label, value }) => {
               const active =
                 activeFilter?.type === "push" &&
@@ -396,11 +736,17 @@ export function ArticleList({
                   key={label}
                   type="button"
                   onClick={() => handlePushFilterClick(value)}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                    active
-                      ? "bg-sky-600/30 border-sky-500 text-sky-200"
-                      : "border-gray-700 text-gray-400 hover:border-gray-500 hover:text-gray-200"
-                  }`}
+                  style={{
+                    border: 0,
+                    borderRadius: 7,
+                    background: active ? "var(--accent-soft)" : "transparent",
+                    color: active ? "var(--accent-ink)" : "var(--text-muted)",
+                    cursor: "pointer",
+                    fontFamily: "var(--font)",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    padding: "5px 11px",
+                  }}
                 >
                   {label}
                 </button>
@@ -410,7 +756,7 @@ export function ArticleList({
         </div>
       </div>
 
-      <div className="divide-y divide-gray-800">
+      <div style={{ maxWidth: 1100, margin: "0 auto", paddingTop: 20 }}>
         {articles.map((a) => (
           <ArticleRow
             key={a.index}
@@ -437,21 +783,36 @@ export function ArticleList({
       </div>
 
       {/* Sentinel + 載入指示 */}
-      <div className="py-8 text-center">
+      <div
+        style={{
+          maxWidth: 1100,
+          margin: "0 auto",
+          padding: "32px 0",
+          textAlign: "center",
+        }}
+      >
         {loading ? (
-          <span className="text-gray-500 text-sm">載入中…</span>
+          <span style={{ color: "var(--text-dim)", fontSize: 13 }}>載入中…</span>
         ) : error && articles.length === 0 ? (
-          <span className="text-amber-400 text-sm">{error}</span>
+          <span style={{ color: "oklch(0.86 0.16 75)", fontSize: 13 }}>{error}</span>
         ) : articles.length === 0 ? (
-          <span className="text-gray-600 text-sm">正在連線至 PTT…</span>
+          <span style={{ color: "var(--text-dim)", fontSize: 13 }}>正在連線至 PTT…</span>
         ) : !hasMore ? (
-          <span className="text-gray-700 text-xs">已到最舊文章</span>
+          <span style={{ color: "var(--text-dim)", fontSize: 12 }}>已到最舊文章</span>
         ) : supportsObserver ? (
           <div ref={sentinelRef} className="h-1" aria-hidden="true" />
         ) : (
           <button
             onClick={handleLoadMore}
-            className="text-sky-400 text-sm hover:text-sky-300"
+            style={{
+              background: "transparent",
+              border: "1px solid var(--border)",
+              borderRadius: 8,
+              color: "var(--text-muted)",
+              cursor: "pointer",
+              fontSize: 13,
+              padding: "6px 10px",
+            }}
           >
             載入更多
           </button>

@@ -5,12 +5,13 @@
  * UI 仍沿用既有的 wsStatus / pttState 介面，方便逐步遷移。
  */
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import {
   createPttAdapter,
   type ConnectionStatus,
+  type HotBoardSummary,
   type LoginFailureReason,
   type PttAdapter,
 } from "../lib/ptt/adapter";
@@ -170,6 +171,102 @@ export function usePttSocket() {
     pttState,
     client,
   };
+}
+
+export function useHotBoards(enabled = true) {
+  const client = usePttSocketStore((s) => s.client);
+  const pttState = usePttSocketStore((s) => s.pttState);
+  const [boards, setBoards] = useState<HotBoardSummary[] | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!enabled || !client || pttState !== "ready") {
+      setBoards(null);
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+    client
+      .listHotBoards()
+      .then((nextBoards) => {
+        if (!cancelled) setBoards(nextBoards);
+      })
+      .catch(() => {
+        if (!cancelled) setBoards(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [client, enabled, pttState]);
+
+  return { boards, loading };
+}
+
+export function useFavoriteBoards(enabled = true) {
+  const client = usePttSocketStore((s) => s.client);
+  const pttState = usePttSocketStore((s) => s.pttState);
+  const [boards, setBoards] = useState<string[] | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!enabled || !client || pttState !== "ready") {
+      setBoards(null);
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+    client
+      .getFavoriteBoards()
+      .then((nextBoards: string[]) => {
+        if (!cancelled) setBoards(nextBoards);
+      })
+      .catch(() => {
+        if (!cancelled) setBoards(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [client, enabled, pttState]);
+
+  return { boards, loading };
+}
+
+export function useRecentBoards(maxRecent = 5) {
+  const [recent, setRecent] = useState<string[]>([]);
+
+  useEffect(() => {
+    const stored = localStorage.getItem("pttzzz_recent_boards");
+    if (stored) {
+      try {
+        setRecent(JSON.parse(stored) as string[]);
+      } catch {
+        setRecent([]);
+      }
+    }
+  }, []);
+
+  const addRecent = (boardName: string) => {
+    setRecent((prev) => {
+      const filtered = prev.filter((b) => b !== boardName);
+      const updated = [boardName, ...filtered].slice(0, maxRecent);
+      localStorage.setItem("pttzzz_recent_boards", JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  return { recent, addRecent };
 }
 
 export async function submitLogin(

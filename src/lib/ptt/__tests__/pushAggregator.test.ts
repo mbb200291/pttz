@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { aggregatePushes, calcArticleScore } from "../pushAggregator";
+import { aggregatePushes, calcArticleScore, detectVote } from "../pushAggregator";
 import type { ArticleEditRecord, OpEditedReplySegment, RawPush } from "../parser";
 
 const OP = "opUser";
@@ -430,5 +430,89 @@ describe("推文評分", () => {
     const thread = aggregatePushes(raw, OP);
     const alicePush = thread.pushes.find((r) => r.author === "alice")!;
     expect(alicePush.score).toBe(0); // 1 push + 1 boo = 0
+  });
+});
+
+// ─── detectVote 單元測試 ───────────────────────────────────────────────────────
+
+describe("detectVote", () => {
+  it("偵測「推X樓」格式", () => {
+    expect(detectVote("推3樓")).toEqual({ targetFloor: 3, direction: "push" });
+    expect(detectVote("推三樓")).toEqual({ targetFloor: 3, direction: "push" });
+  });
+
+  it("偵測「X樓推一個」格式", () => {
+    expect(detectVote("3樓推一個")).toEqual({ targetFloor: 3, direction: "push" });
+    expect(detectVote("三樓推一個")).toEqual({ targetFloor: 3, direction: "push" });
+  });
+
+  it("偵測「噓X樓」格式", () => {
+    expect(detectVote("噓5樓")).toEqual({ targetFloor: 5, direction: "boo" });
+    expect(detectVote("噓五樓")).toEqual({ targetFloor: 5, direction: "boo" });
+  });
+
+  it("非投票內容返回 null", () => {
+    expect(detectVote("普通推文內容")).toBeNull();
+    expect(detectVote("回3樓：討論")).toBeNull();
+  });
+});
+
+// ─── 投票者收集 ───────────────────────────────────────────────────────────────
+
+describe("投票者收集", () => {
+  it("「推X樓」推文使作者出現在目標的 pushVoters", () => {
+    const raw = [
+      push("alice", "第一樓", "01/01 12:00", "push", 10, 1),
+      push("bob", "推1樓", "01/01 12:01", "push", 20, 2),
+    ];
+    const thread = aggregatePushes(raw, OP);
+    const alicePush = thread.pushes.find((r) => r.author === "alice")!;
+    expect(alicePush.pushVoters).toEqual(["bob"]);
+    expect(alicePush.booVoters).toEqual([]);
+  });
+
+  it("「噓X樓」推文使作者出現在目標的 booVoters", () => {
+    const raw = [
+      push("alice", "第一樓", "01/01 12:00", "push", 10, 1),
+      push("bob", "噓1樓", "01/01 12:01", "boo", 20, 2),
+    ];
+    const thread = aggregatePushes(raw, OP);
+    const alicePush = thread.pushes.find((r) => r.author === "alice")!;
+    expect(alicePush.pushVoters).toEqual([]);
+    expect(alicePush.booVoters).toEqual(["bob"]);
+  });
+
+  it("同作者對同一推文投票兩次「推」只出現一次", () => {
+    const raw = [
+      push("alice", "第一樓", "01/01 12:00", "push", 10, 1),
+      push("bob", "推1樓", "01/01 12:01", "push", 20, 2),
+      push("bob", "推1樓讚！", "01/01 12:02", "push", 30, 3),
+    ];
+    const thread = aggregatePushes(raw, OP);
+    const alicePush = thread.pushes.find((r) => r.author === "alice")!;
+    expect(alicePush.pushVoters).toEqual(["bob"]);
+  });
+
+  it("同作者先「推」後「噓」→ 移出 pushVoters，加入 booVoters", () => {
+    const raw = [
+      push("alice", "第一樓", "01/01 12:00", "push", 10, 1),
+      push("bob", "推1樓", "01/01 12:01", "push", 20, 2),
+      push("bob", "噓1樓", "01/01 12:02", "boo", 30, 3),
+    ];
+    const thread = aggregatePushes(raw, OP);
+    const alicePush = thread.pushes.find((r) => r.author === "alice")!;
+    expect(alicePush.pushVoters).toEqual([]);
+    expect(alicePush.booVoters).toEqual(["bob"]);
+  });
+
+  it("一般非投票推文不影響 voters", () => {
+    const raw = [
+      push("alice", "第一樓", "01/01 12:00", "push", 10, 1),
+      push("bob", "我只是路過", "01/01 12:01", "push", 20, 2),
+    ];
+    const thread = aggregatePushes(raw, OP);
+    const alicePush = thread.pushes.find((r) => r.author === "alice")!;
+    expect(alicePush.pushVoters).toEqual([]);
+    expect(alicePush.booVoters).toEqual([]);
   });
 });

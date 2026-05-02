@@ -35,6 +35,8 @@ export interface AggregatedPush {
   anchorOrder: number;
   sourceFloors: number[];
   marker?: string;
+  pushVoters: string[]; // 對此聚合推文投「推」的作者（已去重）
+  booVoters: string[];  // 對此聚合推文投「噓」的作者（已去重）
 }
 
 export interface AggregatedThread {
@@ -254,6 +256,33 @@ function parseFloorNumber(raw: string): number | null {
   return result > 0 ? result : null;
 }
 
+// ─── 投票偵測 ─────────────────────────────────────────────────────────────────
+
+const VOTE_PATTERNS: Array<{
+  re: RegExp;
+  direction: "push" | "boo";
+}> = [
+  { re: /^推\s*([0-9零〇一二兩三四五六七八九十百千萬]+)\s*樓/iu, direction: "push" },
+  { re: /^([0-9零〇一二兩三四五六七八九十百千萬]+)\s*樓推一個/iu, direction: "push" },
+  { re: /^噓\s*([0-9零〇一二兩三四五六七八九十百千萬]+)\s*樓/iu, direction: "boo" },
+];
+
+interface VoteInfo {
+  targetFloor: number;
+  direction: "push" | "boo";
+}
+
+export function detectVote(content: string): VoteInfo | null {
+  for (const { re, direction } of VOTE_PATTERNS) {
+    const m = content.match(re);
+    if (!m) continue;
+    const targetFloor = parseFloorNumber(m[1]);
+    if (targetFloor === null) continue;
+    return { targetFloor, direction };
+  }
+  return null;
+}
+
 function extractAuthorId(author: string): string {
   return author.trim().split(/\s+/u)[0] ?? "";
 }
@@ -296,7 +325,44 @@ export function aggregatePushes(
       floorNumber: i, // 暫定，後面篩掉嵌套後重排
       anchorOrder: g.anchorOrder,
       sourceFloors: g.pushes.map((push, index) => push.rawFloor ?? i + index + 1),
+      pushVoters: [],
+      booVoters: [],
     });
+  }
+
+  // Step 2b：收集投票者（誰推了哪一樓 / 噓了哪一樓）
+  // 在原始推文層級掃描，以支援同作者先推後噓的覆蓋邏輯
+  // Map<pushId, Map<author, "push"|"boo">> 用於覆蓋式去重
+  const voterDirectionMap = new Map<string, Map<string, "push" | "boo">>();
+  for (const rawPush of rawPushes) {
+    const vote = detectVote(rawPush.content);
+    if (!vote) continue;
+    const target = firstLayer.find((candidate) =>
+      candidate.sourceFloors.includes(vote.targetFloor),
+    );
+    if (!target) continue;
+
+    if (!voterDirectionMap.has(target.id)) {
+      voterDirectionMap.set(target.id, new Map());
+    }
+    const authorMap = voterDirectionMap.get(target.id)!;
+    const previous = authorMap.get(rawPush.author);
+    if (previous === vote.direction) continue; // 無變化
+
+    // 移除舊方向
+    if (previous === "push") {
+      target.pushVoters = target.pushVoters.filter((a) => a !== rawPush.author);
+    } else if (previous === "boo") {
+      target.booVoters = target.booVoters.filter((a) => a !== rawPush.author);
+    }
+
+    // 加入新方向
+    if (vote.direction === "push") {
+      target.pushVoters.push(rawPush.author);
+    } else {
+      target.booVoters.push(rawPush.author);
+    }
+    authorMap.set(rawPush.author, vote.direction);
   }
 
   // Step 3：偵測嵌套 → 建立 floorNumber 映射（第一層樓號）
@@ -373,6 +439,8 @@ export function aggregatePushes(
         anchorOrder: note.contentAnchorOffset,
         sourceFloors: [],
         marker: note.marker,
+        pushVoters: [],
+        booVoters: [],
       });
     }
   }

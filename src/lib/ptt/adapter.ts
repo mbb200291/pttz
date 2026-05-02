@@ -1,4 +1,5 @@
 import Ptt from "ptt-client";
+import { Board } from "ptt-client/dist/sites/ptt/model";
 import sleep from "sleep-promise";
 import type PttConfig from "ptt-client/dist/config";
 import { substrWidth } from "ptt-client/dist/utils/char";
@@ -42,6 +43,12 @@ export interface PttClientArticleRow {
   author?: string;
   status?: string;
   title?: string;
+}
+
+export interface HotBoardSummary {
+  name: string;
+  title: string;
+  users: string;
 }
 
 export interface AdapterArticleData {
@@ -156,6 +163,9 @@ export interface PttAdapter {
     threshold: number,
     beforeIndex?: number,
   ) => Promise<ArticleSummary[]>;
+  listHotBoards: () => Promise<HotBoardSummary[]>;
+  getFavoriteBoards: () => Promise<string[]>;
+  getPostCategoryOptions: (boardName: string) => Promise<string[]>;
   disconnect: () => Promise<void>;
   isLoggedIn: () => boolean;
   getStatus: () => ConnectionStatus;
@@ -196,6 +206,7 @@ type BotLike = {
     boardname?: string;
     lines?: string[];
   }>;
+  getFavorite?: (offsets?: number | number[]) => Promise<Board[]>;
   getLine?: (n: number) => { str?: string };
 };
 
@@ -218,6 +229,8 @@ type BoardFetchBot = Partial<
 const PTT_KEY_PGDOWN = "\x1b[6~";
 const PTT_KEY_HOME = "\x1b[1~";
 const PTT_KEY_END = "\x1b[4~";
+const PTT_KEY_CTRL_C = "\x03";
+const PTT_KEY_CTRL_P = "\x10";
 const MAX_BOARD_SCREEN_INDEX_GAP = 50000;
 
 type AdapterDebugGlobal = typeof globalThis & {
@@ -495,6 +508,40 @@ class PttClientAdapter implements PttAdapter {
     );
   }
 
+  async listHotBoards(): Promise<HotBoardSummary[]> {
+    return this.runSerial(async () => {
+      await this.waitUntilLoggedIn();
+      const boards = await Board.select(this.bot).where("entry", "hot").get();
+      return boards.map(mapHotBoardRow).filter((board) => board.name !== "");
+    });
+  }
+
+  async getFavoriteBoards(): Promise<string[]> {
+    return this.runSerial(async () => {
+      await this.waitUntilLoggedIn();
+      if (!this.bot.getFavorite) {
+        if (import.meta.env.DEV) console.log("[getFavoriteBoards] bot.getFavorite not available");
+        return [];
+      }
+      try {
+        const boards = await this.bot.getFavorite();
+        const names = boards.map((b: Board) => b.name);
+        if (import.meta.env.DEV) console.log("[getFavoriteBoards] Got", names.length, "favorites:", names);
+        return names;
+      } catch (err) {
+        if (import.meta.env.DEV) console.log("[getFavoriteBoards] Error:", err);
+        return [];
+      }
+    });
+  }
+
+  async getPostCategoryOptions(boardName: string): Promise<string[]> {
+    return this.runSerial(async () => {
+      await this.waitUntilLoggedIn();
+      return fetchPostCategoryOptionsFromBot(this.bot, boardName);
+    });
+  }
+
   async disconnect(): Promise<void> {
     return this.runSerial(async () => {
       this.bot.socket?.disconnect?.();
@@ -566,6 +613,13 @@ class PttClientAdapter implements PttAdapter {
         }
       }, 100);
     });
+  }
+
+  private async waitUntilLoggedIn(): Promise<void> {
+    await this.waitUntilConnected();
+    if (!this.bot.state.login) {
+      throw new Error("PTT login is required");
+    }
   }
 
   private detectLoginFailureReason(): LoginFailureReason {
@@ -683,6 +737,55 @@ function dropDisconnectedBoardTail(rows: ArticleSummary[]): ArticleSummary[] {
   }
 
   return kept;
+}
+
+export function mapHotBoardRow(
+  board: Pick<Board, "name" | "title" | "users">,
+): HotBoardSummary {
+  return {
+    name: board.name.trim(),
+    title: board.title.trim(),
+    users: board.users.trim(),
+  };
+}
+
+export function parsePostCategoryOptions(screen: string): string[] {
+  const plain = stripAnsi(screen).replace(/\r/g, "");
+  const seen = new Set<string>();
+  const categories: string[] = [];
+
+  const add = (value: string) => {
+    const category = value
+      .replace(/^[\s:：.)、\]-]+/u, "")
+      .replace(/[\s:：.)、\]-]+$/u, "")
+      .trim();
+    if (!category || seen.has(category)) return;
+    seen.add(category);
+    categories.push(category);
+  };
+
+  const bracketMatches = plain.matchAll(/\[([^\]\n]{1,12})\]/gu);
+  for (const match of bracketMatches) {
+    if (match[1]) add(match[1]);
+  }
+  if (categories.length > 0) return categories;
+
+  const promptLines = plain
+    .split("\n")
+    .filter((line) => /分類|類別|種類|標題/u.test(line));
+
+  for (const line of promptLines) {
+    const tokenMatches = line.matchAll(
+      /(?:^|[\s(（])(?:\d{1,2}|[A-Za-z])[\s.)、:：）]+([^\s()[\]（）:：，,。；;]{1,12})/gu,
+    );
+    for (const match of tokenMatches) {
+      if (match[1] && !/請|按|選擇|取消|標題|分類|類別|種類/u.test(match[1])) {
+        add(match[1]);
+      }
+    }
+  }
+
+  return categories;
 }
 
 export function parsePartialBoardScreen(screen: string): ArticleSummary[] {
@@ -960,6 +1063,35 @@ async function ensureNormalBoardView(
     extractCurrentBoardName(readVisibleScreen(bot))?.toLowerCase() ===
     boardName.toLowerCase()
   );
+}
+
+async function fetchPostCategoryOptionsFromBot(
+  bot: BoardFetchBot,
+  boardName: string,
+): Promise<string[]> {
+  if (!bot.send || !bot.getLine) {
+    throw new Error("Bot does not expose board navigation methods");
+  }
+
+  const entered = await ensureNormalBoardView(bot, boardName);
+  if (!entered) {
+    throw new Error(`無法進入看板 ${boardName}`);
+  }
+
+  await bot.send(PTT_KEY_CTRL_P);
+
+  const startedAt = Date.now();
+  let options: string[] = [];
+  while (Date.now() - startedAt < 1200) {
+    options = parsePostCategoryOptions(readVisibleScreen(bot));
+    if (options.length > 0) break;
+    await sleep(50);
+  }
+
+  await bot.send(PTT_KEY_CTRL_C);
+  await sleep(80);
+
+  return options;
 }
 
 export async function fetchBoardArticlesFromBotManually(

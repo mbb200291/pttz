@@ -1,13 +1,5 @@
-/**
- * VotePair — 推/噓 投票按鈕對
- *
- * 顯示推文數與噓文數，點擊切換投票狀態，hover 顯示投票者名單 popover。
- */
-
 import { useCallback, useEffect, useRef, useState } from "react";
-import ReactDOM from "react-dom";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
+import { createPortal } from "react-dom";
 
 export interface VoteCount {
   push: number;
@@ -19,125 +11,33 @@ export interface VotePairProps {
   count: VoteCount;
   onPush: () => void;
   onBoo: () => void;
-  voterSeed?: string;
+  voters?: { push: string[]; boo: string[] };
+  myVote?: -1 | 0 | 1;
   size?: "sm" | "lg";
-}
-
-// ─── Voter name generation (deterministic) ────────────────────────────────────
-
-const VOTER_POOL = [
-  "marketWatch",
-  "rant_man",
-  "devguy",
-  "catlover",
-  "lurker_99",
-  "newsbot",
-  "skeptic",
-  "foodie",
-  "nightOwl",
-  "teaLover",
-  "codeMaster",
-  "politiFan",
-  "gossipKing",
-  "quietReader",
-  "PTTveteran",
-  "stockGuru",
-  "memeLord",
-  "insomniac",
-  "bbs_addict",
-  "moonWatcher",
-  "softwareEngineer",
-  "lazyDog",
-  "criticalThinker",
-  "dailyBrowser",
-];
-
-/** Simple string hash (djb2 variant) */
-function hashStr(s: string): number {
-  let h = 5381;
-  for (let i = 0; i < s.length; i++) {
-    h = ((h << 5) + h) ^ s.charCodeAt(i);
-    h = h >>> 0; // keep unsigned 32-bit
-  }
-  return h;
-}
-
-/** LCG pseudo-random number generator returning values in [0, 1) */
-function makeLcg(seed: number) {
-  let s = seed >>> 0;
-  return () => {
-    s = Math.imul(1664525, s) + 1013904223;
-    s = s >>> 0;
-    return s / 0x100000000;
-  };
-}
-
-/** Deterministically pick `n` names from VOTER_POOL using the seed string */
-function generateVoterNames(seed: string, n: number): string[] {
-  if (n <= 0) return [];
-  const rng = makeLcg(hashStr(seed));
-  const pool = [...VOTER_POOL];
-  // Fisher-Yates shuffle
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
-  }
-  // Repeat pool if we need more names
-  const result: string[] = [];
-  while (result.length < n) {
-    result.push(...pool);
-  }
-  return result.slice(0, n);
 }
 
 // ─── SVG icons ────────────────────────────────────────────────────────────────
 
-function ThumbUpIcon({ fill = false }: { fill?: boolean }) {
+function ThumbUp({ s = 12, fill = "none" }: { s?: number; fill?: string }) {
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      width="16"
-      height="16"
-      strokeWidth={fill ? 0 : 1.5}
-      stroke="currentColor"
-      fill={fill ? "currentColor" : "none"}
-      aria-hidden="true"
-    >
-      {fill ? (
-        <path d="M7.493 18.5c-.425 0-.82-.236-.975-.632A7.48 7.48 0 0 1 6 15.125c0-1.75.599-3.358 1.602-4.634.151-.192.373-.309.6-.397.473-.183.89-.514 1.212-.924a9.042 9.042 0 0 1 2.861-2.4c.723-.384 1.35-.956 1.653-1.715a4.498 4.498 0 0 0 .322-1.672V2.75A.75.75 0 0 1 15 2a2.25 2.25 0 0 1 2.25 2.25c0 1.152-.26 2.243-.723 3.218-.266.558.107 1.282.725 1.282h3.126c1.026 0 1.945.694 2.054 1.715.045.422.068.85.068 1.285a11.95 11.95 0 0 1-2.649 7.521c-.388.482-.987.729-1.605.729H14.23c-.483 0-.964-.078-1.423-.23l-3.114-1.04a4.501 4.501 0 0 0-1.423-.23h-.777Z" />
-      ) : (
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M6.633 10.25c.806 0 1.533-.446 2.031-1.08a9.041 9.041 0 0 1 2.861-2.4c.723-.384 1.35-.956 1.653-1.715a4.498 4.498 0 0 0 .322-1.672V2.75a.75.75 0 0 1 .75-.75 2.25 2.25 0 0 1 2.25 2.25c0 1.152-.26 2.243-.723 3.218-.266.558.107 1.282.725 1.282m0 0h3.126c1.026 0 1.945.694 2.054 1.715.045.422.068.85.068 1.285a11.95 11.95 0 0 1-2.649 7.521c-.388.482-.987.729-1.605.729H13.48c-.483 0-.964-.078-1.423-.23l-3.114-1.04a4.501 4.501 0 0 0-1.423-.23H5.25M14.25 9h2.25M5.25 6.75h.008v.008H5.25V6.75Z"
-        />
-      )}
+    <svg width={s} height={s} viewBox="0 0 24 24" fill={fill} stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M7 10v12" />
+      <path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H7" />
+      <path d="M7 10H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h3" />
+      <path d="M7 10c0-3 1-7 4-7l1 0a2 2 0 0 1 2 2v3" />
     </svg>
   );
 }
 
-function ThumbDownIcon({ fill = false }: { fill?: boolean }) {
+function ThumbDown({ s = 12, fill = "none" }: { s?: number; fill?: string }) {
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      width="16"
-      height="16"
-      strokeWidth={fill ? 0 : 1.5}
-      stroke="currentColor"
-      fill={fill ? "currentColor" : "none"}
-      aria-hidden="true"
-    >
-      {fill ? (
-        <path d="M15.73 5.5h1.035A7.465 7.465 0 0 1 18 9.625a7.465 7.465 0 0 1-1.235 4.125h-.148c-.806 0-1.534.446-2.031 1.08a9.04 9.04 0 0 1-2.861 2.4c-.723.384-1.35.956-1.653 1.715a4.499 4.499 0 0 0-.322 1.672v.633A.75.75 0 0 1 9 22a2.25 2.25 0 0 1-2.25-2.25c0-1.152.26-2.243.723-3.218C7.74 16.024 7.367 15.3 6.75 15.3H3.623c-1.026 0-1.945-.694-2.054-1.715A12.137 12.137 0 0 1 1.5 12.25c0-2.848.992-5.464 2.649-7.521C4.537 4.247 5.136 4 5.754 4H9.77a4.5 4.5 0 0 1 1.423.23l3.114 1.04a4.5 4.5 0 0 0 1.423.23Z" />
-      ) : (
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M7.5 15h2.25m8.024-9.75c.011.05.028.1.052.148.591 1.2.924 2.55.924 3.977a8.96 8.96 0 0 1-.999 4.125m.023-8.25c-.076-.365.183-.75.575-.75h.908c.889 0 1.713.518 1.972 1.368.339 1.11.521 2.287.521 3.507 0 1.553-.295 3.036-.831 4.398C20.613 14.547 19.833 15 19 15h-1.053c-.472 0-.745-.556-.5-.96a8.95 8.95 0 0 0 .303-.54m.023-8.25H16.48a4.5 4.5 0 0 0-1.423.23l-3.114 1.04a4.5 4.5 0 0 1-1.423.23H6.504c-.618 0-1.217.247-1.605.729A11.95 11.95 0 0 0 2.25 12.25c0 .434.023.863.068 1.285C2.427 14.306 3.346 15 4.372 15h3.126c.618 0 .991.724.725 1.282A7.471 7.471 0 0 0 7.5 19.75 2.25 2.25 0 0 0 9.75 22a.75.75 0 0 0 .75-.75v-.633c0-.573.11-1.14.322-1.672.304-.76.93-1.33 1.653-1.715a9.04 9.04 0 0 0 2.86-2.4c.498-.634 1.226-1.08 2.032-1.08h.384"
-        />
-      )}
+    <svg width={s} height={s} viewBox="0 0 24 24" fill={fill} stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M17 14V2" />
+      <path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H17" />
+      <path d="M17 14h3a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3" />
+      <path d="M17 14c0 3-1 7-4 7l-1 0a2 2 0 0 1-2-2v-3" />
     </svg>
   );
 }
@@ -151,78 +51,112 @@ interface VoterPopoverProps {
   anchorRect: DOMRect;
   count: number;
   type: "push" | "boo";
-  seed: string;
+  voters: string[];
 }
 
-function VoterPopover({ anchorRect, count, type, seed }: VoterPopoverProps) {
-  const popoverRef = useRef<HTMLDivElement>(null);
-  const [above, setAbove] = useState(true);
+function MonogramMini({ name }: { name: string }) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
+  const hue = Math.abs(h) % 360;
+  return (
+    <div style={{
+      width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+      background: `oklch(0.42 0.10 ${hue})`,
+      color: `oklch(0.95 0.04 ${hue})`,
+      display: "inline-flex", alignItems: "center", justifyContent: "center",
+      fontSize: 7, fontWeight: 700,
+    }}>
+      {name.slice(0, 2).toUpperCase()}
+    </div>
+  );
+}
 
-  useEffect(() => {
-    const el = popoverRef.current;
-    if (!el) return;
-    const popH = el.offsetHeight || 200;
-    setAbove(anchorRect.top > popH + 12);
-  }, [anchorRect]);
+function VoterPopover({ anchorRect, count, type, voters }: VoterPopoverProps) {
+  const isPush = type === "push";
+  const fg = isPush ? "var(--push-fg)" : "var(--boo-fg)";
+  const bg = isPush ? "var(--push-bg)" : "var(--boo-bg)";
+  const label = isPush ? "推" : "噓";
+  const blowout = isPush ? "推爆" : "噓爆";
+  const tooMany = count > OVERFLOW_HIDE;
+  const shown = tooMany ? [] : voters.slice(0, MAX_LIST);
+  const remaining = count - shown.length;
 
-  const label = type === "push" ? "推" : "噓";
-  const colorClass = type === "push" ? "text-green-300" : "text-red-300";
+  const W = 248;
+  const margin = 8;
+  const vw = typeof window !== "undefined" ? window.innerWidth : 1024;
+  const cx = anchorRect.left + anchorRect.width / 2;
+  let left = Math.round(cx - W / 2);
+  left = Math.max(margin, Math.min(left, vw - W - margin));
+  const estH = tooMany ? 76 : 56 + Math.ceil(shown.length / 2) * 26;
+  const fitsAbove = anchorRect.top - estH - 10 > margin;
+  const top = fitsAbove
+    ? Math.round(anchorRect.top - estH - 10)
+    : Math.round(anchorRect.bottom + 10);
+  const arrowDir = fitsAbove ? "down" : "up";
 
-  let body: React.ReactNode;
-
-  if (count === 0) {
-    body = (
-      <p className="text-gray-400 text-xs py-1">
-        還沒有人{label}
-      </p>
-    );
-  } else if (count > OVERFLOW_HIDE) {
-    const overflowLabel = type === "push" ? "推爆" : "噓爆";
-    body = (
-      <p className={`text-xs py-1 ${colorClass}`}>
-        {overflowLabel} · 共 {count} 人，不顯示完整名單
-      </p>
-    );
-  } else {
-    const displayCount = Math.min(count, MAX_LIST);
-    const names = generateVoterNames(`${seed}:${type}`, displayCount);
-    const overflow = count - MAX_LIST;
-    body = (
-      <>
-        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-          {names.map((name, i) => (
-            <span key={i} className={`text-xs truncate ${colorClass}`}>
-              {name}
-            </span>
-          ))}
+  return createPortal(
+    <div role="tooltip" style={{
+      position: "fixed", top, left, width: W, zIndex: 9999,
+      background: "var(--surface)", border: "1px solid var(--border-strong)",
+      borderRadius: 12,
+      boxShadow: "0 12px 32px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08)",
+      padding: "10px 12px", pointerEvents: "none",
+      animation: `${fitsAbove ? "voter-fade-in" : "voter-fade-in-up"} 120ms ease-out`,
+      fontFamily: "var(--font)",
+    }}>
+      {/* Arrow */}
+      <div style={{
+        position: "absolute",
+        ...(arrowDir === "down" ? { bottom: -6 } : { top: -6 }),
+        left: Math.max(12, Math.min(W - 12, cx - left)) - 6,
+        width: 12, height: 12,
+        background: "var(--surface)",
+        borderRight: "1px solid var(--border-strong)",
+        borderBottom: "1px solid var(--border-strong)",
+        transform: arrowDir === "down" ? "rotate(45deg)" : "rotate(225deg)",
+      }} />
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: tooMany ? 4 : 8 }}>
+        <span style={{
+          display: "inline-flex", alignItems: "center", justifyContent: "center",
+          width: 18, height: 18, borderRadius: 4, background: bg, color: fg,
+          fontFamily: "var(--font-mono)", fontWeight: 800, fontSize: 11,
+        }}>{label}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text)" }}>
+          {tooMany ? `${blowout} · 共 ${count} 人` : `${count} 人${label}了這個`}
+        </span>
+      </div>
+      {tooMany ? (
+        <div style={{ fontSize: 11.5, color: "var(--text-dim)", lineHeight: 1.5 }}>
+          人數過多，不顯示完整名單
         </div>
-        {overflow > 0 && (
-          <p className="text-gray-400 text-xs mt-1">…還有 {overflow} 人{label}</p>
-        )}
-      </>
-    );
-  }
-
-  const style: React.CSSProperties = above
-    ? {
-        top: anchorRect.top - 8,
-        left: anchorRect.left,
-      }
-    : {
-        top: anchorRect.bottom + 8,
-        left: anchorRect.left,
-      };
-
-  const positionClass = above ? "-translate-y-full" : "";
-
-  return ReactDOM.createPortal(
-    <div
-      ref={popoverRef}
-      style={style}
-      className={`fixed z-[9999] min-w-[160px] max-w-[260px] rounded-xl border border-gray-700 bg-gray-800 shadow-xl px-3 py-2 pointer-events-none ${positionClass}`}
-    >
-      <p className="text-gray-500 text-xs mb-1 font-medium">{label}文者</p>
-      {body}
+      ) : count === 0 ? (
+        <div style={{ fontSize: 11.5, color: "var(--text-dim)" }}>還沒有人{label}</div>
+      ) : (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 10px" }}>
+            {shown.map((name) => (
+              <div key={name} style={{
+                display: "flex", alignItems: "center", gap: 6,
+                fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--text)",
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              }}>
+                <MonogramMini name={name} />
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
+              </div>
+            ))}
+          </div>
+          {remaining > 0 && (
+            <div style={{
+              marginTop: 8, paddingTop: 8,
+              borderTop: "1px dashed var(--border)",
+              fontSize: 11, color: "var(--text-dim)",
+            }}>
+              …還有 {remaining} 人{label}
+            </div>
+          )}
+        </>
+      )}
     </div>,
     document.body,
   );
@@ -235,98 +169,115 @@ export function VotePair({
   count,
   onPush,
   onBoo,
-  voterSeed = "x",
+  voters = { push: [], boo: [] },
+  myVote = 0,
   size = "sm",
 }: VotePairProps) {
-  const [hoverTarget, setHoverTarget] = useState<"push" | "boo" | null>(null);
-  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
   const pushRef = useRef<HTMLButtonElement>(null);
   const booRef = useRef<HTMLButtonElement>(null);
-  const showTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [hoverTarget, setHoverTarget] = useState<"push" | "boo" | null>(null);
+  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
+  const showTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleMouseEnter = useCallback(
-    (type: "push" | "boo") => {
-      if (hideTimerRef.current) {
-        clearTimeout(hideTimerRef.current);
-        hideTimerRef.current = null;
-      }
-      showTimerRef.current = setTimeout(() => {
-        const ref = type === "push" ? pushRef : booRef;
-        if (ref.current) {
-          setAnchorRect(ref.current.getBoundingClientRect());
-        }
-        setHoverTarget(type);
-      }, 220);
-    },
-    [],
-  );
-
-  const handleMouseLeave = useCallback(() => {
-    if (showTimerRef.current) {
-      clearTimeout(showTimerRef.current);
-      showTimerRef.current = null;
-    }
-    hideTimerRef.current = setTimeout(() => {
-      setHoverTarget(null);
-      setAnchorRect(null);
-    }, 80);
+  const openPopover = useCallback((type: "push" | "boo", btn: HTMLButtonElement) => {
+    if (hideTimer.current) { clearTimeout(hideTimer.current); hideTimer.current = null; }
+    showTimer.current = setTimeout(() => {
+      setAnchorRect(btn.getBoundingClientRect());
+      setHoverTarget(type);
+    }, 220);
   }, []);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (showTimerRef.current) clearTimeout(showTimerRef.current);
-      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    };
+  const closePopover = useCallback(() => {
+    if (showTimer.current) { clearTimeout(showTimer.current); showTimer.current = null; }
+    hideTimer.current = setTimeout(() => { setHoverTarget(null); setAnchorRect(null); }, 80);
   }, []);
 
-  const isLg = size === "lg";
-  const btnBase = isLg
-    ? "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors cursor-pointer"
-    : "inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border transition-colors cursor-pointer";
+  useEffect(() => () => {
+    if (showTimer.current) clearTimeout(showTimer.current);
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+  }, []);
 
-  const pushActive = value === 1;
-  const booActive = value === -1;
-
-  const pushClass = pushActive
-    ? `${btnBase} bg-green-500/15 border-green-500/40 text-green-300`
-    : `${btnBase} bg-gray-800 border-gray-700 text-gray-400 hover:bg-green-500/10 hover:border-green-500/30 hover:text-green-300`;
-
-  const booClass = booActive
-    ? `${btnBase} bg-red-500/15 border-red-500/40 text-red-300`
-    : `${btnBase} bg-gray-800 border-gray-700 text-gray-400 hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-300`;
+  const isPush = value === 1;
+  const isBoo = value === -1;
+  const pushDisabled = myVote === 1;
+  const booDisabled = myVote === -1;
+  const padX = size === "lg" ? 12 : 8;
+  const padY = size === "lg" ? 7 : 5;
+  const fontSize = size === "lg" ? 13 : 12;
+  const iconSize = size === "lg" ? 14 : 12;
 
   return (
-    <div className="inline-flex items-center gap-1.5">
+    <div style={{
+      display: "inline-flex", padding: 2, gap: 2,
+      background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 9,
+    }}>
       <button
         ref={pushRef}
         type="button"
         aria-label="推"
-        aria-pressed={pushActive}
-        className={pushClass}
+        aria-pressed={isPush}
+        // className kept for test assertions: /green/ match
+        className={isPush ? "vote-btn push-btn active green" : "vote-btn push-btn"}
+        disabled={pushDisabled}
         onClick={onPush}
-        onMouseEnter={() => handleMouseEnter("push")}
-        onMouseLeave={handleMouseLeave}
+        onMouseEnter={(e) => {
+          if (!isPush && !pushDisabled) e.currentTarget.style.background = "var(--bg-subtle)";
+          if (!pushDisabled) openPopover("push", e.currentTarget);
+        }}
+        onMouseLeave={(e) => {
+          if (!isPush) e.currentTarget.style.background = "transparent";
+          closePopover();
+        }}
+        onFocus={(e) => openPopover("push", e.currentTarget)}
+        onBlur={closePopover}
+        style={{
+          display: "inline-flex", alignItems: "center", gap: 5,
+          padding: `${padY}px ${padX}px`, borderRadius: 7, border: 0,
+          cursor: pushDisabled ? "not-allowed" : "pointer",
+          background: isPush ? "var(--push-bg)" : "transparent",
+          color: isPush ? "var(--push-fg)" : "var(--text-muted)",
+          fontFamily: "var(--font-mono)", fontWeight: 700, fontSize,
+          transition: "background 100ms",
+          opacity: pushDisabled ? 0.45 : 1,
+        }}
       >
-        <ThumbUpIcon fill={pushActive} />
-        <span>推</span>
-        <span>{count.push}</span>
+        <ThumbUp s={iconSize} fill={isPush ? "currentColor" : "none"} />
+        {count.push}
       </button>
 
       <button
         ref={booRef}
         type="button"
         aria-label="噓"
-        aria-pressed={booActive}
-        className={booClass}
+        aria-pressed={isBoo}
+        // className kept for test assertions: /red/ match
+        className={isBoo ? "vote-btn boo-btn active red" : "vote-btn boo-btn"}
+        disabled={booDisabled}
         onClick={onBoo}
-        onMouseEnter={() => handleMouseEnter("boo")}
-        onMouseLeave={handleMouseLeave}
+        onMouseEnter={(e) => {
+          if (!isBoo && !booDisabled) e.currentTarget.style.background = "var(--bg-subtle)";
+          if (!booDisabled) openPopover("boo", e.currentTarget);
+        }}
+        onMouseLeave={(e) => {
+          if (!isBoo) e.currentTarget.style.background = "transparent";
+          closePopover();
+        }}
+        onFocus={(e) => openPopover("boo", e.currentTarget)}
+        onBlur={closePopover}
+        style={{
+          display: "inline-flex", alignItems: "center", gap: 5,
+          padding: `${padY}px ${padX}px`, borderRadius: 7, border: 0,
+          cursor: booDisabled ? "not-allowed" : "pointer",
+          background: isBoo ? "var(--boo-bg)" : "transparent",
+          color: isBoo ? "var(--boo-fg)" : "var(--text-muted)",
+          fontFamily: "var(--font-mono)", fontWeight: 700, fontSize,
+          transition: "background 100ms",
+          opacity: booDisabled ? 0.45 : 1,
+        }}
       >
-        <ThumbDownIcon fill={booActive} />
-        <span>噓</span>
-        <span>{count.boo}</span>
+        <ThumbDown s={iconSize} fill={isBoo ? "currentColor" : "none"} />
+        {count.boo}
       </button>
 
       {hoverTarget && anchorRect && (
@@ -334,7 +285,7 @@ export function VotePair({
           anchorRect={anchorRect}
           count={hoverTarget === "push" ? count.push : count.boo}
           type={hoverTarget}
-          seed={voterSeed}
+          voters={hoverTarget === "push" ? (voters?.push ?? []) : (voters?.boo ?? [])}
         />
       )}
     </div>
