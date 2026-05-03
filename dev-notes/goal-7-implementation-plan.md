@@ -287,6 +287,33 @@ npm run test    // 全部通過
 
 ---
 
+## ✅ Bug Fix：修正 Zustand selector 導致連續載入問題
+
+**修改檔案：** `src/hooks/useBoard.ts`、`src/hooks/useArticle.ts`
+
+### 問題
+在打開看板（例如 Gossiping）時，文章列表會出現「一直跳動載入」現象，loading 狀態不斷切換。
+
+### 根因
+`useBoard` 和 `useArticle` 使用 `usePttSocketStore()` 直接取得整個 store state，而非使用 selector。
+這導致當 store 的任何部分變化（例如 wsStatus、loginError、recentBuffer 等）時，hooks 都會重新渲染，
+進而觸發 effects 重新執行，導致 fetch 不斷被重啟。
+
+### 修正
+改用 Zustand selector 只訂閱需要的值：
+```typescript
+// Before
+const { client, pttState } = usePttSocketStore();
+
+// After
+const client = usePttSocketStore((s) => s.client);
+const pttState = usePttSocketStore((s) => s.pttState);
+```
+
+這樣 hooks 只在 `client` 或 `pttState` 實際改變時重新渲染，避免不必要的 effect 重新執行。
+
+---
+
 ## 尚未涵蓋（後續任務）
 
 - **PTT adapter 真實寫入整合** — `usePttActions` stub → 實際呼叫 `adapter.send()` 序列
