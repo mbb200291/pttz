@@ -300,38 +300,51 @@ export function Article({
   // Composer state: null = closed
   const [composer, setComposer] = useState<{ mode: ComposerMode; initial: ComposerInitial } | null>(null);
 
-  const { isLoggedIn } = usePttActions();
+  const actions = usePttActions();
+  const { isLoggedIn } = actions;
 
   const handleArticleVote = useCallback((direction: "push" | "boo") => {
     if (!canVote(articleVote.value, direction)) return;
     const next: -1 | 0 | 1 = direction === "push" ? 1 : -1;
-    setArticleVote(prev => ({
-      value: next,
-      count: {
-        push: prev.count.push + (direction === "push" ? 1 : 0),
-        boo: prev.count.boo + (direction === "boo" ? 1 : 0),
-      },
-    }));
-  }, [articleVote.value]);
+    void actions.replyToArticle(
+      direction === "push" ? "推" : "噓",
+      direction,
+      boardName,
+    ).then((result) => {
+      if (!result.ok) return;
+      setArticleVote(prev => ({
+        value: next,
+        count: {
+          push: prev.count.push + (direction === "push" ? 1 : 0),
+          boo: prev.count.boo + (direction === "boo" ? 1 : 0),
+        },
+      }));
+    });
+  }, [actions, articleVote.value]);
 
   const handlePushVote = useCallback((pushId: string, next: -1 | 0 | 1) => {
     const myVote = myPushVotes.get(pushId) ?? 0;
     const direction = next === 1 ? "push" : "boo";
     if (!canVote(myVote, direction)) return;
 
-    setMyPushVotes(prev => new Map(prev).set(pushId, next));
-    setPushVotes(prev => {
-      const current = prev.get(pushId) ?? { value: 0 as -1 | 0 | 1, count: { push: 0, boo: 0 } };
-      const updated = {
-        value: next,
-        count: {
-          push: current.count.push + (next === 1 ? 1 : 0),
-          boo: current.count.boo + (next === -1 ? 1 : 0),
-        },
-      };
-      return new Map(prev).set(pushId, updated);
+    const push = article?.pushes.find((item) => item.id === pushId);
+    const targetFloor = push?.floorNumber ?? 0;
+    void actions.votePush(targetFloor, direction, boardName).then((result) => {
+      if (!result.ok) return;
+      setMyPushVotes(prev => new Map(prev).set(pushId, next));
+      setPushVotes(prev => {
+        const current = prev.get(pushId) ?? { value: 0 as -1 | 0 | 1, count: { push: 0, boo: 0 } };
+        const updated = {
+          value: next,
+          count: {
+            push: current.count.push + (next === 1 ? 1 : 0),
+            boo: current.count.boo + (next === -1 ? 1 : 0),
+          },
+        };
+        return new Map(prev).set(pushId, updated);
+      });
     });
-  }, [myPushVotes]);
+  }, [actions, article?.pushes, boardName, myPushVotes]);
 
   const openReply = useCallback(() => {
     setComposer({ mode: "reply", initial: {} });
@@ -349,12 +362,16 @@ export function Article({
     setComposer(null);
   }, []);
 
-  const handleComposerSubmit = useCallback((_payload: import("./Composer").ComposerPayload) => {
+  const handleComposerSubmit = useCallback((payload: import("./Composer").ComposerPayload) => {
     if (composer?.mode === "edit-push") {
       // TODO: update pushEdits Map with old content in history once adapter integration is done
+      setComposer(null);
+      return;
     }
-    setComposer(null);
-  }, [composer]);
+    void actions.replyToArticle(payload.body, payload.pushType, boardName).then((result) => {
+      if (result.ok) setComposer(null);
+    });
+  }, [actions, boardName, composer]);
 
   const initialArticle =
     initialArticleSummary && !articleAid

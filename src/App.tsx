@@ -16,6 +16,7 @@ import type { AggregatedPush } from "./lib/ptt/pushAggregator";
 import type { PttState } from "./hooks/usePttSocket";
 import { getSafeViewForPttState, type AppView, type BoardFilter } from "./lib/ptt/viewState";
 import { resolveBoardCategoryOptions } from "./lib/ptt/boardCategories";
+import { usePttActions } from "./hooks/usePttActions";
 
 type PreviewMode = "home" | "board" | "article" | "login";
 
@@ -190,6 +191,7 @@ export default function App() {
   const { wsStatus, pttState, client } = usePttSocket();
   const { boards: hotBoards, loading: hotBoardsLoading } = useHotBoards(!isPreview);
   const { recent: recentBoards, addRecent } = useRecentBoards(5);
+  const actions = usePttActions();
   const currentUser = usePttSocketStore((s) => s.credentials?.username);
   const [postCategoryOptionsByBoard, setPostCategoryOptionsByBoard] = useState<
     Record<string, string[]>
@@ -353,7 +355,13 @@ export default function App() {
           categoryOptions={resolveBoardCategoryOptions(view.board, view.categoryOptions)}
           currentUser={currentUser}
           onCancel={() => setView({ type: "board", name: view.board })}
-          onSubmit={() => setView({ type: "board", name: view.board })}
+          onSubmit={(payload) => {
+            void actions
+              .postArticle(payload.board, payload.category, payload.title, payload.body)
+              .then((result) => {
+                if (result.ok) setView({ type: "board", name: view.board });
+              });
+          }}
         />
       )}
 

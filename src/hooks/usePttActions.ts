@@ -3,7 +3,7 @@
  *
  * Format helpers and stub actions for PTT interactions.
  * Pure format functions generate the text strings sent to PTT.
- * The hook provides stubbed action methods (all resolve with ok: true after delay).
+ * The hook delegates write actions to the PTT adapter when available.
  */
 
 import { usePttSocketStore } from "./usePttSocket";
@@ -86,14 +86,24 @@ export interface PttActionsResult {
   replyToArticle(
     content: string,
     pushType: PushType,
+    boardName?: string,
   ): Promise<{ ok: boolean }>;
   replyToPush(
     floor: number,
     content: string,
     pushType: PushType,
+    boardName?: string,
   ): Promise<{ ok: boolean }>;
-  voteArticle(floor: number, kind: "push" | "boo"): Promise<{ ok: boolean }>;
-  votePush(floor: number, kind: "push" | "boo"): Promise<{ ok: boolean }>;
+  voteArticle(
+    floor: number,
+    kind: "push" | "boo",
+    boardName?: string,
+  ): Promise<{ ok: boolean }>;
+  votePush(
+    floor: number,
+    kind: "push" | "boo",
+    boardName?: string,
+  ): Promise<{ ok: boolean }>;
   postArticle(
     board: string,
     category: string,
@@ -122,40 +132,37 @@ export function usePttActions(): PttActionsResult {
   const client = usePttSocketStore((s) => s.client);
   const isLoggedIn = client?.isLoggedIn() ?? false;
 
-  // Stub implementations - all resolve with ok: true after delay
-  const delay = () =>
-    new Promise<void>((resolve) => setTimeout(resolve, 300));
+  const unavailable = async () => ({ ok: false });
 
   return {
     isLoggedIn,
-    async replyToArticle(_content: string, _pushType: PushType) {
-      await delay();
-      return { ok: true };
+    async replyToArticle(content: string, pushType: PushType, boardName?: string) {
+      return client?.replyToArticle(content, pushType, boardName) ?? unavailable();
     },
-    async replyToPush(_floor: number, _content: string, _pushType: PushType) {
-      await delay();
-      return { ok: true };
+    async replyToPush(
+      floor: number,
+      content: string,
+      pushType: PushType,
+      boardName?: string,
+    ) {
+      return client?.replyToPush(floor, content, pushType, boardName) ?? unavailable();
     },
-    async voteArticle(_floor: number, _kind: "push" | "boo") {
-      await delay();
-      return { ok: true };
+    async voteArticle(floor: number, kind: "push" | "boo", boardName?: string) {
+      return client?.voteArticle(floor, kind, boardName) ?? unavailable();
     },
-    async votePush(_floor: number, _kind: "push" | "boo") {
-      await delay();
-      return { ok: true };
+    async votePush(floor: number, kind: "push" | "boo", boardName?: string) {
+      return client?.votePush(floor, kind, boardName) ?? unavailable();
     },
     async postArticle(
-      _board: string,
-      _category: string,
-      _title: string,
-      _body: string,
+      board: string,
+      category: string,
+      title: string,
+      body: string,
     ) {
-      await delay();
-      return { ok: true };
+      return client?.postArticle(board, category, title, body) ?? unavailable();
     },
-    async editArticle(_body: string, _editSummary: string) {
-      await delay();
-      return { ok: true };
+    async editArticle(body: string, editSummary: string) {
+      return client?.editArticle(body, editSummary) ?? unavailable();
     },
     async editPush(
       _mode: "補充" | "更正" | "撤回",
@@ -164,8 +171,7 @@ export function usePttActions(): PttActionsResult {
       _content: string,
       _pushType: PushType,
     ) {
-      await delay();
-      return { ok: true };
+      return unavailable();
     },
   };
 }

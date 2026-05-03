@@ -40,6 +40,10 @@ export interface PushEditData {
 
 const INITIAL_VISIBLE_TOP_LEVEL_REPLIES = 30;
 const REPLY_RENDER_BATCH_SIZE = 30;
+const EMPTY_VOTE_STATE = {
+  value: 0 as -1 | 0 | 1,
+  count: { push: 0, boo: 0 },
+};
 
 function compareTopLevelReplies(
   a: AggregatedPush,
@@ -316,6 +320,7 @@ function PushItem({
   const ipLabel =
     push.ipAddresses.length === 0 ? null : push.ipAddresses.join(", ");
   const isEditNode = push.type === "edit";
+  const displayVoteState = voteState ?? EMPTY_VOTE_STATE;
 
   const cardBorder = isEditNode
     ? "1px solid var(--accent-border)"
@@ -457,12 +462,12 @@ function PushItem({
             alignItems: "center",
             flexWrap: "wrap",
           }}>
-            {voteState && onVote && (
+            {onVote && (
               <VotePair
-                value={voteState.value}
-                count={voteState.count}
+                value={displayVoteState.value}
+                count={displayVoteState.count}
                 voters={{ push: push.pushVoters, boo: push.booVoters }}
-                myVote={voteState.value}
+                myVote={displayVoteState.value}
                 onPush={() => onVote(1)}
                 onBoo={() => onVote(-1)}
                 size="sm"

@@ -6,6 +6,7 @@
   並將規則近一步具體化
 - 實作單一個目標的時候，請你把實作的一些坑和一些實作時才會遇到的細節記錄在implementation-notes
 - 完成一次目標的時候，也請更新implementation.md，這個會用更高level去紀錄目前spec.MD中的列像的實作方法
+- 請勿控制git修改行為，例如staging, commit或是rebase、cherry-pick等，你僅允許操作git讀取相關指令
 
 ## 開發意見
 

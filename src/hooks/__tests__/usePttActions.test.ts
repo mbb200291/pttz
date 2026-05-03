@@ -1,4 +1,8 @@
-import { describe, expect, it } from "vitest";
+// @vitest-environment jsdom
+import { describe, expect, it, vi } from "vitest";
+import { renderHook } from "@testing-library/react";
+import { usePttSocketStore } from "../usePttSocket";
+import type { PttAdapter } from "../../lib/ptt/adapter";
 
 describe("usePttActions format helpers", () => {
   it("formatReplyToPush formats a reply to a floor", async () => {
@@ -95,5 +99,26 @@ describe("canVote", () => {
   it("returns true when already booed and direction is push", async () => {
     const { canVote } = await import("../usePttActions");
     expect(canVote(-1, "push")).toBe(true);
+  });
+});
+
+describe("usePttActions adapter integration", () => {
+  it("sends article replies through the PTT adapter", async () => {
+    const replyToArticle = vi.fn().mockResolvedValue({ ok: true });
+    usePttSocketStore.setState({
+      client: {
+        isLoggedIn: vi.fn().mockReturnValue(true),
+        replyToArticle,
+      } as unknown as PttAdapter,
+      pttState: "ready",
+    });
+
+    const { usePttActions } = await import("../usePttActions");
+    const { result } = renderHook(() => usePttActions());
+
+    await expect(result.current.replyToArticle("測試回文", "push")).resolves.toEqual({
+      ok: true,
+    });
+    expect(replyToArticle).toHaveBeenCalledWith("測試回文", "push", undefined);
   });
 });

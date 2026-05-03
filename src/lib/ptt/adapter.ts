@@ -36,6 +36,8 @@ export type LoginResult =
   | { ok: true }
   | { ok: false; reason: LoginFailureReason };
 
+export type PushType = "push" | "neutral" | "boo";
+
 export interface PttClientArticleRow {
   id: number;
   push?: string;
@@ -166,6 +168,34 @@ export interface PttAdapter {
   listHotBoards: () => Promise<HotBoardSummary[]>;
   getFavoriteBoards: () => Promise<string[]>;
   getPostCategoryOptions: (boardName: string) => Promise<string[]>;
+  replyToArticle: (
+    content: string,
+    pushType: PushType,
+    boardName?: string,
+  ) => Promise<{ ok: boolean }>;
+  replyToPush: (
+    floor: number,
+    content: string,
+    pushType: PushType,
+    boardName?: string,
+  ) => Promise<{ ok: boolean }>;
+  voteArticle: (
+    floor: number,
+    kind: "push" | "boo",
+    boardName?: string,
+  ) => Promise<{ ok: boolean }>;
+  votePush: (
+    floor: number,
+    kind: "push" | "boo",
+    boardName?: string,
+  ) => Promise<{ ok: boolean }>;
+  postArticle: (
+    board: string,
+    category: string,
+    title: string,
+    body: string,
+  ) => Promise<{ ok: boolean }>;
+  editArticle: (body: string, editSummary: string) => Promise<{ ok: boolean }>;
   disconnect: () => Promise<void>;
   isLoggedIn: () => boolean;
   getStatus: () => ConnectionStatus;
@@ -226,11 +256,14 @@ type BoardFetchBot = Partial<
   Pick<BotLike, "send" | "getLine" | "enterBoardByName" | "enterIndex">
 >;
 
+type WriteBot = BoardFetchBot;
+
 const PTT_KEY_PGDOWN = "\x1b[6~";
 const PTT_KEY_HOME = "\x1b[1~";
 const PTT_KEY_END = "\x1b[4~";
 const PTT_KEY_CTRL_C = "\x03";
 const PTT_KEY_CTRL_P = "\x10";
+const PTT_KEY_CTRL_X = "\x18";
 const MAX_BOARD_SCREEN_INDEX_GAP = 50000;
 
 type AdapterDebugGlobal = typeof globalThis & {
@@ -542,6 +575,61 @@ class PttClientAdapter implements PttAdapter {
     });
   }
 
+  async replyToArticle(
+    content: string,
+    pushType: PushType,
+    boardName?: string,
+  ): Promise<{ ok: boolean }> {
+    return this.runSerial(async () => {
+      await this.waitUntilLoggedIn();
+      return submitPushFromCurrentArticle(this.bot, content, pushType, boardName);
+    });
+  }
+
+  async replyToPush(
+    floor: number,
+    content: string,
+    pushType: PushType,
+    boardName?: string,
+  ): Promise<{ ok: boolean }> {
+    return this.replyToArticle(formatReplyToFloor(floor, content), pushType, boardName);
+  }
+
+  async voteArticle(
+    floor: number,
+    kind: "push" | "boo",
+    boardName?: string,
+  ): Promise<{ ok: boolean }> {
+    return this.replyToArticle(formatVoteForFloor(floor, kind), kind, boardName);
+  }
+
+  async votePush(
+    floor: number,
+    kind: "push" | "boo",
+    boardName?: string,
+  ): Promise<{ ok: boolean }> {
+    return this.replyToArticle(formatVoteForFloor(floor, kind), kind, boardName);
+  }
+
+  async postArticle(
+    board: string,
+    category: string,
+    title: string,
+    body: string,
+  ): Promise<{ ok: boolean }> {
+    return this.runSerial(async () => {
+      await this.waitUntilLoggedIn();
+      return submitPostFromBot(this.bot, board, category, title, body);
+    });
+  }
+
+  async editArticle(
+    _body: string,
+    _editSummary: string,
+  ): Promise<{ ok: boolean }> {
+    throw new Error("Article editing is not implemented yet");
+  }
+
   async disconnect(): Promise<void> {
     return this.runSerial(async () => {
       this.bot.socket?.disconnect?.();
@@ -751,6 +839,10 @@ export function mapHotBoardRow(
 
 export function parsePostCategoryOptions(screen: string): string[] {
   const plain = stripAnsi(screen).replace(/\r/g, "");
+  const promptLines = plain
+    .split("\n")
+    .filter((line) => /分類|類別|種類|標題/u.test(line));
+  const source = promptLines.length > 0 ? promptLines.join("\n") : plain;
   const seen = new Set<string>();
   const categories: string[] = [];
 
@@ -764,15 +856,11 @@ export function parsePostCategoryOptions(screen: string): string[] {
     categories.push(category);
   };
 
-  const bracketMatches = plain.matchAll(/\[([^\]\n]{1,12})\]/gu);
+  const bracketMatches = source.matchAll(/\[([^\]\n]{1,12})\]/gu);
   for (const match of bracketMatches) {
     if (match[1]) add(match[1]);
   }
   if (categories.length > 0) return categories;
-
-  const promptLines = plain
-    .split("\n")
-    .filter((line) => /分類|類別|種類|標題/u.test(line));
 
   for (const line of promptLines) {
     const tokenMatches = line.matchAll(
@@ -1092,6 +1180,117 @@ async function fetchPostCategoryOptionsFromBot(
   await sleep(80);
 
   return options;
+}
+
+function formatReplyToFloor(floor: number, content: string): string {
+  return `回${floor}樓：${content.trim()}`;
+}
+
+function formatVoteForFloor(floor: number, kind: "push" | "boo"): string {
+  return `${kind === "push" ? "推" : "噓"}${floor}樓`;
+}
+
+function getPushTypeKey(pushType: PushType): string {
+  switch (pushType) {
+    case "push":
+      return "1";
+    case "boo":
+      return "2";
+    default:
+      return "3";
+  }
+}
+
+async function submitPushFromCurrentArticle(
+  bot: WriteBot,
+  content: string,
+  pushType: PushType,
+  returnBoardName?: string,
+): Promise<{ ok: boolean }> {
+  const trimmed = content.trim();
+  if (!trimmed) return { ok: false };
+  if (!bot.send || !bot.getLine) {
+    throw new Error("Bot does not expose article write methods");
+  }
+
+  await bot.send("X");
+  await sleep(180);
+
+  const afterCommand = stripAnsi(readVisibleScreen(bot));
+  if (
+    /1\..*(2\.|噓)|值得推薦|給它噓聲|只加註解|推文方式|推文種類/u.test(
+      afterCommand,
+    )
+  ) {
+    await bot.send(getPushTypeKey(pushType));
+    await sleep(140);
+  }
+
+  await bot.send(`${trimmed}\r`);
+
+  let afterContent = "";
+  const confirmStartedAt = Date.now();
+  while (Date.now() - confirmStartedAt < 3500) {
+    afterContent = stripAnsi(readVisibleScreen(bot));
+    if (/確定|是否|送出|儲存/u.test(afterContent)) break;
+    await sleep(80);
+  }
+
+  if (/確定|是否|送出|儲存/u.test(afterContent)) {
+    await bot.send("y\r");
+    await sleep(500);
+    const afterConfirm = stripAnsi(readVisibleScreen(bot));
+    if (/請按任意鍵繼續|按任意鍵繼續/u.test(afterConfirm)) {
+      await bot.send("\r");
+      await sleep(300);
+    }
+    if (returnBoardName) {
+      await ensureNormalBoardView(bot, returnBoardName);
+    }
+    return { ok: true };
+  }
+
+  return { ok: false };
+}
+
+async function submitPostFromBot(
+  bot: WriteBot,
+  boardName: string,
+  category: string,
+  title: string,
+  body: string,
+): Promise<{ ok: boolean }> {
+  if (!bot.send || !bot.getLine) {
+    throw new Error("Bot does not expose article write methods");
+  }
+
+  const entered = await ensureNormalBoardView(bot, boardName);
+  if (!entered) {
+    throw new Error(`無法進入看板 ${boardName}`);
+  }
+
+  await bot.send(PTT_KEY_CTRL_P);
+  await sleep(250);
+
+  const options = parsePostCategoryOptions(readVisibleScreen(bot));
+  const selectedIndex = options.findIndex((option) => option === category);
+  if (selectedIndex >= 0) {
+    await bot.send(String(selectedIndex + 1));
+    await sleep(150);
+  } else {
+    await bot.send("\r");
+    await sleep(150);
+  }
+
+  const fullTitle = category ? `[${category}] ${title.trim()}` : title.trim();
+  await bot.send(`${fullTitle}\r`);
+  await sleep(250);
+  await bot.send(`${body.trim()}\r`);
+  await sleep(100);
+  await bot.send(`${PTT_KEY_CTRL_X}s`);
+  await sleep(350);
+
+  return { ok: true };
 }
 
 export async function fetchBoardArticlesFromBotManually(

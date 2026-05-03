@@ -123,6 +123,19 @@ describe("ptt adapter module", () => {
     ).toEqual(["問題", "情報", "心得", "閒聊"]);
   });
 
+  it("parses numbered post categories without using board-title brackets", async () => {
+    const mod = await import("../adapter");
+
+    expect(
+      mod.parsePostCategoryOptions(
+        [
+          "發表文章於【 Test 】 [測試] 每週定期清除本板文章 看板",
+          "種類： 1.測試 2.色彩 3.控制 4.簽名 5.圖 6.動畫 7.互動 8.公告 (1-8或不選)",
+        ].join("\n"),
+      ),
+    ).toEqual(["測試", "色彩", "控制", "簽名", "圖", "動畫", "互動", "公告"]);
+  });
+
   it("restores Re: prefix when ptt-client splits it into the status field", async () => {
     const mod = await import("../adapter");
 

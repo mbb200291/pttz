@@ -273,6 +273,20 @@ describe("PushThread", () => {
     expect(onReply).toHaveBeenCalledWith(expect.objectContaining({ id: "push-0", author: "alice" }));
   });
 
+  it("shows push vote buttons with zero counts even when vote state is missing", () => {
+    render(
+      <PushThread
+        score={0}
+        pushes={[push({ id: "push-0", content: "hello", anchorOrder: 10 })]}
+        onVote={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "推" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "噓" })).toBeDefined();
+    expect(screen.getAllByText("0").length).toBeGreaterThanOrEqual(2);
+  });
+
   it("shows 編輯 button when push.author === currentUser", () => {
     render(
       <PushThread
