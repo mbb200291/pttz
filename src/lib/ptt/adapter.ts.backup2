@@ -194,7 +194,7 @@ export interface PttAdapter {
     category: string,
     title: string,
     body: string,
-  ) => Promise<{ ok: boolean; reason?: string }>;
+  ) => Promise<{ ok: boolean }>;
   editArticle: (body: string, editSummary: string) => Promise<{ ok: boolean }>;
   disconnect: () => Promise<void>;
   isLoggedIn: () => boolean;
@@ -258,25 +258,6 @@ type BoardFetchBot = Partial<
 
 type WriteBot = BoardFetchBot;
 
-type LoginTerminalBot = Pick<BotLike, "send">;
-
-interface LoginTerminalTimeouts {
-  promptMs: number;
-  passwordPromptMs: number;
-  loginMs: number;
-  pollMs: number;
-  postSendMs: number;
-}
-
-interface LoginTerminalOptions {
-  username: string;
-  password: string;
-  kickOthers: boolean;
-  readSnapshot: () => string;
-  markLoggedIn: () => void;
-  timeouts?: Partial<LoginTerminalTimeouts>;
-}
-
 const PTT_KEY_PGDOWN = "\x1b[6~";
 const PTT_KEY_HOME = "\x1b[1~";
 const PTT_KEY_END = "\x1b[4~";
@@ -294,169 +275,6 @@ const PTT_WS_URL = import.meta.env.DEV
     ? `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ptt-ws`
     : "ws://127.0.0.1:4173/ptt-ws"
   : "wss://ws.ptt.cc/bbs";
-
-const DEFAULT_LOGIN_TIMEOUTS: LoginTerminalTimeouts = {
-  promptMs: 5000,
-  passwordPromptMs: 5000,
-  loginMs: 15000,
-  pollMs: 200,
-  postSendMs: 300,
-};
-
-function isLoginPromptScreen(plain: string): boolean {
-  return (
-    plain.includes("請輸入代號") ||
-    plain.includes("請輸入帳號") ||
-    plain.toLowerCase().includes("login:")
-  );
-}
-
-function isPasswordPromptScreen(plain: string): boolean {
-  return (
-    plain.includes("請輸入密碼") ||
-    plain.includes("輸入密碼") ||
-    /輸入.*密碼/u.test(plain) ||
-    plain.toLowerCase().includes("password:")
-  );
-}
-
-function isPressAnyKeyScreen(plain: string): boolean {
-  return (
-    plain.includes("按任意鍵繼續") ||
-    plain.includes("請按任意鍵繼續") ||
-    plain.includes("觀看最新文章")
-  );
-}
-
-function isLoginSuccessScreen(plain: string): boolean {
-  if (isLoginPromptScreen(plain) || isPasswordPromptScreen(plain)) {
-    return false;
-  }
-
-  return (
-    plain.includes("我是") ||
-    plain.includes("主功能表") ||
-    plain.includes("【主功能表】") ||
-    plain.includes("【分類看板】") ||
-    plain.includes("分類看板") ||
-    plain.includes("批踢踢實業坊")
-  );
-}
-
-function detectLoginFailureReasonFromScreen(plain: string): LoginFailureReason {
-  if (
-    plain.includes("請稍後再試") ||
-    plain.includes("請勿頻繁登入以免造成系統過度負荷")
-  ) {
-    return "login_rate_limited";
-  }
-
-  if (
-    (plain.includes("guest") && plain.includes("在站上")) ||
-    plain.includes("目前 guest 在站人數過多")
-  ) {
-    return "guest_overload";
-  }
-
-  if (plain.includes("密碼不對或無此帳號")) {
-    return "invalid_credentials";
-  }
-
-  return "unknown";
-}
-
-export async function loginThroughTerminal(
-  bot: LoginTerminalBot,
-  options: LoginTerminalOptions,
-): Promise<LoginResult> {
-  const timeouts = { ...DEFAULT_LOGIN_TIMEOUTS, ...options.timeouts };
-  const readPlainSnapshot = () => stripAnsi(options.readSnapshot());
-
-  const promptStartedAt = Date.now();
-  while (Date.now() - promptStartedAt < timeouts.promptMs) {
-    const plain = readPlainSnapshot();
-    const failureReason = detectLoginFailureReasonFromScreen(plain);
-    if (failureReason !== "unknown") return { ok: false, reason: failureReason };
-    if (isLoginPromptScreen(plain) || isPasswordPromptScreen(plain)) break;
-    if (isPressAnyKeyScreen(plain)) {
-      await bot.send("\r");
-      await sleep(timeouts.postSendMs);
-      continue;
-    }
-    await sleep(timeouts.pollMs);
-  }
-
-  let plain = readPlainSnapshot();
-  if (!isLoginPromptScreen(plain) && !isPasswordPromptScreen(plain)) {
-    return { ok: false, reason: detectLoginFailureReasonFromScreen(readPlainSnapshot()) };
-  }
-
-  if (isLoginPromptScreen(plain) && !isPasswordPromptScreen(plain)) {
-    await bot.send(`${options.username}\r`);
-    await sleep(timeouts.postSendMs);
-
-    const passwordPromptStartedAt = Date.now();
-    while (Date.now() - passwordPromptStartedAt < timeouts.passwordPromptMs) {
-      plain = readPlainSnapshot();
-      const failureReason = detectLoginFailureReasonFromScreen(plain);
-      if (failureReason !== "unknown") return { ok: false, reason: failureReason };
-      if (isLoginSuccessScreen(plain)) {
-        options.markLoggedIn();
-        return { ok: true };
-      }
-      if (isPasswordPromptScreen(plain)) break;
-      if (isPressAnyKeyScreen(plain)) {
-        await bot.send("\r");
-        await sleep(timeouts.postSendMs);
-        continue;
-      }
-      await sleep(timeouts.pollMs);
-    }
-  }
-
-  if (!isPasswordPromptScreen(readPlainSnapshot())) {
-    return { ok: false, reason: detectLoginFailureReasonFromScreen(readPlainSnapshot()) };
-  }
-
-  await bot.send(`${options.password}\r`);
-  await sleep(timeouts.postSendMs);
-
-  const loginStartedAt = Date.now();
-  while (Date.now() - loginStartedAt < timeouts.loginMs) {
-    const plain = readPlainSnapshot();
-    const failureReason = detectLoginFailureReasonFromScreen(plain);
-    if (failureReason !== "unknown") return { ok: false, reason: failureReason };
-
-    if (plain.includes("您想刪除其他重複登入的連線嗎")) {
-      await bot.send(`${options.kickOthers ? "y" : "n"}\r`);
-      await sleep(timeouts.postSendMs);
-      continue;
-    }
-    if (isPressAnyKeyScreen(plain)) {
-      await bot.send("\r");
-      await sleep(timeouts.postSendMs);
-      continue;
-    }
-    if (plain.includes("您要刪除以上錯誤嘗試的記錄嗎")) {
-      await bot.send("y\r");
-      await sleep(timeouts.postSendMs);
-      continue;
-    }
-    if (plain.toLowerCase().includes("y/n") && !isLoginPromptScreen(plain)) {
-      await bot.send("y\r");
-      await sleep(timeouts.postSendMs);
-      continue;
-    }
-    if (isLoginSuccessScreen(plain)) {
-      options.markLoggedIn();
-      return { ok: true };
-    }
-
-    await sleep(timeouts.pollMs);
-  }
-
-  return { ok: false, reason: detectLoginFailureReasonFromScreen(readPlainSnapshot()) };
-}
 
 class PttClientAdapter implements PttAdapter {
   private bot: BotLike;
@@ -532,13 +350,60 @@ class PttClientAdapter implements PttAdapter {
       await this.waitUntilConnected();
 
       try {
-        return await loginThroughTerminal(this.bot, {
-          username,
-          password,
-          kickOthers,
-          readSnapshot: () => this.readTerminalSnapshot(),
-          markLoggedIn: () => this.markLoggedIn(),
-        });
+        await this.bot.send(`${username}\r${password}\r`);
+
+        const startedAt = Date.now();
+        while (Date.now() - startedAt < 15000) {
+          const plain = stripAnsi(this.readTerminalSnapshot());
+
+          if (
+            plain.includes("抱歉，目前已有太多 guest 在站上") ||
+            (plain.includes("guest") && plain.includes("在站上"))
+          ) {
+            return { ok: false, reason: "guest_overload" };
+          }
+
+          if (
+            plain.includes("請稍後再試") ||
+            plain.includes("請勿頻繁登入以免造成系統過度負荷")
+          ) {
+            return { ok: false, reason: "login_rate_limited" };
+          }
+
+          if (plain.includes("密碼不對或無此帳號")) {
+            return { ok: false, reason: "invalid_credentials" };
+          }
+
+          if (plain.includes("您想刪除其他重複登入的連線嗎")) {
+            await this.bot.send(`${kickOthers ? "y" : "n"}\r`);
+          } else if (
+            plain.includes("按任意鍵繼續") ||
+            plain.includes("請按任意鍵繼續")
+          ) {
+            await this.bot.send("\r");
+          } else if (plain.includes("您要刪除以上錯誤嘗試的記錄嗎")) {
+            await this.bot.send("y\r");
+          } else if (
+            plain.toLowerCase().includes("y/n") &&
+            !plain.includes("請輸入代號")
+          ) {
+            await this.bot.send("y\r");
+          } else if (
+            plain.includes("我是") ||
+            plain.includes("主功能表") ||
+            plain.includes("【主功能表】") ||
+            plain.includes("【分類看板】") ||
+            plain.includes("分類看板") ||
+            plain.includes("批踢踢實業坊")
+          ) {
+            this.markLoggedIn();
+            return { ok: true };
+          }
+
+          await sleep(250);
+        }
+
+        return { ok: false, reason: this.detectLoginFailureReason() };
       } catch {
         return { ok: false, reason: "unknown" };
       }
@@ -751,7 +616,7 @@ class PttClientAdapter implements PttAdapter {
     category: string,
     title: string,
     body: string,
-  ): Promise<{ ok: boolean; reason?: string }> {
+  ): Promise<{ ok: boolean }> {
     return this.runSerial(async () => {
       await this.waitUntilLoggedIn();
       return submitPostFromBot(this.bot, board, category, title, body);
@@ -843,6 +708,30 @@ class PttClientAdapter implements PttAdapter {
     if (!this.bot.state.login) {
       throw new Error("PTT login is required");
     }
+  }
+
+  private detectLoginFailureReason(): LoginFailureReason {
+    const plain = stripAnsi(this.readTerminalSnapshot());
+
+    if (
+      plain.includes("請稍後再試") ||
+      plain.includes("請勿頻繁登入以免造成系統過度負荷")
+    ) {
+      return "login_rate_limited";
+    }
+
+    if (
+      (plain.includes("guest") && plain.includes("在站上")) ||
+      plain.includes("目前 guest 在站人數過多")
+    ) {
+      return "guest_overload";
+    }
+
+    if (plain.includes("密碼不對或無此帳號")) {
+      return "invalid_credentials";
+    }
+
+    return "unknown";
   }
 
   private readTerminalSnapshot(): string {
@@ -950,20 +839,9 @@ export function mapHotBoardRow(
 
 export function parsePostCategoryOptions(screen: string): string[] {
   const plain = stripAnsi(screen).replace(/\r/g, "");
-  const lines = plain.split("\n");
-
-  // 優先找包含分類相關關鍵字的行（排除「標題：」這類標題提示）
-  let promptLines = lines.filter((line) => {
-    // 排除純粹的「標題：」「標題:」這類行
-    if (/^標題[:：]\s*$/.test(line.trim())) return false;
-    return /分類|類別|種類/u.test(line);
-  });
-
-  // 若無關鍵字匹配，改找有序號格式（如 "1. 測試"）的行
-  if (promptLines.length === 0) {
-    promptLines = lines.filter((line) => /^\s*\d{1,2}\s*[\.\)）]\s*/u.test(line));
-  }
-
+  const promptLines = plain
+    .split("\n")
+    .filter((line) => /分類|類別|種類|標題/u.test(line));
   const source = promptLines.length > 0 ? promptLines.join("\n") : plain;
   const seen = new Set<string>();
   const categories: string[] = [];
@@ -985,28 +863,12 @@ export function parsePostCategoryOptions(screen: string): string[] {
   if (categories.length > 0) return categories;
 
   for (const line of promptLines) {
-    // 嘗試匹配"1. 分類"或"1) 分類"這樣的格式（在行首）
-    let tokenMatches = line.matchAll(
-      /^\s*\d{1,2}\s*[\.\)）]\s*([^\s()[\]（）:：，,。；;]{1,12})/gu,
+    const tokenMatches = line.matchAll(
+      /(?:^|[\s(（])(?:\d{1,2}|[A-Za-z])[\s.)、:：）]+([^\s()[\]（）:：，,。；;]{1,12})/gu,
     );
-    let found = false;
     for (const match of tokenMatches) {
       if (match[1] && !/請|按|選擇|取消|標題|分類|類別|種類/u.test(match[1])) {
         add(match[1]);
-        found = true;
-      }
-    }
-
-    // 若行首未找到，嘗試原始正則（更寬鬆的匹配）
-    // 加入冒號 : ：作為前驱分隔符（PTT 格式如 "種類：1.測試" 中第一項前是冒號）
-    if (!found) {
-      tokenMatches = line.matchAll(
-        /(?:^|[\s(（:：])(?:\d{1,2}|[A-Za-z])[\s.)、:：）]+([^\s()[\]（）:：，,。；;]{1,12})/gu,
-      );
-      for (const match of tokenMatches) {
-        if (match[1] && !/請|按|選擇|取消|標題|分類|類別|種類/u.test(match[1])) {
-          add(match[1]);
-        }
       }
     }
   }
@@ -1232,7 +1094,7 @@ async function ensureBoardView(
 
   if (!bot.send) return false;
 
-  await bot.send(`s${boardName}\r`);
+  await bot.send(`s${boardName}\r ${PTT_KEY_HOME}${PTT_KEY_END}`);
   await sleep(120);
 
   return (
@@ -1247,25 +1109,12 @@ async function ensureNormalBoardView(
   boardName: string,
   forceReenter = false,
 ): Promise<boolean> {
-  const debug = import.meta.env.DEV;
-  const log = (msg: string) => {
-    if (debug) console.log(`[ensureBoard] ${msg}`);
-  };
-
   let screen = readVisibleScreen(bot);
-  const plainScreen = stripAnsi(screen).replace(/\r/g, "");
-  const currentBoard = extractCurrentBoardName(screen);
-  
-  log(`Initial screen board: ${currentBoard || "null"}, target: ${boardName}`);
-  if (debug) console.log(`[ensureBoard] Screen sample:\n${plainScreen.split('\n').slice(0, 5).join('\n')}`);
-
   const onBoard =
-    currentBoard?.toLowerCase() === boardName.toLowerCase();
+    extractCurrentBoardName(screen)?.toLowerCase() === boardName.toLowerCase();
 
   if (onBoard) {
-    log(`Already on board ${boardName}`);
     if (!isBoardListScreen(screen)) {
-      log(`Not in board list view, pressing q to exit`);
       // Article view: q exits to board list — poll for it rather than a fixed sleep.
       await bot.send?.("q");
       const afterQ = bot.getLine
@@ -1274,7 +1123,6 @@ async function ensureNormalBoardView(
       screen = afterQ ?? (await sleep(200), readVisibleScreen(bot));
     }
     if (isFilterModeScreen(screen)) {
-      log(`In filter mode, exiting to normal mode`);
       // Title-search filter list: exit to board category level, re-enter normally
       await bot.enterIndex?.();
       await sleep(200);
@@ -1282,48 +1130,29 @@ async function ensureNormalBoardView(
     } else if (isBoardListScreen(screen) && !forceReenter) {
       // Already in normal board list — nothing to do (unless caller forces re-entry
       // to escape push-filter mode, which looks identical to normal mode)
-      log(`Already in normal board list view, returning true`);
       return true;
     }
   }
 
-  log(`Attempting to enter board using bot.enterBoardByName`);
   if (bot.enterBoardByName) {
     try {
       const entered = await bot.enterBoardByName(boardName);
-      if (entered) {
-        log(`bot.enterBoardByName succeeded`);
-        return true;
-      }
-      log(`bot.enterBoardByName returned false`);
-    } catch (e) {
-      log(`bot.enterBoardByName threw: ${e}`);
+      if (entered) return true;
+    } catch {
       // fall back
     }
   }
 
-  if (!bot.send) {
-    log(`bot.send not available, cannot enter board`);
-    return false;
-  }
+  if (!bot.send) return false;
+  await bot.send(`s${boardName}\r ${PTT_KEY_HOME}${PTT_KEY_END}`);
+  await sleep(150);
 
-  log(`Sending manual board entry command: s${boardName}\\r`);
-  await bot.send(`s${boardName}\r`);
-  await sleep(200);  // Increased from 150ms to 200ms
-
-  screen = readVisibleScreen(bot);
-  const newPlainScreen = stripAnsi(screen).replace(/\r/g, "");
-  const newCurrentBoard = extractCurrentBoardName(screen);
-  
-  log(`After entry command, board: ${newCurrentBoard || "null"}`);
-  if (debug) console.log(`[ensureBoard] Screen after entry:\n${newPlainScreen.split('\n').slice(0, 8).join('\n')}`);
-
-  const success =
-    newCurrentBoard?.toLowerCase() === boardName.toLowerCase();
-  
-  log(`Board entry result: ${success}`);
-  return success;
+  return (
+    extractCurrentBoardName(readVisibleScreen(bot))?.toLowerCase() ===
+    boardName.toLowerCase()
+  );
 }
+
 async function fetchPostCategoryOptionsFromBot(
   bot: BoardFetchBot,
   boardName: string,
@@ -1339,35 +1168,16 @@ async function fetchPostCategoryOptionsFromBot(
 
   await bot.send(PTT_KEY_CTRL_P);
 
-  // 輪詢直到出現分類選單或標題輸入區（無分類看板會直接到標題）
   const startedAt = Date.now();
   let options: string[] = [];
-  while (Date.now() - startedAt < 1500) {
-    const screen = readVisibleScreen(bot);
-    options = parsePostCategoryOptions(screen);
+  while (Date.now() - startedAt < 1200) {
+    options = parsePostCategoryOptions(readVisibleScreen(bot));
     if (options.length > 0) break;
-    if (/標題[:：]/u.test(stripAnsi(screen))) break;
-    await sleep(60);
+    await sleep(50);
   }
 
-  // 取消發文編輯
   await bot.send(PTT_KEY_CTRL_C);
-  await sleep(150);
-
-  // 部分情境 Ctrl+C 會問「確定放棄編輯？[Y/n]」，需再回 y
-  const afterCancel = stripAnsi(readVisibleScreen(bot)).replace(/\r/g, "");
-  if (/放棄|取消編輯|是否離開/u.test(afterCancel)) {
-    await bot.send("y\r");
-    await sleep(150);
-  }
-
-  // 嚴格驗證：若已不在目標看板，嘗試恢復
-  const current = extractCurrentBoardName(
-    stripAnsi(readVisibleScreen(bot)).replace(/\r/g, ""),
-  );
-  if (!current || current.toLowerCase() !== boardName.toLowerCase()) {
-    await ensureNormalBoardView(bot, boardName);
-  }
+  await sleep(80);
 
   return options;
 }
@@ -1443,75 +1253,13 @@ async function submitPushFromCurrentArticle(
   return { ok: false };
 }
 
-function sanitizePostBody(body: string): string {
-  return body
-    .replace(/\r\n/g, "\n")
-    .replace(/\r/g, "\n")
-    // 保留 \n (\x0A) 與 \t (\x09)，移除其他 control char
-    .replace(/[\x00-\x08\x0B-\x1F\x7F]/g, "")
-    .slice(0, 50000);
-}
-
-async function waitForPattern(
-  bot: WriteBot,
-  pattern: RegExp,
-  timeoutMs: number,
-  pollMs = 80,
-): Promise<boolean> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const screen = stripAnsi(readVisibleScreen(bot)).replace(/\r/g, "");
-    if (pattern.test(screen)) return true;
-    await sleep(pollMs);
-  }
-  return false;
-}
-
-export function isPostGuidelineScreen(screen: string): boolean {
-  const plain = stripAnsi(screen).replace(/\r/g, "");
-  return /文章\s*發\s*表\s*綱\s*領|四不政策|避免謾罵/u.test(plain);
-}
-
-export function isPostEditorScreen(screen: string): boolean {
-  const plain = stripAnsi(screen).replace(/\r/g, "");
-  if (isPostGuidelineScreen(plain)) return false;
-  return /^~/m.test(plain) || /編輯文章|Ctrl-X|插入/u.test(plain);
-}
-
-export function isPostSuccessScreen(screen: string): boolean {
-  const plain = stripAnsi(screen).replace(/\r/g, "");
-  if (isPostGuidelineScreen(plain)) return false;
-  return /已送出|發表成功|文章已發表/u.test(plain);
-}
-
-export async function waitForPostTitlePrompt(
-  bot: WriteBot,
-  readScreen: () => string,
-  timeoutMs: number,
-  pollMs = 80,
-): Promise<boolean> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const screen = readScreen();
-    const plain = stripAnsi(screen).replace(/\r/g, "");
-    if (/標題[:：]/u.test(plain)) return true;
-    if (isPostGuidelineScreen(plain)) {
-      await bot.send?.("\r");
-      await sleep(pollMs);
-      continue;
-    }
-    await sleep(pollMs);
-  }
-  return /標題[:：]/u.test(stripAnsi(readScreen()).replace(/\r/g, ""));
-}
-
 async function submitPostFromBot(
   bot: WriteBot,
   boardName: string,
   category: string,
   title: string,
   body: string,
-): Promise<{ ok: boolean; reason?: string }> {
+): Promise<{ ok: boolean }> {
   if (!bot.send || !bot.getLine) {
     throw new Error("Bot does not expose article write methods");
   }
@@ -1521,262 +1269,122 @@ async function submitPostFromBot(
     if (debug) console.log(`[submitPost] ${msg}`);
   };
 
-  // Phase 1: 強制歸位到主功能表/看板列表
-  // 策略：根據畫面特徵採取對應動作；偵測到狀態未變化就跳出循環
-  log(`Resetting to main menu / board list`);
-  let lastSignature = "";
-  let stuckCount = 0;
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const screen = readVisibleScreen(bot);
-    const plain = stripAnsi(screen).replace(/\r/g, "");
-
-    // 偵測狀態是否卡住（連續 2 次相同畫面 = 上一個動作沒效果）
-    const signature = plain.slice(0, 200);
-    if (signature === lastSignature) {
-      stuckCount += 1;
-      if (stuckCount >= 2) {
-        log(`State stuck after ${attempt} attempts, breaking loop`);
-        break;
-      }
-    } else {
-      stuckCount = 0;
-    }
-    lastSignature = signature;
-
-    // 已是看板列表或主功能表，停止
-    if (
-      isBoardListScreen(screen) ||
-      /主功能表|【主功能表】|【分類看板】/u.test(plain)
-    ) {
-      log(`Reached clean state at attempt ${attempt}`);
-      break;
-    }
-
-    if (isPostGuidelineScreen(plain)) {
-      log(`Post guideline detected, cancelling compose flow`);
-      await bot.send(PTT_KEY_CTRL_C);
-      await sleep(250);
-      continue;
-    }
-
-    // 確認框 [Y/n] - 按 N 不儲存/不確認
-    if (/\[Y\/n\]/iu.test(plain) || /是否要儲存|是否儲存|存檔|放棄|是否離開|取消編輯/u.test(plain)) {
-      log(`Confirmation prompt detected, sending 'n'`);
-      await bot.send("n\r");
-      await sleep(300);
-      continue;
-    }
-
-    // pmore 編輯器（有 ~ 標記空白行 + 沒有看板/主功能表特徵）
-    // 用 Ctrl+X → n（不儲存）退出，比 Ctrl+C 可靠
-    if (isPostEditorScreen(plain)) {
-      log(`In editor (pmore), sending Ctrl+X to trigger save dialog`);
-      await bot.send(PTT_KEY_CTRL_X);
-      await sleep(400);
-      // 接下來的循環會偵測 [Y/n] 提示並送 n
-      continue;
-    }
-
-    // 「按任意鍵繼續」
-    if (/任意鍵/u.test(plain)) {
-      log(`'Press any key' prompt, sending Enter`);
-      await bot.send("\r");
-      await sleep(200);
-      continue;
-    }
-
-    // 未知狀態：嘗試 Ctrl+C 取消輸入，再按 q 退出
-    log(`Unknown state, trying Ctrl+C + q`);
-    await bot.send(PTT_KEY_CTRL_C);
-    await sleep(150);
-    await bot.send("q");
-    await sleep(200);
-  }
-
-  // Phase 2: 確保進入看板
+  // 第 1 步：確保進入看板
   log(`Entering board: ${boardName}`);
   const entered = await ensureNormalBoardView(bot, boardName);
   if (!entered) {
-    return { ok: false, reason: `無法進入看板 ${boardName}` };
+    throw new Error(`無法進入看板 ${boardName}`);
   }
+  log(`Board entered successfully`);
 
-  // Phase 3: 開啟發文提示，輪詢直到分類選單或標題輸入區出現
+  // 第 2 步：按 Ctrl+P 開始新文章
   log(`Pressing Ctrl+P to compose new article`);
   await bot.send(PTT_KEY_CTRL_P);
-  const composeOpened = await waitForPattern(
-    bot,
-    /分類|類別|種類|標題[:：]/u,
-    1500,
-  );
-  if (!composeOpened) {
-    await bot.send(PTT_KEY_CTRL_C);
-    await sleep(200);
-    return { ok: false, reason: "無法開啟發文視窗（可能無發文權限）" };
-  }
-
-  // Phase 4: 解析並選擇分類
+  await sleep(300);
+  
   let screen = readVisibleScreen(bot);
+  if (debug) console.log(`[submitPost] After Ctrl+P:`, stripAnsi(screen));
+
+  // 第 3 步：選擇分類
+  log(`Parsing category options`);
   const options = parsePostCategoryOptions(screen);
   log(`Available categories: ${options.join(", ")}`);
-
-  const selectedIndex = category
-    ? options.findIndex((option) => option === category)
-    : -1;
-
+  
+  const selectedIndex = options.findIndex((option) => option === category);
   if (selectedIndex >= 0) {
-    log(`Selected category index: ${selectedIndex + 1} (${category})`);
+    log(`Selected category index: ${selectedIndex + 1}`);
     await bot.send(String(selectedIndex + 1));
-  } else if (category && options.length > 0) {
-    // 呼叫端指定了分類但不在清單中
-    await bot.send(PTT_KEY_CTRL_C);
     await sleep(200);
-    return {
-      ok: false,
-      reason: `分類 "${category}" 不在可用清單：[${options.join(", ")}]`,
-    };
   } else {
-    // 沒指定分類或無分類選單 → 按 Enter
-    log(`No category selection, sending Enter`);
+    log(`Category not found, sending Enter (default)`);
     await bot.send("\r");
-  }
-
-  // 等待標題輸入區出現
-  const titlePromptShown = await waitForPostTitlePrompt(
-    bot,
-    () => readVisibleScreen(bot),
-    2000,
-  );
-  if (!titlePromptShown) {
-    const probe = stripAnsi(readVisibleScreen(bot)).replace(/\r/g, "");
-    await bot.send(PTT_KEY_CTRL_C);
     await sleep(200);
-    return {
-      ok: false,
-      reason: `分類選擇失敗（可能此看板強制分類）：${probe.slice(0, 80)}`,
-    };
   }
+  
+  screen = readVisibleScreen(bot);
+  if (debug) console.log(`[submitPost] After category:`, stripAnsi(screen));
 
-  // Phase 5: 輸入標題（純本體；PTT 已預填 [分類] 前綴）
-  const cleanTitle = title
-    .trim()
-    .replace(/[\x00-\x1F\x7F]/g, "")
-    .slice(0, 60);
-  if (!cleanTitle) {
-    await bot.send(PTT_KEY_CTRL_C);
-    await sleep(200);
-    return { ok: false, reason: "標題不可為空" };
-  }
-  log(`Entering title body: ${cleanTitle}`);
-  await bot.send(`${cleanTitle}\r`);
+  // 第 4 步：輸入標題
+  const fullTitle = category ? `[${category}] ${title.trim()}` : title.trim();
+  log(`Entering title: ${fullTitle}`);
+  await bot.send(`${fullTitle}\r`);
+  await sleep(300);
+  
+  screen = readVisibleScreen(bot);
+  if (debug) console.log(`[submitPost] After title:`, stripAnsi(screen));
 
-  // 等待進入內文編輯器（pmore 風格畫面）
-  const editorReady = await waitForPattern(
-    bot,
-    /離開|Ctrl-X|插入|文章編輯|請按.+鍵/u,
-    2500,
-  );
-  if (!editorReady) {
-    log(`Warning: editor screen not detected within timeout, proceeding anyway`);
-  }
+  // 第 5 步：輸入內容
+  log(`Entering body (${body.length} chars)`);
+  await bot.send(`${body.trim()}\r`);
+  await sleep(300);
+  
+  screen = readVisibleScreen(bot);
+  if (debug) console.log(`[submitPost] After body:`, stripAnsi(screen));
 
-  // Phase 6: 逐行送內文（避免長文截斷）
-  const cleanBody = sanitizePostBody(body);
-  const lines = cleanBody.split("\n");
-  log(`Entering body: ${lines.length} lines, ${cleanBody.length} chars total`);
-  for (const line of lines) {
-    await bot.send(`${line}\r`);
-    await sleep(30);
-  }
-  await sleep(150);
-
-  // Phase 7: Ctrl+X 進入儲存對話流程
+  // 第 6 步：按 Ctrl+X 保存，進入確認菜單
   log(`Pressing Ctrl+X to save`);
   await bot.send(PTT_KEY_CTRL_X);
+  await sleep(350);
+  
+  screen = readVisibleScreen(bot);
+  if (debug) console.log(`[submitPost] After Ctrl+X:`, stripAnsi(screen));
 
-  // Phase 8: 多階段儲存對話（儲存確認 → 分類規定 → 簽名檔）
-  const dialogTimeout = 8000;
-  const dialogStart = Date.now();
-  let answeredSave = false;
-  let answeredRule = false;
-  let answeredSignature = false;
-  let postSuccessful = false;
-
-  while (Date.now() - dialogStart < dialogTimeout) {
-    const plain = stripAnsi(readVisibleScreen(bot)).replace(/\r/g, "");
-
-    // 已抵達成功畫面
-    if (isPostSuccessScreen(plain)) {
-      log(`Post successful detected`);
-      postSuccessful = true;
+  // 第 7 步：等待確認提示並發送 'y'
+  const confirmStartTime = Date.now();
+  const confirmTimeout = 5000; // 5 秒超時
+  
+  while (Date.now() - confirmStartTime < confirmTimeout) {
+    screen = readVisibleScreen(bot);
+    const plainScreen = stripAnsi(screen).replace(/\r/g, "");
+    
+    if (/是否確定送出|確定送出|送出文章|[Yy]\/[Nn]/u.test(plainScreen)) {
+      log(`Confirmation prompt detected, sending 'y'`);
+      if (debug) console.log(`[submitPost] Confirmation screen:`, plainScreen);
+      await bot.send("y\r");
+      await sleep(500);
       break;
     }
-
-    // 簽名檔提示（要在儲存確認後才會出現）
-    if (!answeredSignature && /簽名檔|signature/iu.test(plain)) {
-      log(`Signature prompt detected, sending '0' to skip`);
-      await bot.send("0\r");
-      answeredSignature = true;
-      await sleep(150);
-      continue;
-    }
-
-    // 分類規定確認（部分看板才有）
-    if (
-      !answeredRule &&
-      answeredSave &&
-      /符合分類|分類規定/u.test(plain)
-    ) {
-      log(`Category-rule prompt detected, sending 'y'`);
-      await bot.send("y\r");
-      answeredRule = true;
-      await sleep(150);
-      continue;
-    }
-
-    // 儲存確認（[Y/n]）— 要排除已被分類規定 / 簽名檔覆蓋的情況
-    if (
-      !answeredSave &&
-      /要儲存|是否儲存|存檔|\[Y\/n\]/iu.test(plain) &&
-      !/簽名檔|分類規定/u.test(plain)
-    ) {
-      log(`Save prompt detected, sending 'y'`);
-      await bot.send("y\r");
-      answeredSave = true;
-      await sleep(150);
-      continue;
-    }
-
-    await sleep(80);
+    
+    await sleep(100);
   }
 
-  // Phase 9: 等待「按任意鍵繼續」並按 Enter 返回看板
+  // 第 8 步：等待成功提示或返回看板
+  const successStartTime = Date.now();
+  const successTimeout = 3000; // 3 秒超時
+  let postSuccessful = false;
+  
+  while (Date.now() - successStartTime < successTimeout) {
+    screen = readVisibleScreen(bot);
+    const plainScreen = stripAnsi(screen).replace(/\r/g, "");
+    
+    // 檢查成功訊息或返回看板列表
+    if (
+      /已送出|文章已送出|成功|按任意鍵|請按任意鍵/u.test(plainScreen) ||
+      isBoardListScreen(screen)
+    ) {
+      log(`Post successful detected`);
+      if (debug) console.log(`[submitPost] Success screen:`, plainScreen);
+      postSuccessful = true;
+      
+      // 如果出現「請按任意鍵」提示，按 Enter 返回
+      if (/按任意鍵|請按任意鍵/u.test(plainScreen)) {
+        await bot.send("\r");
+        await sleep(300);
+      }
+      break;
+    }
+    
+    await sleep(100);
+  }
+
   if (!postSuccessful) {
-    postSuccessful = await waitForPattern(
-      bot,
-      /已送出|發表成功|按任意鍵|請按任意鍵/u,
-      3000,
-    );
+    screen = readVisibleScreen(bot);
+    log(`Warning: Could not confirm success, final screen: ${stripAnsi(screen)}`);
   }
 
-  if (postSuccessful) {
-    const finalPlain = stripAnsi(readVisibleScreen(bot)).replace(/\r/g, "");
-    if (/按任意鍵|請按任意鍵/u.test(finalPlain)) {
-      await bot.send("\r");
-      await sleep(300);
-    }
-    // Phase 10: 確保返回正常看板
-    await ensureNormalBoardView(bot, boardName);
-    return { ok: true };
-  }
-
-  const finalScreen = stripAnsi(readVisibleScreen(bot)).replace(/\r/g, "");
-  log(`Warning: post not confirmed. answeredSave=${answeredSave} answeredSignature=${answeredSignature}`);
-  if (debug) console.log(`[submitPost] Final screen:`, finalScreen);
-  return {
-    ok: false,
-    reason: `發文未確認成功（畫面：${finalScreen.slice(0, 100)}）`,
-  };
+  return { ok: postSuccessful };
 }
+
 export async function fetchBoardArticlesFromBotManually(
   bot: BoardFetchBot,
   boardName: string,

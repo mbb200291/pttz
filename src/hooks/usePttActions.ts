@@ -109,7 +109,7 @@ export interface PttActionsResult {
     category: string,
     title: string,
     body: string,
-  ): Promise<{ ok: boolean }>;
+  ): Promise<{ ok: boolean; reason?: string }>;
   editArticle(
     body: string,
     editSummary: string,

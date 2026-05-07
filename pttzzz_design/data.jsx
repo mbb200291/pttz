@@ -17,6 +17,13 @@ const POPULAR_BOARDS = [
 ];
 
 const RECENT_BOARDS = ["Gossiping", "Tech_Job", "Stock", "C_Chat"];
+const FAVORITE_BOARDS = [
+  { name: "Tech_Job",  zh: "科技業",  online:  2104, today: 1532, note: "求職薪水情報" },
+  { name: "Stock",     zh: "股票板",  online:  4218, today: 3104, note: "盤中追蹤" },
+  { name: "C_Chat",    zh: "西恰",    online:  6512, today: 5102, note: "ACG 日常" },
+  { name: "movie",     zh: "電影板",  online:   982, today:  421, note: "週末選片" },
+  { name: "Lifeismoney", zh: "省錢板", online: 1421, today:  892, note: "優惠通報" },
+];
 
 // Article list — board: Gossiping
 const ARTICLES = [
@@ -134,4 +141,4 @@ const PUSHES = [
 
 const CURRENT_USER = "pttzzz";
 
-window.PTTZZZ_DATA = { POPULAR_BOARDS, RECENT_BOARDS, ARTICLES, PINNED, ARTICLE, PUSHES, CURRENT_USER };
+window.PTTZZZ_DATA = { POPULAR_BOARDS, RECENT_BOARDS, FAVORITE_BOARDS, ARTICLES, PINNED, ARTICLE, PUSHES, CURRENT_USER };

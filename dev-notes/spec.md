@@ -35,6 +35,7 @@
    - 類似pattern
      - `回x樓`
      - `回xf` / `回xF`
+     - `推x樓 xxxxxx`  # 此處的xxxx視為回文部分
      - `TO xf`
      - `reply to xf`
      - `>>xf`

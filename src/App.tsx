@@ -359,7 +359,14 @@ export default function App() {
             void actions
               .postArticle(payload.board, payload.category, payload.title, payload.body)
               .then((result) => {
-                if (result.ok) setView({ type: "board", name: view.board });
+                if (result.ok) {
+                  setView({ type: "board", name: view.board });
+                } else {
+                  alert(`發文失敗：${result.reason ?? "未知錯誤"}`);
+                }
+              })
+              .catch((err) => {
+                alert(`發文失敗：${err instanceof Error ? err.message : String(err)}`);
               });
           }}
         />

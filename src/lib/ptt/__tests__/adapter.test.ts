@@ -41,6 +41,156 @@ describe("ptt adapter module", () => {
     expect(mod.pttClientModuleLoaded).toBe(true);
   });
 
+  it("waits for the password prompt before sending the password during login", async () => {
+    const mod = await import("../adapter");
+    const sent: string[] = [];
+    let screen = "請輸入代號，或以 guest 參觀";
+
+    const result = await mod.loginThroughTerminal(
+      {
+        send: async (message: string) => {
+          sent.push(message);
+          if (message === "user\r") {
+            screen = "請輸入密碼:";
+          } else if (message === "password\r") {
+            screen = "【主功能表】 批踢踢實業坊";
+          }
+          return true;
+        },
+      },
+      {
+        username: "user",
+        password: "password",
+        kickOthers: false,
+        readSnapshot: () => screen,
+        markLoggedIn: () => undefined,
+        timeouts: {
+          promptMs: 20,
+          passwordPromptMs: 20,
+          loginMs: 20,
+          pollMs: 1,
+          postSendMs: 0,
+        },
+      },
+    );
+
+    expect(result).toEqual({ ok: true });
+    expect(sent).toEqual(["user\r", "password\r"]);
+  });
+
+  it("recognizes PTT's full password prompt wording during login", async () => {
+    const mod = await import("../adapter");
+    const sent: string[] = [];
+    let screen = "請輸入代號，或以 guest 參觀";
+
+    const result = await mod.loginThroughTerminal(
+      {
+        send: async (message: string) => {
+          sent.push(message);
+          if (message === "user\r") {
+            screen = "請輸入您的密碼:";
+          } else if (message === "password\r") {
+            screen = "【主功能表】 批踢踢實業坊";
+          }
+          return true;
+        },
+      },
+      {
+        username: "user",
+        password: "password",
+        kickOthers: false,
+        readSnapshot: () => screen,
+        markLoggedIn: () => undefined,
+        timeouts: {
+          promptMs: 20,
+          passwordPromptMs: 20,
+          loginMs: 20,
+          pollMs: 1,
+          postSendMs: 0,
+        },
+      },
+    );
+
+    expect(result).toEqual({ ok: true });
+    expect(sent).toEqual(["user\r", "password\r"]);
+  });
+
+  it("can recover when a retry starts while PTT is still waiting for password", async () => {
+    const mod = await import("../adapter");
+    const sent: string[] = [];
+    let screen = "請輸入您的密碼:";
+
+    const result = await mod.loginThroughTerminal(
+      {
+        send: async (message: string) => {
+          sent.push(message);
+          if (message === "password\r") {
+            screen = "【主功能表】 批踢踢實業坊";
+          }
+          return true;
+        },
+      },
+      {
+        username: "user",
+        password: "password",
+        kickOthers: false,
+        readSnapshot: () => screen,
+        markLoggedIn: () => undefined,
+        timeouts: {
+          promptMs: 20,
+          passwordPromptMs: 20,
+          loginMs: 20,
+          pollMs: 1,
+          postSendMs: 0,
+        },
+      },
+    );
+
+    expect(result).toEqual({ ok: true });
+    expect(sent).toEqual(["password\r"]);
+  });
+
+  it("does not treat the login banner as a successful login before password auth", async () => {
+    const mod = await import("../adapter");
+    const sent: string[] = [];
+    let screen = "批踢踢實業坊\n請輸入代號，或以 guest 參觀";
+    let markedLoggedIn = false;
+
+    const result = await mod.loginThroughTerminal(
+      {
+        send: async (message: string) => {
+          sent.push(message);
+          if (message === "user\r") {
+            screen = "批踢踢實業坊\n請輸入密碼:";
+          } else if (message === "password\r") {
+            screen = "【主功能表】 批踢踢實業坊";
+          }
+          return true;
+        },
+      },
+      {
+        username: "user",
+        password: "password",
+        kickOthers: false,
+        readSnapshot: () => screen,
+        markLoggedIn: () => {
+          markedLoggedIn = true;
+        },
+        timeouts: {
+          promptMs: 20,
+          passwordPromptMs: 20,
+          loginMs: 20,
+          pollMs: 1,
+          postSendMs: 0,
+        },
+      },
+    );
+
+    expect(result).toEqual({ ok: true });
+    expect(markedLoggedIn).toBe(true);
+    expect(sent).toEqual(["user\r", "password\r"]);
+  });
+
   it("serializes bot operations to avoid overlapping terminal commands", async () => {
     const mod = await import("../adapter");
     const runSerial = mod.createSerialTaskRunner();
@@ -134,6 +284,42 @@ describe("ptt adapter module", () => {
         ].join("\n"),
       ),
     ).toEqual(["測試", "色彩", "控制", "簽名", "圖", "動畫", "互動", "公告"]);
+  });
+
+  it("recognizes PTT post guidelines without treating them as the editor or a success screen", async () => {
+    const mod = await import("../adapter");
+    const guidelineScreen = [
+      "                ▕         ● 文 章 發 表 綱 領 ●",
+      "                ▕     【 四不政策 】",
+      "                ▕▕ (1) 避免謾罵、攻擊、灌水等文章。   ▏",
+    ].join("\n");
+
+    expect(mod.isPostGuidelineScreen(guidelineScreen)).toBe(true);
+    expect(mod.isPostEditorScreen(guidelineScreen)).toBe(false);
+    expect(mod.isPostSuccessScreen(guidelineScreen)).toBe(false);
+  });
+
+  it("advances through PTT post guidelines while waiting for the title prompt", async () => {
+    const mod = await import("../adapter");
+    const sent: string[] = [];
+    let screen = "● 文 章 發 表 綱 領 ●\n【 四不政策 】";
+
+    const shown = await mod.waitForPostTitlePrompt(
+      {
+        send: async (message: string) => {
+          sent.push(message);
+          screen = "標題: [測試] ";
+          return true;
+        },
+        getLine: () => ({ str: screen }),
+      },
+      () => screen,
+      20,
+      1,
+    );
+
+    expect(shown).toBe(true);
+    expect(sent).toEqual(["\r"]);
   });
 
   it("restores Re: prefix when ptt-client splits it into the status field", async () => {

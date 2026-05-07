@@ -132,10 +132,98 @@ const pttState = usePttSocketStore((s) => s.pttState);
 
 ---
 
+---
+
+## Bug #7：看板進入命令格式錯誤導致無法發文和讀取文章
+
+**現象：**
+- 發文時：「無法進入看板 test」
+- 讀取文章列表時：同樣出現「無法進入看板」錯誤
+- 影響範圍廣，所有需要進入看板的操作都失敗
+
+**根因：**
+`ensureNormalBoardView()` 函式（行 1147-1155）的看板進入命令格式完全錯誤：
+
+```typescript
+// ❌ 錯誤的原始代碼
+await bot.send(`s${boardName}\r ${PTT_KEY_HOME}${PTT_KEY_END}`);
+```
+
+問題：
+1. `${PTT_KEY_HOME}${PTT_KEY_END}` 不應該作為字面字符串拼接
+2. 終端控制碼被當作普通文字發送，導致命令格式錯誤
+3. PTT 無法識別看板名，導致進入失敗
+
+**修正方案：**
+
+改正命令格式 + 增加重試邏輯：
+
+```typescript
+// ✅ 修正後的代碼
+await bot.send(`s${boardName}\r`);  // 正確的命令格式
+await sleep(400);  // 增加延遲到 400ms
+
+// 驗證看板進入 - 重試多次
+for (let attempt = 0; attempt < 3; attempt++) {
+  const currentBoard = extractCurrentBoardName(readVisibleScreen(bot));
+  if (currentBoard?.toLowerCase() === boardName.toLowerCase()) {
+    return true;
+  }
+  if (attempt < 2) {
+    await sleep(200);  // 重試間隔
+  }
+}
+
+return false;
+```
+
+**改進重點：**
+
+1. **移除錯誤的終端控制碼** - 直接發送 `s${boardName}\r`
+2. **增加延遲** - 從 150ms → 400ms，給看板加載充足時間
+3. **添加重試邏輯** - 重試 3 次，每次間隔 200ms，提高成功率
+4. **明確驗證** - 檢查 `extractCurrentBoardName` 是否返回正確的看板名
+
+**第二波改進（看板進入仍失敗）：**
+
+發現即使修正命令格式，仍有進入失敗的情況。進行了更激進的改進：
+
+```typescript
+// 增加：
+// 1. 初始延遲從 400ms → 600ms
+// 2. 重試次數從 3 次 → 5 次  
+// 3. 重試策略：先按 q 返回，再重新進入
+// 4. 遞增延遲：300ms + (attempt * 100ms)
+
+for (let attempt = 0; attempt < 5; attempt++) {
+  const screen = readVisibleScreen(bot);
+  const currentBoard = extractCurrentBoardName(screen);
+  if (currentBoard?.toLowerCase() === boardName.toLowerCase()) {
+    return true;
+  }
+  if (attempt < 4) {
+    if (attempt > 0) {
+      // 重試時先按 q 返回，再進入
+      await bot.send?.("q");
+      await sleep(300);
+      await bot.send(`s${boardName}\\r`);
+    }
+    await sleep(300 + attempt * 100);  // 遞增延遲
+  }
+}
+```
+
+**驗證：**
+
+- ✅ `npm run build` 通過
+- ✅ `npm run test` 通過：19 files / 221 tests
+- ✅ 更激進的重試邏輯應能大幅提高看板進入成功率
+
 ## 版本歷史
 
 | 日期       | 版本   | 重點                                                           |
 | ---------- | ------ | -------------------------------------------------------------- |
+| 2026-05-03 | v0.7.2 | 修復看板進入命令格式，新增重試邏輯                             |
 | 2026-05-03 | v0.7.1 | 修復連續載入 bug，優化 Zustand selector 使用                   |
 | 2026-04-29 | v0.7.0 | Goal 7 初始 push：VotePair、usePttActions、Composer 等 UI 元件 |
 
@@ -310,3 +398,76 @@ return { ok: true };
 
 - `npm run build` 通過
 - `npm run test` 通過：19 files / 221 tests
+
+---
+
+## Bug #5：純投票推文被顯示為獨立回文
+
+**現象：**
+根據 spec.md 規則，純投票（「推X樓」、「噓X樓」）應視為投票操作，不應在 UI 中顯示為獨立回文。但目前實作會將這些純投票作為獨立推文出現在回文列表中。
+
+**根因：**
+`groupPushes()` 正確地將純投票識別為獨立群組（避免與其他回文聚合），但這些純投票群組被合併成 `AggregatedPush` 後，仍被納入最終回傳的 `threadPushes` 陣列，導致 UI 展示。
+
+**修正：**
+在 `aggregatePushes()` 的最後一步（Step 5）添加過濾邏輯：
+
+```typescript
+// Step 5：過濾掉純投票推文（不顯示為獨立回文）
+const displayedPushes = threadPushes.filter((push) => {
+  // 編輯記錄類型保留
+  if (push.type === "edit") return true;
+  // 檢查是否為純投票推文
+  return !isPureVote(push.content);
+});
+
+return {
+  pushes: displayedPushes,
+  articleNotes: articleEditRecords,
+};
+```
+
+**實作細節：**
+
+1. 純投票的投票記錄仍在 Step 2b 時被完整記錄在目標推文的 `pushVoters` / `booVoters` 陣列中
+2. 過濾只影響最終顯示的 `displayedPushes`，不影響投票計數邏輯
+3. 編輯記錄（type="edit"）始終保留，不被過濾
+
+**規則釐清：**
+
+根據 `dev-notes/reply-handling-rule.md`：
+
+- 「推X樓」← 純投票，不顯示
+- 「推X樓 其他內容」← 帶內容的回覆，顯示為嵌套回文
+- 「回X樓：...」← 嵌套回覆，顯示
+- 「回X樓：推X樓 其他」← 嵌套回覆，顯示（不視為純投票）
+
+**驗證：**
+
+- ✅ `npm run test -- pushAggregator.test.ts` 通過：43 tests
+- ✅ `npm run test` 通過：19 files / 221 tests
+- ✅ 投票記錄邏輯保持不變（Step 2b 在過濾前執行）
+
+---
+
+## Bug #6：樓層號以 0 開始而非 1
+
+**現象：**
+UI 顯示的推文樓層號從 0 開始，但 PTT 樓層應以 1 開始。
+
+**根因：**
+`aggregatePushes()` 的 Step 3 中，初始化 `let floor = 0;` 導致第一層非嵌套推文的樓層號為 0, 1, 2, ...
+
+**修正：**
+將初始化改為 `let floor = 1;`，使樓層號正確從 1 開始。
+
+```typescript
+// Step 3：偵測嵌套 → 建立 floorNumber 映射（第一層樓號）
+const topLevel: AggregatedPush[] = [];
+let floor = 1;  // ← 改為 1
+```
+
+**驗證：**
+
+- ✅ `npm run test` 通過：19 files / 221 tests
+- ✅ `npm run build` 通過

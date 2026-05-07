@@ -437,6 +437,352 @@ npm run test    // 全部通過
 
 ---
 
+## 發文流程 Pseudo Code
+
+### 高層次流程（UI → adapter）
+
+```
+使用者流程：
+  1. 點擊「發新文章」
+     → App navigate to "compose" view
+     → ComposeScreen(mode="post") 渲染
+     
+  2. 選擇看板 + 分類（分類透過 getPostCategoryOptions 取得）
+     → 先發 request: adapter.getPostCategoryOptions(boardName)
+     → categories 回傳後，UI 展示 chips
+     
+  3. 輸入標題、內容、上傳圖片（Imgur）
+     → 草稿自動存到 localStorage (600ms debounce)
+     
+  4. 點發布
+     → onSubmit(payload)
+     → usePttActions.postArticle(board, category, title, body)
+     → 實際調用 adapter.postArticle(board, category, title, body)
+```
+
+### 設計原則（基於初版審視結論）
+
+下列原則是審視 v1 pseudo code 後的修訂結果，所有後續實作都應遵守：
+
+1. **分類選擇後不可重複加 `[分類]` 前綴** — PTT 在使用者按下分類編號後，會自動把 `[分類]` 加上空白預填到標題輸入區。我們只送純標題本體 `${title}`。
+2. **儲存流程是多階段的** — 按 Ctrl+X 之後依序會碰到：
+   - 「您是否要儲存檔案 [Y/n]?」
+   - （部分情境）「文章是否符合分類規定 [Y/n]?」
+   - 「請選擇簽名檔 (0-9, x.不選)」
+   - 「文章發表成功！按任意鍵繼續」
+   每一階段都需要主動偵測並回應，不能省略。
+3. **以輪詢 (polling) 取代固定 sleep** — PTT WebSocket RTT 變動大，固定 `sleep(N)` 在高延遲下會錯過提示、低延遲下浪費時間。每次按鍵後都應 `while (!匹配預期狀態 && !timeout) await sleep(80)`。
+4. **內文要 sanitize control char 並逐行送出** — 移除 `\x00-\x1F`（除了 `\n`/`\t`），長文逐行送 `${line}\r`，每行間隔 20–50ms 讓編輯器跟上。
+5. **嚴格驗證畫面狀態** — 用 `extractCurrentBoardName()` / `isBoardListScreen()` 驗證返回看板，不要僅 `screen.includes(boardName)`。
+
+---
+
+### adapter.postArticle 完整流程（v2 修訂版）
+
+```typescript
+async postArticle(board, category, title, body) {
+  // Phase 1: 準備階段
+  檢查登入狀態：
+    if (!isLoggedIn()) throw Error("未登入")
+
+  序列化任務：
+    return runSerial(async () => {
+      // Phase 2: 確保乾淨進入看板
+      // 若目前在編輯頁，先 Ctrl+C 退出（最多嘗試 2 次，每次後驗證）
+      若處於編輯狀態：
+        await bot.send("\x03")  // Ctrl+C
+        await waitFor(/任意鍵/, 1000) || await sleep(300)
+        await bot.send("\r")  // 清掉「按任意鍵」
+
+      success = ensureNormalBoardView(bot, board)
+      if (!success) throw Error(`無法進入看板 ${board}`)
+
+      // Phase 3: 開啟發文提示
+      await bot.send("\x10")  // Ctrl+P
+      // 輪詢直到出現分類提示（含「分類」「類別」「種類」字樣或方括號選項）
+      ok = await waitForScreen(/分類|類別|種類|\[[^\]]{1,12}\]/u, 1500)
+      if (!ok) {
+        await bot.send("\x03")  // 退出
+        throw Error("無法開啟發文視窗（可能無發文權限）")
+      }
+
+      // Phase 4: 解析並選擇分類
+      screen = readVisibleScreen(bot)
+      options = parsePostCategoryOptions(screen)
+      selectedIndex = options.findIndex(o => o === category)
+
+      if (selectedIndex >= 0) {
+        await bot.send(String(selectedIndex + 1))
+        // 等待標題輸入區出現（會看到 "標題：" 字樣 + 預填 [分類] 前綴）
+        await waitForScreen(/標題[:：]/u, 1500)
+      } else if (category) {
+        // 分類不在列表但呼叫端指定了分類 → 視為錯誤
+        await bot.send("\x03")
+        throw Error(`分類 "${category}" 不在可用清單：[${options.join(", ")}]`)
+      } else {
+        // 沒指定分類，且看板不強制 → 按 Enter 跳過
+        // ⚠️ 部分看板（如 Gossiping）強制分類，按 Enter 會跳錯誤訊息
+        await bot.send("\r")
+        const ok = await waitForScreen(/標題[:：]/u, 1500)
+        if (!ok) {
+          screen = readVisibleScreen(bot)
+          await bot.send("\x03")
+          throw Error("此看板強制要求分類，請傳入有效 category")
+        }
+      }
+
+      // Phase 5: 輸入標題（純本體，不加 [分類]）
+      // 重要：選分類後 PTT 已預填 [分類] 前綴；只送 title 本體即可
+      cleanTitle = title.trim().replace(/[\x00-\x1F]/g, "").slice(0, 60)
+      if (!cleanTitle) {
+        await bot.send("\x03")
+        throw Error("標題不可為空")
+      }
+      await bot.send(`${cleanTitle}\r`)
+      // 標題完成後會進入內文編輯器（pmore 風格畫面）
+      await waitForScreen(/離開\s*\[Ctrl-X\]|插入模式|文章編輯/u, 2500)
+
+      // Phase 6: 逐行輸入內容（避免長文截斷）
+      lines = sanitizeBody(body).split("\n")
+      for (const line of lines) {
+        await bot.send(`${line}\r`)
+        await sleep(30)  // 讓編輯器處理插入
+      }
+
+      // Phase 7: Ctrl+X 進入儲存對話流程
+      await bot.send("\x18")  // Ctrl+X
+
+      // Phase 8: 多階段儲存對話
+      saveOk = await handleSaveDialog(bot)
+      if (!saveOk) return { ok: false, reason: "save-dialog" }
+
+      // Phase 9: 處理簽名檔提示
+      sigOk = await handleSignaturePrompt(bot)  // 送 "0" 不附簽名檔
+      if (!sigOk) return { ok: false, reason: "signature" }
+
+      // Phase 10: 等待「按任意鍵繼續」並返回看板
+      await waitForScreen(/任意鍵|已送出|發表成功/u, 5000)
+      await bot.send("\r")
+      await sleep(300)
+
+      // Phase 11: 驗證已回到看板列表
+      ok = await ensureNormalBoardView(bot, board)
+      return { ok }
+    })
+}
+
+// 多階段儲存對話處理
+async function handleSaveDialog(bot) {
+  const start = Date.now()
+  let answeredSave = false
+
+  while (Date.now() - start < 5000) {
+    screen = stripAnsi(readVisibleScreen(bot))
+
+    // 第一道：儲存確認（[Y/n]）
+    if (!answeredSave && /要儲存|是否儲存|存檔|\[Y\/n\]/iu.test(screen)) {
+      await bot.send("y\r")
+      answeredSave = true
+      await sleep(120)
+      continue
+    }
+
+    // 第二道：分類規定確認（部分看板才有）
+    if (/符合分類|分類規定/u.test(screen)) {
+      await bot.send("y\r")
+      await sleep(120)
+      continue
+    }
+
+    // 第三道：簽名檔提示出現 → 把控制權交給下一階段
+    if (/簽名檔|signature/iu.test(screen)) {
+      return true
+    }
+
+    // 第四道：直接看到「已送出 / 任意鍵」也算成功
+    if (/已送出|發表成功|任意鍵/u.test(screen)) {
+      return true
+    }
+
+    await sleep(80)
+  }
+  return false
+}
+
+// 簽名檔處理
+async function handleSignaturePrompt(bot) {
+  screen = stripAnsi(readVisibleScreen(bot))
+  if (!/簽名檔|signature/iu.test(screen)) {
+    return true  // 沒提示就直接通過
+  }
+
+  // 0 = 不要簽名檔；x = 不選（兩者都會跳過）
+  await bot.send("0\r")
+  return await waitForScreen(/已送出|發表成功|任意鍵/u, 3000)
+}
+
+// 內容 sanitize：移除 control char、normalize line endings、限長
+function sanitizeBody(body) {
+  return body
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/[\x00-\x09\x0B-\x1F\x7F]/g, "")  // 保留 \n, \t
+    .slice(0, 50000)  // 上限保險
+}
+```
+
+### getPostCategoryOptions 完整流程（v2 修訂版）
+
+```typescript
+async getPostCategoryOptions(boardName) {
+  return runSerial(async () => {
+    // Phase 1: 準備
+    if (!isLoggedIn()) throw Error("未登入")
+
+    // Phase 2: 進入看板
+    success = await ensureNormalBoardView(bot, boardName)
+    if (!success) throw Error(`無法進入看板 ${boardName}`)
+
+    // Phase 3: 打開發文提示
+    await bot.send("\x10")  // Ctrl+P
+
+    // Phase 4: 輪詢直到分類提示出現或 timeout
+    options = []
+    const start = Date.now()
+    while (Date.now() - start < 1500) {
+      screen = readVisibleScreen(bot)
+      options = parsePostCategoryOptions(screen)
+      if (options.length > 0) break
+      // 也可能是「無分類」直接到標題輸入
+      if (/標題[:：]/u.test(stripAnsi(screen))) break
+      await sleep(80)
+    }
+
+    // Phase 5: 取消發文（Ctrl+C）
+    await bot.send("\x03")
+    await sleep(150)
+
+    // 部分情境 Ctrl+C 會問「確定放棄？[Y/n]」，需再回 y
+    screen = stripAnsi(readVisibleScreen(bot))
+    if (/放棄|取消編輯|是否離開/u.test(screen)) {
+      await bot.send("y\r")
+      await sleep(200)
+    }
+
+    // Phase 6: 嚴格驗證已返回看板
+    // 用 extractCurrentBoardName 比對，避免 boardName 在頁尾誤判
+    current = extractCurrentBoardName(stripAnsi(readVisibleScreen(bot)))
+    if (current?.toLowerCase() !== boardName.toLowerCase()) {
+      // 嘗試重新進入看板恢復狀態
+      await ensureNormalBoardView(bot, boardName)
+    }
+
+    return options
+  })
+}
+```
+
+### 畫面解析：parsePostCategoryOptions 邏輯
+
+```typescript
+function parsePostCategoryOptions(screen) {
+  const lines = screen.split('\n')
+  
+  // 尋找分類行（包含「分類」「類別」「種類」「標題」）
+  const categoryKeyword = /分類|類別|種類|標題/u
+  const categoryLine = lines.find(line => categoryKeyword.test(line))
+  
+  if (!categoryLine) return []
+  
+  // 從該行抽取所有 [內容] 格式的選項
+  // 正則：\[([^\]\n]{1,12})\]
+  const matches = categoryLine.match(/\[([^\]\n]{1,12})\]/gu) || []
+  
+  return matches
+    .map(m => m.slice(1, -1))  // 移除括號
+    .filter(opt => !isCommonKeyword(opt))  // 過濾「無」「其他」等
+}
+
+function isCommonKeyword(text) {
+  const common = ["無", "其他", "不分類", "待分類"]
+  return common.includes(text)
+}
+```
+
+### 錯誤處理與重試策略
+
+```typescript
+// submitPostFromBot 失敗時的診斷邏輯
+
+async submitPostFromBot(...) {
+  try {
+    // 主流程
+    ...
+  } catch (err) {
+    // 診斷失敗原因
+    const screen = readVisibleScreen(bot)
+    
+    if (screen.includes("無此看板") || screen.includes("此看板不存在")) {
+      throw new Error(`看板不存在：${board}`)
+    }
+    
+    if (screen.includes("您無權進入")) {
+      throw new Error(`無權進入看板：${board}`)
+    }
+    
+    if (screen.includes("無法儲存")) {
+      throw new Error("文章儲存失敗，可能內容過長或格式錯誤")
+    }
+    
+    if (screen.includes("標題過短") || screen.includes("標題過長")) {
+      throw new Error("標題長度不符")
+    }
+    
+    // 通用錯誤
+    throw new Error(`發文失敗（屏幕內容：${screen.substring(0, 100)}）`)
+  }
+}
+```
+
+### UI → 後端的呼叫順序（時序圖）
+
+```text
+使用者選擇看板 "Gossiping"
+  │
+  ├─ ComposeScreen onMount
+  │  └─ useEffect: 呼叫 getPostCategoryOptions("Gossiping")
+  │     │
+  │     └─ adapter.getPostCategoryOptions("Gossiping")
+  │        │
+  │        ├─ ensureNormalBoardView(bot, "Gossiping")
+  │        ├─ send(Ctrl+P) → read screen → parsePostCategoryOptions
+  │        ├─ send(Ctrl+C) 取消
+  │        └─ return ["問卦", "新聞", "心得", "閒聊"]
+  │
+  └─ UI 更新：分類 chips = 上述清單
+     │
+     使用者輸入標題、內容
+     │
+     使用者點「發布」
+     │
+     └─ onSubmit({ board, category, title, body })
+        │
+        └─ usePttActions.postArticle(...)
+           │
+           └─ adapter.postArticle(board, category, title, body)
+              │
+              ├─ ensureNormalBoardView → send(Ctrl+P)
+              ├─ 讀屏幕 → 選分類 → 輸標題 → 輸內容
+              ├─ send(Ctrl+X) → 確認 "是否確定送出"
+              ├─ send("y\r") → 確認按任意鍵
+              ├─ send("\r")
+              └─ ensureNormalBoardView 返回看板
+                 │
+                 return { ok: true }
+```
+
+---
+
 ### Refining C：目前驗證指令
 
 本輪 refining 完成後需維持：

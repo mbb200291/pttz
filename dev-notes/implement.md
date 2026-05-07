@@ -19,6 +19,47 @@ PTTzzz 是一個純前端的 PTT 閱讀器。
 2. 由 client 端直接連接 PTT websocket
 3. 針對推文/回文做前端聚合，建立較容易閱讀的討論串視圖
 
+## 技術棧
+
+### 前端框架
+
+- **React 18** — UI 層元件系統
+- **Zustand 5** — 輕量狀態管理（`usePttSocket` store + `subscribeWithSelector`）
+- **Vite** — 構建工具與開發伺服器
+- **TypeScript** — 靜態型別檢查
+- **Tailwind CSS 4** — 樣式與 UI 工具庫
+
+### PTT 連線層
+
+- **ppt-client 0.9.0** — 底層 WebSocket 終端模擬器（npm 包）
+  - 提供 `Bot` 物件封裝 PTT 連線
+  - `send()` 送終端命令、`getLine()` 讀終端輸出
+  - 本身不提供發文 / 推文 API，需手工模擬終端操作
+
+### 開發工具
+
+- **Vitest** — 單元測試與元件測試
+- **@testing-library/react** — React 元件測試工具
+- **ESLint** — 程式碼檢查
+
+### 層次結構
+
+```text
+ppt-client WebSocket 底層
+    ↓
+src/lib/ppt/adapter.ts       ← 高階 API 層：login、listArticles、getArticle、postArticle ...
+    ↓
+src/hooks/usePttSocket.ts    ← Zustand store + 事件橋接
+    ↓
+src/hooks/useBoard.ts        ← 看板資料（分頁、搜尋、篩選）
+src/hooks/useArticle.ts      ← 文章資料（本體、推文聚合、編輯紀錄）
+src/hooks/usePttActions.ts   ← 寫入操作（發文、推文、回文）
+    ↓
+src/components/              ← React UI 元件（LoginModal、ArticleList、Article ...）
+```
+
+---
+
 ## 目前架構
 
 ### 1. PTT 存取層

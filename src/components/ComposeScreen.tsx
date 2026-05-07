@@ -610,10 +610,11 @@ export function ComposeScreen({
                   gap: 4,
                   padding: "6px 10px",
                   background: "var(--surface)",
-                  border: `1px solid ${bodyFocused ? "var(--accent-border)" : "var(--border)"}`,
+                  borderTop: `1px solid ${bodyFocused ? "var(--accent-border)" : "var(--border)"}`,
+                  borderRight: `1px solid ${bodyFocused ? "var(--accent-border)" : "var(--border)"}`,
+                  borderLeft: `1px solid ${bodyFocused ? "var(--accent-border)" : "var(--border)"}`,
                   borderTopLeftRadius: 12,
                   borderTopRightRadius: 12,
-                  borderBottom: 0,
                 }}
               >
                 <button
@@ -778,8 +779,9 @@ export function ComposeScreen({
                   width: "100%",
                   padding: "18px 20px",
                   background: "var(--surface)",
-                  border: `1px solid ${bodyFocused ? "var(--accent-border)" : "var(--border)"}`,
-                  borderTop: 0,
+                  borderRight: `1px solid ${bodyFocused ? "var(--accent-border)" : "var(--border)"}`,
+                  borderBottom: `1px solid ${bodyFocused ? "var(--accent-border)" : "var(--border)"}`,
+                  borderLeft: `1px solid ${bodyFocused ? "var(--accent-border)" : "var(--border)"}`,
                   borderBottomLeftRadius: 12,
                   borderBottomRightRadius: 12,
                   color: "var(--text)",

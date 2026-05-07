@@ -132,6 +132,12 @@ function groupPushes(rawPushes: AnchoredRawPush[]): PushGroup[] {
   for (let i = 0; i < rawPushes.length; i++) {
     const cur = rawPushes[i];
 
+    // 優先檢測純投票：純投票推文獨立成群，不聚合
+    if (isPureVote(cur.content)) {
+      groups.push({ pushes: [cur], anchorOrder: cur.anchorOffset ?? i });
+      continue;
+    }
+
     if (groups.length === 0) {
       groups.push({ pushes: [cur], anchorOrder: cur.anchorOffset ?? i });
       continue;
@@ -154,6 +160,12 @@ function groupPushes(rawPushes: AnchoredRawPush[]): PushGroup[] {
 
     const sameGroup = groups[sameAuthorGroupIdx];
     const lastPush = sameGroup.pushes[sameGroup.pushes.length - 1];
+
+    // 若上一推是純投票，不聚合
+    if (isPureVote(lastPush.content)) {
+      groups.push({ pushes: [cur], anchorOrder: cur.anchorOffset ?? i });
+      continue;
+    }
 
     // 連續同作者：上一則全域推文就是同作者。
     const prevGlobal = rawPushes[i - 1];
@@ -283,6 +295,33 @@ export function detectVote(content: string): VoteInfo | null {
   return null;
 }
 
+/**
+ * 檢測是否為「純投票」（只有投票操作，後面無其他內容）
+ * 例如：「推0樓」是純投票，「推0樓 我同意」不是純投票
+ */
+function isPureVote(content: string): boolean {
+  const vote = detectVote(content);
+  if (!vote) return false;
+
+  // 找到投票 pattern 的結尾
+  const patterns = [
+    /^推\s*([0-9零〇一二兩三四五六七八九十百千萬]+)\s*樓/iu,
+    /^([0-9零〇一二兩三四五六七八九十百千萬]+)\s*樓推一個/iu,
+    /^噓\s*([0-9零〇一二兩三四五六七八九十百千萬]+)\s*樓/iu,
+  ];
+
+  for (const pattern of patterns) {
+    const m = content.match(pattern);
+    if (!m) continue;
+
+    // 投票後面是否還有其他內容（非空白）
+    const afterVote = content.slice(m[0].length).trim();
+    return afterVote.length === 0;
+  }
+
+  return false;
+}
+
 function extractAuthorId(author: string): string {
   return author.trim().split(/\s+/u)[0] ?? "";
 }
@@ -368,7 +407,7 @@ export function aggregatePushes(
   // Step 3：偵測嵌套 → 建立 floorNumber 映射（第一層樓號）
   // 先跑一遍，把不是嵌套的推文給 floorNumber
   const topLevel: AggregatedPush[] = [];
-  let floor = 0;
+  let floor = 1;
   for (const p of firstLayer) {
     const reply = detectReply(p.content);
     if (reply) {
@@ -445,8 +484,17 @@ export function aggregatePushes(
     }
   }
 
+  // Step 5：過濾掉純投票推文（不顯示為獨立回文）
+  // 純投票已在 Step 2b 時對投票目標記錄過投票者，此處只移除顯示
+  const displayedPushes = threadPushes.filter((push) => {
+    // 編輯記錄類型保留
+    if (push.type === "edit") return true;
+    // 檢查是否為純投票推文
+    return !isPureVote(push.content);
+  });
+
   return {
-    pushes: threadPushes,
+    pushes: displayedPushes,
     articleNotes: articleEditRecords,
   };
 }
