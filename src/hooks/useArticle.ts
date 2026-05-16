@@ -245,11 +245,12 @@ export function useArticle(
         if (!isCurrentRequest()) return;
         setError(err instanceof Error ? err.message : "無法載入文章");
       } finally {
-        if (!isCurrentRequest()) return;
-        if (mode === "initial" && !isStaleRevalidate) {
-          setLoading(false);
-        } else {
-          setReloading(false);
+        if (isCurrentRequest()) {
+          if (mode === "initial" && !isStaleRevalidate) {
+            setLoading(false);
+          } else {
+            setReloading(false);
+          }
         }
       }
     },

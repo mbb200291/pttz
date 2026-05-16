@@ -229,7 +229,7 @@ export function useFavoriteBoards(enabled = true) {
         if (!cancelled) setBoards(nextBoards);
       })
       .catch(() => {
-        if (!cancelled) setBoards(null);
+        if (!cancelled) setBoards([]);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

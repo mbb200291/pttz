@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  useFavoriteBoards,
   useHotBoards,
   useRecentBoards,
   usePttSocket,
@@ -67,6 +68,8 @@ const MOCK_ARTICLES: ArticleSummary[] = [
     title: "(已被刪除) [公告] 板規修訂草案",
   },
 ];
+
+const MOCK_FAVORITE_BOARDS = ["Tech_Job", "Stock", "C_Chat", "movie", "Lifeismoney"];
 
 const MOCK_PUSHES: AggregatedPush[] = [
   {
@@ -190,6 +193,8 @@ export default function App() {
   const isPreview = previewMode !== null;
   const { wsStatus, pttState, client } = usePttSocket();
   const { boards: hotBoards, loading: hotBoardsLoading } = useHotBoards(!isPreview);
+  const { boards: favoriteBoards, loading: favoriteBoardsLoading } =
+    useFavoriteBoards(!isPreview);
   const { recent: recentBoards, addRecent } = useRecentBoards(5);
   const actions = usePttActions();
   const currentUser = usePttSocketStore((s) => s.credentials?.username);
@@ -217,6 +222,9 @@ export default function App() {
       })),
     [hotBoards],
   );
+  const effectiveFavoriteBoards = isPreview
+    ? MOCK_FAVORITE_BOARDS
+    : favoriteBoards ?? (effectivePttState === "ready" ? [] : undefined);
   const composeBoard = view.type === "compose" ? view.board : null;
 
   useEffect(() => {
@@ -288,7 +296,10 @@ export default function App() {
           wsStatus={effectiveWsStatus}
           popularBoards={isPreview ? undefined : popularBoards}
           popularBoardsLoading={!isPreview && hotBoardsLoading}
+          favoriteBoards={effectiveFavoriteBoards}
+          favoriteBoardsLoading={!isPreview && favoriteBoardsLoading}
           recentBoards={isPreview ? undefined : recentBoards}
+          currentUser={currentUser}
           onEnter={(board) => {
             addRecent(board);
             setView({ type: "board", name: board });

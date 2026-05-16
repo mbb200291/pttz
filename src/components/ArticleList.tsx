@@ -7,7 +7,13 @@
  *   - AID 跳轉（#XXXXXXXX）
  */
 
-import type { KeyboardEvent, MouseEvent } from "react";
+import type {
+  KeyboardEvent,
+  MouseEvent,
+  PointerEvent,
+  TouchEvent,
+  WheelEvent,
+} from "react";
 import { useRef, useEffect, useMemo, useState } from "react";
 import { useBoard } from "../hooks/useBoard";
 import type { BoardFilter } from "../lib/ptt/viewState";
@@ -51,8 +57,10 @@ interface ArticleListProps {
   onCompose?: (categoryOptions: string[]) => void;
   mockArticles?: ArticleSummary[];
   mockLoading?: boolean;
+  mockRefreshing?: boolean;
   mockError?: string | null;
   onMockLoadMore?: () => void;
+  onMockRefresh?: () => void;
 }
 
 function getPushBadgeStyle(count: string): {
@@ -334,6 +342,19 @@ const PUSH_QUICK_FILTERS = [
 ] as const;
 
 export const ARTICLE_LIST_PRELOAD_ROOT_MARGIN = "0px 0px 720px 0px";
+const PULL_REFRESH_THRESHOLD_PX = 72;
+const PULL_REFRESH_MAX_DISTANCE_PX = 96;
+const PULL_REFRESH_REFRESHING_GAP_PX = 48;
+
+function isAtTopBoundary(): boolean {
+  return typeof window === "undefined" || window.scrollY <= 0;
+}
+
+function getRubberBandDistance(rawDistance: number): number {
+  if (rawDistance <= 0) return 0;
+  const normalized = 1 - Math.exp(-rawDistance / PULL_REFRESH_MAX_DISTANCE_PX);
+  return Math.round(PULL_REFRESH_MAX_DISTANCE_PX * normalized);
+}
 
 export function ArticleList({
   boardName,
@@ -345,8 +366,10 @@ export function ArticleList({
   onCompose,
   mockArticles,
   mockLoading,
+  mockRefreshing,
   mockError,
   onMockLoadMore,
+  onMockRefresh,
 }: ArticleListProps) {
   const [searchInput, setSearchInput] = useState(
     initialFilter?.type === "search" ? initialFilter.keyword : "",
@@ -358,16 +381,20 @@ export function ArticleList({
   const {
     articles: liveArticles,
     loading: liveLoading,
+    refreshing: liveRefreshing,
     error: liveError,
     hasMore: liveHasMore,
     loadMore,
+    refresh,
   } = useBoard(boardName, activeFilter);
 
   const articles = mockArticles ?? liveArticles;
   const loading = mockLoading ?? liveLoading;
+  const refreshing = mockRefreshing ?? liveRefreshing;
   const error = mockError ?? liveError;
   const hasMore = mockArticles ? true : liveHasMore;
   const handleLoadMore = onMockLoadMore ?? loadMore;
+  const handleRefresh = onMockRefresh ?? refresh;
   const observedCategoryOptions = useMemo(
     () => extractCategoryOptionsFromArticles(articles),
     [articles],
@@ -385,6 +412,13 @@ export function ArticleList({
     author: string;
   } | null>(null);
   const restoredListKeyRef = useRef<string | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
+  const pointerStartYRef = useRef<number | null>(null);
+  const pullRawDistanceRef = useRef(0);
+  const wheelPullDistanceRef = useRef(0);
+  const wheelSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [pullDistance, setPullDistance] = useState(0);
+  const [pullReady, setPullReady] = useState(false);
   const restoreListKey = `${boardName}:${activeFilter?.type ?? "all"}:${
     activeFilter?.type === "search"
       ? activeFilter.keyword
@@ -483,6 +517,14 @@ export function ArticleList({
     };
   }, [articles, boardName]);
 
+  useEffect(() => {
+    return () => {
+      if (wheelSettleTimerRef.current) {
+        clearTimeout(wheelSettleTimerRef.current);
+      }
+    };
+  }, []);
+
   function handleSearchCommit() {
     const val = searchInput.trim();
     if (!val) {
@@ -514,6 +556,107 @@ export function ArticleList({
     setSearchInput("");
   }
 
+  function handleTouchStart(event: TouchEvent<HTMLDivElement>) {
+    if (!isAtTopBoundary()) return;
+    touchStartYRef.current = event.touches[0]?.clientY ?? null;
+    pullRawDistanceRef.current = 0;
+    setPullReady(false);
+  }
+
+  function handleTouchMove(event: TouchEvent<HTMLDivElement>) {
+    const startY = touchStartYRef.current;
+    if (startY === null) return;
+    if (!isAtTopBoundary()) return;
+
+    const currentY = event.touches[0]?.clientY ?? startY;
+    const rawDistance = Math.max(0, currentY - startY);
+    pullRawDistanceRef.current = rawDistance;
+    setPullReady(rawDistance >= PULL_REFRESH_THRESHOLD_PX);
+    setPullDistance(getRubberBandDistance(rawDistance));
+  }
+
+  function handleTouchEnd() {
+    if (pullRawDistanceRef.current >= PULL_REFRESH_THRESHOLD_PX && !loading && !refreshing) {
+      handleRefresh();
+    }
+    touchStartYRef.current = null;
+    pullRawDistanceRef.current = 0;
+    setPullReady(false);
+    setPullDistance(0);
+  }
+
+  function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (event.pointerType === "touch" || event.button !== 0 || !isAtTopBoundary()) {
+      return;
+    }
+    pointerStartYRef.current = event.clientY;
+    pullRawDistanceRef.current = 0;
+    setPullReady(false);
+  }
+
+  function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
+    const startY = pointerStartYRef.current;
+    if (startY === null) return;
+    if (!isAtTopBoundary()) return;
+
+    const rawDistance = Math.max(0, event.clientY - startY);
+    pullRawDistanceRef.current = rawDistance;
+    setPullReady(rawDistance >= PULL_REFRESH_THRESHOLD_PX);
+    setPullDistance(getRubberBandDistance(rawDistance));
+  }
+
+  function handlePointerEnd() {
+    if (pullRawDistanceRef.current >= PULL_REFRESH_THRESHOLD_PX && !loading && !refreshing) {
+      handleRefresh();
+    }
+    pointerStartYRef.current = null;
+    pullRawDistanceRef.current = 0;
+    setPullReady(false);
+    setPullDistance(0);
+  }
+
+  function handleWheel(event: WheelEvent<HTMLDivElement>) {
+    if (!isAtTopBoundary() || loading || refreshing) {
+      wheelPullDistanceRef.current = 0;
+      if (wheelSettleTimerRef.current) clearTimeout(wheelSettleTimerRef.current);
+      setPullReady(false);
+      setPullDistance(0);
+      return;
+    }
+
+    if (event.deltaY >= 0) {
+      wheelPullDistanceRef.current = 0;
+      if (wheelSettleTimerRef.current) clearTimeout(wheelSettleTimerRef.current);
+      setPullReady(false);
+      setPullDistance(0);
+      return;
+    }
+
+    wheelPullDistanceRef.current = Math.min(
+      PULL_REFRESH_MAX_DISTANCE_PX,
+      wheelPullDistanceRef.current + Math.abs(event.deltaY),
+    );
+    setPullReady(wheelPullDistanceRef.current >= PULL_REFRESH_THRESHOLD_PX);
+    setPullDistance(getRubberBandDistance(wheelPullDistanceRef.current));
+
+    if (wheelPullDistanceRef.current >= PULL_REFRESH_THRESHOLD_PX) {
+      wheelPullDistanceRef.current = 0;
+      if (wheelSettleTimerRef.current) clearTimeout(wheelSettleTimerRef.current);
+      setPullReady(false);
+      setPullDistance(0);
+      handleRefresh();
+      return;
+    }
+
+    if (wheelSettleTimerRef.current) clearTimeout(wheelSettleTimerRef.current);
+    wheelSettleTimerRef.current = setTimeout(() => {
+      wheelPullDistanceRef.current = 0;
+      wheelSettleTimerRef.current = null;
+      setPullReady(false);
+      setPullDistance(0);
+    }, 160);
+  }
+
   const filterLabel =
     activeFilter?.type === "search"
       ? `系列《${activeFilter.keyword}》`
@@ -523,6 +666,15 @@ export function ArticleList({
 
   return (
     <div
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerEnd}
+      onPointerCancel={handlePointerEnd}
+      onWheel={handleWheel}
       style={{
         minHeight: "100vh",
         background: "var(--bg)",
@@ -621,6 +773,28 @@ export function ArticleList({
               清除
             </button>
           )}
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={loading || refreshing}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              background: refreshing ? "var(--accent-soft)" : "transparent",
+              border: "1px solid var(--border)",
+              borderRadius: 8,
+              color: refreshing ? "var(--accent-ink)" : "var(--text-muted)",
+              cursor: loading || refreshing ? "not-allowed" : "pointer",
+              fontFamily: "var(--font)",
+              fontSize: 12,
+              fontWeight: 700,
+              padding: "6px 10px",
+              opacity: loading ? 0.55 : 1,
+            }}
+          >
+            {refreshing ? "重新載入中" : "重新整理"}
+          </button>
           {onCompose && (
             <button
               type="button"
@@ -756,6 +930,31 @@ export function ArticleList({
         </div>
       </div>
 
+      <div
+        aria-hidden="true"
+        data-testid="pull-refresh-indicator"
+        style={{
+          height: refreshing
+            ? Math.max(PULL_REFRESH_REFRESHING_GAP_PX, pullDistance)
+            : pullDistance,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "var(--text-dim)",
+          fontSize: 12,
+          fontFamily: "var(--font)",
+          transition: touchStartYRef.current === null ? "height 140ms ease" : "none",
+        }}
+      >
+        {refreshing
+          ? "重新載入中"
+          : pullDistance > 0
+            ? pullReady
+              ? "放開重新整理"
+              : "下拉重新整理"
+            : ""}
+      </div>
+
       <div style={{ maxWidth: 1100, margin: "0 auto", paddingTop: 20 }}>
         {articles.map((a) => (
           <ArticleRow
@@ -793,6 +992,8 @@ export function ArticleList({
       >
         {loading ? (
           <span style={{ color: "var(--text-dim)", fontSize: 13 }}>載入中…</span>
+        ) : refreshing ? (
+          <span style={{ color: "var(--text-dim)", fontSize: 13 }}>重新載入中…</span>
         ) : error && articles.length === 0 ? (
           <span style={{ color: "oklch(0.86 0.16 75)", fontSize: 13 }}>{error}</span>
         ) : articles.length === 0 ? (

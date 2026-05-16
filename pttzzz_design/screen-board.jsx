@@ -6,8 +6,8 @@ const { pushCountStyle } = window.PTTZZZ_THEME;
 const PUSH_FILTERS = [
   { label: "全部", value: null },
   { label: "≥10", value: 10 },
+  { label: "≥20", value: 20 },
   { label: "≥30", value: 30 },
-  { label: "≥100", value: 100 },
   { label: "爆", value: "boom" },
 ];
 
@@ -198,9 +198,101 @@ function Board({ t, boardName, density, showAuthor, onBack, onOpen, onCompose })
           </div>
         </div>
 
+        {/* Active filter chips */}
+        {(search.trim() || filter != null) && (
+          <div style={{
+            display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8,
+            padding: "0 20px 14px",
+          }}>
+            <span style={{
+              fontSize: 11, fontWeight: 700, letterSpacing: "0.06em",
+              color: t.textDim, textTransform: "uppercase", marginRight: 2,
+            }}>
+              篩選中
+            </span>
+            {search.trim() && (
+              <span style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                padding: "4px 4px 4px 10px", borderRadius: 999,
+                background: t.accentSoft, color: t.accentInk,
+                border: `1px solid ${t.accentBorder}`,
+                fontSize: 12, fontWeight: 600, letterSpacing: "-0.005em",
+              }}>
+                <Icon.Search s={11} />
+                <span>關鍵字 <span style={{ fontFamily: t.fontMono }}>「{search.trim()}」</span></span>
+                <button onClick={() => setSearch("")} title="清除關鍵字"
+                  style={{
+                    background: "transparent", border: 0, color: "inherit",
+                    cursor: "pointer", padding: "3px 5px", borderRadius: 999,
+                    display: "inline-flex", alignItems: "center", opacity: 0.7,
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.opacity = 1}
+                  onMouseLeave={e => e.currentTarget.style.opacity = 0.7}>
+                  <Icon.Close s={11} />
+                </button>
+              </span>
+            )}
+            {filter != null && (
+              <span style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                padding: "4px 4px 4px 10px", borderRadius: 999,
+                background: t.accentSoft, color: t.accentInk,
+                border: `1px solid ${t.accentBorder}`,
+                fontSize: 12, fontWeight: 600,
+              }}>
+                <span>推噓 {filter === "boom" ? "爆文" : `≥${filter}`}</span>
+                <button onClick={() => setFilter(null)} title="清除推噓篩選"
+                  style={{
+                    background: "transparent", border: 0, color: "inherit",
+                    cursor: "pointer", padding: "3px 5px", borderRadius: 999,
+                    display: "inline-flex", alignItems: "center", opacity: 0.7,
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.opacity = 1}
+                  onMouseLeave={e => e.currentTarget.style.opacity = 0.7}>
+                  <Icon.Close s={11} />
+                </button>
+              </span>
+            )}
+            <span style={{
+              fontSize: 12, color: t.textDim, fontFamily: t.fontMono, marginLeft: 4,
+            }}>
+              · {filtered.length} 篇符合
+            </span>
+            <span style={{ flex: 1 }} />
+            <button onClick={() => { setSearch(""); setFilter(null); }}
+              style={{
+                background: "transparent", border: 0, color: t.textMuted,
+                fontSize: 12, fontWeight: 600, cursor: "pointer",
+                padding: "4px 8px", borderRadius: 6, fontFamily: t.font,
+              }}
+              onMouseEnter={e => e.currentTarget.style.color = t.text}
+              onMouseLeave={e => e.currentTarget.style.color = t.textMuted}>
+              清除全部
+            </button>
+          </div>
+        )}
+
         {/* Articles */}
         <div style={{ borderTop: `1px solid ${t.border}` }}>
-          {filtered.map(a => (
+          {filtered.length === 0 ? (
+            <div style={{
+              padding: "60px 20px", textAlign: "center",
+              color: t.textMuted, fontSize: 14,
+            }}>
+              <div style={{ fontSize: 32, marginBottom: 12, opacity: 0.5 }}>∅</div>
+              <div style={{ fontWeight: 600, marginBottom: 6, color: t.text }}>沒有符合的文章</div>
+              <div style={{ fontSize: 12.5, color: t.textDim }}>
+                試著調整關鍵字或推噓條件
+              </div>
+              <button onClick={() => { setSearch(""); setFilter(null); }}
+                style={{
+                  marginTop: 18, padding: "6px 14px", borderRadius: 8,
+                  background: t.surface, border: `1px solid ${t.border}`,
+                  color: t.text, fontSize: 12.5, fontWeight: 600,
+                  cursor: "pointer", fontFamily: t.font,
+                }}>清除全部篩選</button>
+            </div>
+          ) : filtered.map(a => (
             <ArticleRow key={a.idx} a={a} t={t} density={density} showAuthor={showAuthor} onOpen={onOpen} />
           ))}
         </div>

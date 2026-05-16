@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 afterEach(() => {
+  vi.useRealTimers();
   cleanup();
 });
 
@@ -221,5 +222,250 @@ describe("ArticleList", () => {
     await userEvent.click(screen.getByRole("button", { name: /發文/ }));
 
     expect(onCompose).toHaveBeenCalledWith(["標的", "請益"]);
+  });
+
+  it("calls refresh when the refresh button is clicked", async () => {
+    const { ArticleList } = await import("../ArticleList");
+    const onMockRefresh = vi.fn();
+
+    render(
+      <ArticleList
+        boardName="Gossiping"
+        onBack={() => {}}
+        onSelectArticle={() => {}}
+        onSelectArticleByAid={() => {}}
+        mockArticles={[]}
+        mockLoading={false}
+        mockRefreshing={false}
+        onMockRefresh={onMockRefresh}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "重新整理" }));
+
+    expect(onMockRefresh).toHaveBeenCalledOnce();
+  });
+
+  it("calls refresh when dragging down from the top boundary", async () => {
+    const { ArticleList } = await import("../ArticleList");
+    const onMockRefresh = vi.fn();
+
+    Object.defineProperty(window, "scrollY", {
+      configurable: true,
+      value: 0,
+    });
+
+    const { container } = render(
+      <ArticleList
+        boardName="Gossiping"
+        onBack={() => {}}
+        onSelectArticle={() => {}}
+        onSelectArticleByAid={() => {}}
+        mockArticles={[]}
+        mockLoading={false}
+        mockRefreshing={false}
+        onMockRefresh={onMockRefresh}
+      />,
+    );
+
+    const shell = container.firstElementChild as HTMLElement;
+    fireEvent.pointerDown(shell, {
+      pointerId: 1,
+      pointerType: "mouse",
+      clientY: 12,
+      button: 0,
+    });
+    fireEvent.pointerMove(shell, {
+      pointerId: 1,
+      pointerType: "mouse",
+      clientY: 96,
+      button: 0,
+    });
+
+    expect(screen.getByText("放開重新整理")).toBeTruthy();
+
+    fireEvent.pointerUp(shell, {
+      pointerId: 1,
+      pointerType: "mouse",
+      clientY: 96,
+      button: 0,
+    });
+
+    expect(onMockRefresh).toHaveBeenCalledOnce();
+    expect(screen.queryByText("放開重新整理")).toBeNull();
+  });
+
+  it("uses rubber-band resistance while revealing the pull refresh gap", async () => {
+    const { ArticleList } = await import("../ArticleList");
+
+    Object.defineProperty(window, "scrollY", {
+      configurable: true,
+      value: 0,
+    });
+
+    const { container } = render(
+      <ArticleList
+        boardName="Gossiping"
+        onBack={() => {}}
+        onSelectArticle={() => {}}
+        onSelectArticleByAid={() => {}}
+        mockArticles={[]}
+        mockLoading={false}
+        mockRefreshing={false}
+        onMockRefresh={() => {}}
+      />,
+    );
+
+    const shell = container.firstElementChild as HTMLElement;
+    fireEvent.pointerDown(shell, {
+      pointerId: 1,
+      pointerType: "mouse",
+      clientY: 10,
+      button: 0,
+    });
+    fireEvent.pointerMove(shell, {
+      pointerId: 1,
+      pointerType: "mouse",
+      clientY: 130,
+      button: 0,
+    });
+
+    const indicator = screen.getByTestId("pull-refresh-indicator");
+    expect(screen.getByText("放開重新整理")).toBeTruthy();
+    expect(parseFloat(indicator.style.height)).toBeGreaterThan(0);
+    expect(parseFloat(indicator.style.height)).toBeLessThan(96);
+  });
+
+  it("shows a reserved pull refresh gap while refreshing", async () => {
+    const { ArticleList } = await import("../ArticleList");
+
+    render(
+      <ArticleList
+        boardName="Gossiping"
+        onBack={() => {}}
+        onSelectArticle={() => {}}
+        onSelectArticleByAid={() => {}}
+        mockArticles={[]}
+        mockLoading={false}
+        mockRefreshing
+        onMockRefresh={() => {}}
+      />,
+    );
+
+    const indicator = screen.getByTestId("pull-refresh-indicator");
+    expect(screen.getAllByText("重新載入中").length).toBeGreaterThan(0);
+    expect(parseFloat(indicator.style.height)).toBeGreaterThan(0);
+  });
+
+  it("calls refresh when a trackpad overscrolls upward at the top boundary", async () => {
+    const { ArticleList } = await import("../ArticleList");
+    const onMockRefresh = vi.fn();
+
+    Object.defineProperty(window, "scrollY", {
+      configurable: true,
+      value: 0,
+    });
+
+    const { container } = render(
+      <ArticleList
+        boardName="Gossiping"
+        onBack={() => {}}
+        onSelectArticle={() => {}}
+        onSelectArticleByAid={() => {}}
+        mockArticles={[]}
+        mockLoading={false}
+        mockRefreshing={false}
+        onMockRefresh={onMockRefresh}
+      />,
+    );
+
+    const shell = container.firstElementChild as HTMLElement;
+    fireEvent.wheel(shell, { deltaY: -28 });
+    fireEvent.wheel(shell, { deltaY: -28 });
+    fireEvent.wheel(shell, { deltaY: -28 });
+
+    expect(onMockRefresh).toHaveBeenCalledOnce();
+  });
+
+  it("snaps the pull refresh gap closed after a partial trackpad overscroll", async () => {
+    vi.useFakeTimers();
+    const { ArticleList } = await import("../ArticleList");
+
+    Object.defineProperty(window, "scrollY", {
+      configurable: true,
+      value: 0,
+    });
+
+    const { container } = render(
+      <ArticleList
+        boardName="Gossiping"
+        onBack={() => {}}
+        onSelectArticle={() => {}}
+        onSelectArticleByAid={() => {}}
+        mockArticles={[]}
+        mockLoading={false}
+        mockRefreshing={false}
+        onMockRefresh={() => {}}
+      />,
+    );
+
+    const shell = container.firstElementChild as HTMLElement;
+    fireEvent.wheel(shell, { deltaY: -24 });
+
+    const indicator = screen.getByTestId("pull-refresh-indicator");
+    expect(parseFloat(indicator.style.height)).toBeGreaterThan(0);
+
+    act(() => {
+      vi.advanceTimersByTime(220);
+    });
+
+    expect(parseFloat(indicator.style.height)).toBe(0);
+    expect(screen.queryByText("下拉重新整理")).toBeNull();
+  });
+
+  it("does not pull refresh when the list is scrolled away from the top", async () => {
+    const { ArticleList } = await import("../ArticleList");
+    const onMockRefresh = vi.fn();
+
+    Object.defineProperty(window, "scrollY", {
+      configurable: true,
+      value: 120,
+    });
+
+    const { container } = render(
+      <ArticleList
+        boardName="Gossiping"
+        onBack={() => {}}
+        onSelectArticle={() => {}}
+        onSelectArticleByAid={() => {}}
+        mockArticles={[]}
+        mockLoading={false}
+        mockRefreshing={false}
+        onMockRefresh={onMockRefresh}
+      />,
+    );
+
+    const shell = container.firstElementChild as HTMLElement;
+    fireEvent.pointerDown(shell, {
+      pointerId: 1,
+      pointerType: "mouse",
+      clientY: 12,
+      button: 0,
+    });
+    fireEvent.pointerMove(shell, {
+      pointerId: 1,
+      pointerType: "mouse",
+      clientY: 120,
+      button: 0,
+    });
+    fireEvent.pointerUp(shell, {
+      pointerId: 1,
+      pointerType: "mouse",
+      clientY: 120,
+      button: 0,
+    });
+    fireEvent.wheel(shell, { deltaY: -96 });
+
+    expect(onMockRefresh).not.toHaveBeenCalled();
   });
 });

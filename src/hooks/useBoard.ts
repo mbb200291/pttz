@@ -23,9 +23,11 @@ export type { BoardFilter };
 export interface UseBoardReturn {
   articles: ArticleSummary[];
   loading: boolean;
+  refreshing: boolean;
   error: string | null;
   hasMore: boolean;
   loadMore: () => void;
+  refresh: () => void;
 }
 
 export const BOARD_CACHE_REVALIDATE_DELAY_MS = 15000;
@@ -148,6 +150,7 @@ export function useBoard(
   const pttState = usePttSocketStore((s) => s.pttState);
   const [articles, setArticles] = useState<ArticleSummary[]>([]);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
 
@@ -256,7 +259,7 @@ export function useBoard(
   }, [boardName, client, fetchArticles, filter, pttState]);
 
   const loadMore = useCallback(() => {
-    if (!client || loading || articles.length === 0 || !hasMore) return;
+    if (!client || loading || refreshing || articles.length === 0 || !hasMore) return;
 
     const nextOffset = getNextBoardLoadMoreOffset(articles);
     if (nextOffset === null || nextOffset <= 0) {
@@ -287,7 +290,35 @@ export function useBoard(
       .finally(() => {
         setLoading(false);
       });
-  }, [articles, boardName, client, fetchArticles, filter, hasMore, loading]);
+  }, [articles, boardName, client, fetchArticles, filter, hasMore, loading, refreshing]);
 
-  return { articles, loading, error, hasMore, loadMore };
+  const refresh = useCallback(() => {
+    if (!client || loading || refreshing) return;
+
+    setRefreshing(true);
+    setError(null);
+    fetchArticles()
+      .then((next) => {
+        if (next.length === 0) return;
+        setArticles((prev) => {
+          const refreshed =
+            prev.length > 0 ? refreshCachedBoardArticles(prev, next) : next;
+          if (filter) {
+            writeFilteredBoardCache(boardName, filter, refreshed);
+          } else {
+            writeBoardCache(boardName, refreshed);
+          }
+          return refreshed;
+        });
+        setHasMore(true);
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : "無法重新載入文章");
+      })
+      .finally(() => {
+        setRefreshing(false);
+      });
+  }, [boardName, client, fetchArticles, filter, loading, refreshing]);
+
+  return { articles, loading, refreshing, error, hasMore, loadMore, refresh };
 }

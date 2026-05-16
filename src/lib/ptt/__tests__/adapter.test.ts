@@ -322,6 +322,50 @@ describe("ptt adapter module", () => {
     expect(sent).toEqual(["\r"]);
   });
 
+  it("does not type the board search command into a dangling post title prompt after reading categories", async () => {
+    const mod = await import("../adapter");
+    const sent: string[] = [];
+    let state: "board" | "category" | "title" = "board";
+
+    const screens = {
+      board: [
+        "  看板《Test》[測試] 人氣:1",
+        "",
+        "",
+        buildBoardLine({
+          index: 461,
+          push: "+",
+          date: "5/07",
+          author: "MBB200291",
+          title: "[測試] 既有文章",
+        }),
+      ],
+      category: [
+        "發表文章於【 Test 】 [測試] 每週定期清除本板文章 看板",
+        "種類： 1.測試 2.色彩 3.控制 4.簽名 5.圖 6.動畫 7.互動 8.公告 (1-8或不選)",
+      ],
+      title: ["標題: [測試] "],
+    } satisfies Record<string, string[]>;
+
+    const bot = {
+      async send(command: string) {
+        sent.push(command);
+        if (command === "\x10") state = "category";
+        if (command === "\x03" && state === "category") state = "title";
+        else if (command === "\x03" && state === "title") state = "board";
+        return true;
+      },
+      getLine(index: number) {
+        return { str: screens[state][index] ?? "" };
+      },
+    };
+
+    const options = await mod.fetchPostCategoryOptionsFromBot(bot, "Test");
+
+    expect(options).toEqual(["測試", "色彩", "控制", "簽名", "圖", "動畫", "互動", "公告"]);
+    expect(sent).not.toContain("sTest\r");
+  });
+
   it("restores Re: prefix when ptt-client splits it into the status field", async () => {
     const mod = await import("../adapter");
 
@@ -864,6 +908,290 @@ describe("ptt adapter module", () => {
     await mod.fetchBoardArticlesFromBotManually(bot, "Gossiping", 0, true);
 
     expect(calls).toContain("enter:Gossiping");
+  });
+
+  it("uses board-list search fallback when entering from the PTT board directory", async () => {
+    const mod = await import("../adapter");
+    const calls: string[] = [];
+    let state: "directory" | "matched" | "board" = "directory";
+
+    const bot = {
+      async send(command: string) {
+        calls.push(command);
+        if (command === "Tech_Job\r") state = "matched";
+        if (command === "r") state = "board";
+        return true;
+      },
+      async enterBoardByName() {
+        throw new TypeError("Cannot read properties of undefined");
+      },
+      getLine(index: number) {
+        const screens = {
+          directory: [
+            "【看板列表】                     批踢踢實業坊",
+            "[←][q]回上層 [→][r]閱讀 [↑↓]選擇 [PgUp][PgDn]翻頁 [c]新文章 [/]搜尋 [h]求助",
+            "   編號   看  板       類別   中   文   敘   述               人氣 板   主",
+            "      1 ˇBaseball     棒球 ◎[棒球] 一馬首轟不一樣富貴邦MFGA   爆!Matthew10244",
+          ],
+          matched: [
+            "【看板列表】                     批踢踢實業坊",
+            "[←][q]回上層 [→][r]閱讀 [↑↓]選擇 [PgUp][PgDn]翻頁 [c]新文章 [/]搜尋 [h]求助",
+            "   編號   看  板       類別   中   文   敘   述               人氣 板   主",
+            "●   88 ˇTech_Job     科技 ◎[科技] 工作板                         96",
+          ],
+          board: [
+            "  看板《Tech_Job》[科技] 人氣:96",
+            "",
+            "",
+            buildBoardLine({
+              index: 9981,
+              push: "10",
+              date: "5/13",
+              author: "worker",
+              title: "[請益] offer 選擇",
+            }),
+          ],
+        } satisfies Record<typeof state, string[]>;
+
+        return { str: screens[state][index] ?? "" };
+      },
+    };
+
+    const articles = await mod.fetchBoardArticlesFromBotManually(bot, "Tech_Job");
+
+    expect(calls).toContain("/");
+    expect(calls).toContain("Tech_Job\r");
+    expect(calls).toContain("r");
+    expect(articles[0]?.title).toBe("[請益] offer 選擇");
+  });
+
+  it("returns to index before manual board entry when board-directory search misses", async () => {
+    const mod = await import("../adapter");
+    const calls: string[] = [];
+    let state: "directory" | "index" | "board" = "directory";
+
+    const bot = {
+      async send(command: string) {
+        calls.push(command);
+        if (command === "r") state = "directory";
+        if (command === "sTech_Job\r \x1b[1~\x1b[4~") state = "board";
+        return true;
+      },
+      async enterBoardByName() {
+        throw new TypeError("Cannot read properties of undefined");
+      },
+      async enterIndex() {
+        calls.push("enterIndex");
+        state = "index";
+        return true;
+      },
+      getLine(index: number) {
+        const screens = {
+          directory: [
+            "【看板列表】                     批踢踢實業坊                     看板《MyCIA》",
+            "[←][q]回上層 [→][r]閱讀 [↑↓]選擇 [PgUp][PgDn]翻頁 [c]新文章 [/]搜尋 [h]求助",
+            "   編號   看  板       類別   中   文   敘   述               人氣 板   主",
+            "      1 ˇBaseball     棒球 ◎[棒球] 一馬首轟不一樣富貴邦MFGA   爆!Matthew10244",
+          ],
+          index: [
+            "主功能表",
+            "(F)avorite 我的最愛",
+            "(C)lass 分組討論區",
+            "(S)earch 搜尋看板",
+          ],
+          board: [
+            "  看板《Tech_Job》[科技] 人氣:96",
+            "",
+            "",
+            buildBoardLine({
+              index: 9981,
+              push: "10",
+              date: "5/13",
+              author: "worker",
+              title: "[請益] offer 選擇",
+            }),
+          ],
+        } satisfies Record<typeof state, string[]>;
+
+        return { str: screens[state][index] ?? "" };
+      },
+    };
+
+    const articles = await mod.fetchBoardArticlesFromBotManually(bot, "Tech_Job");
+
+    expect(calls).toContain("enterIndex");
+    expect(calls).toContain("sTech_Job\r \x1b[1~\x1b[4~");
+    expect(articles[0]?.title).toBe("[請益] offer 選擇");
+  });
+
+  it("parses favorite board names from the PTT favorite screen without ptt-client Board.fromLine", async () => {
+    const mod = await import("../adapter");
+    const screen = [
+      "【看板列表】                     批踢踢實業坊                     我的最愛",
+      "[←][q]回上層 [→][r]閱讀 [↑↓]選擇 [PgUp][PgDn]翻頁 [c]新文章 [/]搜尋 [h]求助",
+      "   編號   看  板       類別   中   文   敘   述               人氣 板   主",
+      "●    1 ˇBaseball     棒球 ◎[棒球] 一馬首轟不一樣富貴邦MFGA   爆!Matthew10244",
+      "     2 ˇStock        學術 ◎[股票] ＊溫聲股票板＊             爆!rayccccc/Pau",
+      "     3   C_Chat       閒談 ◎[希洽] 這裡是ACG閒聊板           HOTdaniel0527",
+      "     4   Test         測試 ◎[測試] 每週定期清除本板文章        3 hank2579",
+    ].join("\n");
+
+    expect(mod.parseFavoriteBoardNamesFromScreen(screen)).toEqual([
+      "Baseball",
+      "Stock",
+      "C_Chat",
+      "Test",
+    ]);
+  });
+
+  it("falls back to manual favorite parsing when ptt-client getFavorite throws", async () => {
+    const mod = await import("../adapter");
+    const calls: string[] = [];
+    const rows = [
+      "【看板列表】                     批踢踢實業坊                     我的最愛",
+      "[←][q]回上層 [→][r]閱讀 [↑↓]選擇 [PgUp][PgDn]翻頁 [c]新文章 [/]搜尋 [h]求助",
+      "   編號   看  板       類別   中   文   敘   述               人氣 板   主",
+      "●    1 ˇBaseball     棒球 ◎[棒球] 一馬首轟不一樣富貴邦MFGA   爆!Matthew10244",
+      "     2 ˇStock        學術 ◎[股票] ＊溫聲股票板＊             爆!rayccccc/Pau",
+    ];
+
+    const bot = {
+      async getFavorite() {
+        throw new RangeError("Invalid count value: -1");
+      },
+      async enterFavorite() {
+        calls.push("enterFavorite");
+        return true;
+      },
+      async enterIndex() {
+        calls.push("enterIndex");
+        return true;
+      },
+      getLine(index: number) {
+        return { str: rows[index] ?? "" };
+      },
+    };
+
+    await expect(mod.fetchFavoriteBoardNamesFromBot(bot)).resolves.toEqual([
+      "Baseball",
+      "Stock",
+    ]);
+    expect(calls).toEqual(["enterIndex", "enterFavorite", "enterIndex"]);
+  });
+
+  it("resets to the PTT index before reading favorites", async () => {
+    const mod = await import("../adapter");
+    const calls: string[] = [];
+    const bot = {
+      async getFavorite() {
+        calls.push("getFavorite");
+        return [{ name: "Baseball" }] as never;
+      },
+      async enterIndex() {
+        calls.push("enterIndex");
+        return true;
+      },
+    };
+
+    await expect(mod.fetchFavoriteBoardNamesFromBot(bot)).resolves.toEqual([
+      "Baseball",
+    ]);
+    expect(calls).toEqual(["enterIndex", "getFavorite"]);
+  });
+
+  it("leaves an article reader before reading favorites", async () => {
+    const mod = await import("../adapter");
+    const calls: string[] = [];
+    let inArticle = true;
+    const bot = {
+      async getFavorite() {
+        calls.push("getFavorite");
+        return [{ name: "Baseball" }] as never;
+      },
+      async send(command: string) {
+        calls.push(command);
+        if (command === "q") inArticle = false;
+        return true;
+      },
+      async enterIndex() {
+        calls.push("enterIndex");
+        return true;
+      },
+      getLine(index: number) {
+        if (!inArticle) return { str: index === 0 ? "【主功能表】 批踢踢實業坊" : "" };
+        const rows = [
+          " 標題  [公告] 申請組務時 請用預設的分類",
+          " 時間  Thu Jan 26 04:21:47 2006",
+          "───────────────────────────────────────",
+          "申請組務時 請從以下八個選項選擇一個",
+          "  瀏覽 第 1/2 頁 ( 58%)  目前顯示: 第 02~23 行  (y)回應(X%)推文(h)說明(←)離開",
+        ];
+        return { str: rows[index] ?? "" };
+      },
+    };
+
+    await expect(mod.fetchFavoriteBoardNamesFromBot(bot)).resolves.toEqual([
+      "Baseball",
+    ]);
+    expect(calls).toEqual(["q", "enterIndex", "getFavorite"]);
+  });
+
+  it("continues manual favorite parsing across multiple favorite pages", async () => {
+    const mod = await import("../adapter");
+    const calls: string[] = [];
+    let page = 0;
+    const pages = [
+      [
+        "【看板列表】                     批踢踢實業坊                     我的最愛",
+        "[←][q]回上層 [→][r]閱讀 [↑↓]選擇 [PgUp][PgDn]翻頁 [c]新文章 [/]搜尋 [h]求助",
+        "   編號   看  板       類別   中   文   敘   述               人氣 板   主",
+        "●    1 ˇBaseball     棒球 ◎[棒球] 一馬首轟不一樣富貴邦MFGA   爆!Matthew10244",
+        "     2 ˇStock        學術 ◎[股票] ＊溫聲股票板＊             爆!rayccccc/Pau",
+      ],
+      [
+        "【看板列表】                     批踢踢實業坊                     我的最愛",
+        "[←][q]回上層 [→][r]閱讀 [↑↓]選擇 [PgUp][PgDn]翻頁 [c]新文章 [/]搜尋 [h]求助",
+        "   編號   看  板       類別   中   文   敘   述               人氣 板   主",
+        "     3   C_Chat       閒談 ◎[希洽] 這裡是ACG閒聊板           HOTdaniel0527",
+        "     4   Test         測試 ◎[測試] 每週定期清除本板文章        3 hank2579",
+      ],
+    ];
+
+    const bot = {
+      async getFavorite() {
+        throw new RangeError("Invalid count value: -1");
+      },
+      async enterFavorite() {
+        calls.push("enterFavorite");
+        return true;
+      },
+      async send(command: string) {
+        calls.push(command);
+        page = Math.min(page + 1, pages.length - 1);
+        return true;
+      },
+      async enterIndex() {
+        calls.push("enterIndex");
+        return true;
+      },
+      getLine(index: number) {
+        return { str: pages[page]?.[index] ?? "" };
+      },
+    };
+
+    await expect(mod.fetchFavoriteBoardNamesFromBot(bot)).resolves.toEqual([
+      "Baseball",
+      "Stock",
+      "C_Chat",
+      "Test",
+    ]);
+    expect(calls).toEqual([
+      "enterIndex",
+      "enterFavorite",
+      "\x1b[6~",
+      "\x1b[6~",
+      "enterIndex",
+    ]);
   });
 
   it("opens an article through explicit board navigation using the same open sequence as ptt-client", async () => {

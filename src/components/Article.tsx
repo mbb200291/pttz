@@ -369,9 +369,11 @@ export function Article({
       return;
     }
     void actions.replyToArticle(payload.body, payload.pushType, boardName).then((result) => {
-      if (result.ok) setComposer(null);
+      if (!result.ok) return;
+      setComposer(null);
+      void liveReload();
     });
-  }, [actions, boardName, composer]);
+  }, [actions, boardName, composer, liveReload]);
 
   const initialArticle =
     initialArticleSummary && !articleAid

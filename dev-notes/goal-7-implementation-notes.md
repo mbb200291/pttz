@@ -223,6 +223,8 @@ for (let attempt = 0; attempt < 5; attempt++) {
 
 | 日期       | 版本   | 重點                                                           |
 | ---------- | ------ | -------------------------------------------------------------- |
+| 2026-05-14 | v0.7.4 | 實站驗證 Test 發文 / 自文回文，修正文章回覆後未自動重載問題     |
+| 2026-05-14 | v0.7.3 | 修正從 PTT 看板列表頁進入任意看板的 fallback 流程              |
 | 2026-05-03 | v0.7.2 | 修復看板進入命令格式，新增重試邏輯                             |
 | 2026-05-03 | v0.7.1 | 修復連續載入 bug，優化 Zustand selector 使用                   |
 | 2026-04-29 | v0.7.0 | Goal 7 初始 push：VotePair、usePttActions、Composer 等 UI 元件 |
@@ -257,6 +259,102 @@ const pttState = usePttSocketStore((s) => s.pttState);
 ```
 
 這樣 hooks 只在 `client` 或 `pttState` 實際改變時重新渲染，避免不必要的 effect 重新執行。
+
+---
+
+## Bug #8：從 PTT 看板列表頁進板 fallback 失敗
+
+**現象：**
+
+實際登入後首頁會先嘗試同步我的最愛。`ptt-client.getFavorite()` 在特定我的最愛頁面會丟出
+`RangeError: Invalid count value: -1`，但 bot terminal 仍停在 PTT 的「看板列表」畫面。
+此時從首頁點選或輸入 `Tech_Job` 會顯示「無法進入看板 Tech_Job」。
+
+**根因：**
+
+`ensureNormalBoardView()` 先呼叫 `bot.enterBoardByName(boardName)`。當 bot 位於 `【看板列表】`
+而非主選單或一般看板列表時，`ptt-client` 內部讀不到 `currentBoardname`，會觸發
+`Cannot read properties of undefined (reading 'toLowerCase')`。
+
+adapter 的 fallback 原本直接送 `s${boardName}\r`。但在 PTT「看板列表」頁，`s` 並不是主選單的
+Search board 指令；畫面提示是 `[/]搜尋`。因此 fallback 仍停在看板列表頁，無法進入目標看板。
+
+**修正：**
+
+1. 新增 `isBoardDirectoryScreen()` 判斷 `【看板列表】` 且有 `[/]搜尋` 提示。
+2. 位於看板列表頁時，先嘗試 `/` 搜尋目標看板並按 `r` 閱讀。
+3. 若看板列表搜尋沒有成功進入目標看板，先呼叫 `enterIndex()` 回主索引。
+4. 回主索引後再送標準進板序列 `s${boardName}\r \x1b[1~\x1b[4~`，並用
+   `extractCurrentBoardName()` + `isBoardListScreen()` 驗證狀態。
+
+**測試：**
+
+新增 adapter regression tests：
+
+- 從 PTT 看板列表頁搜尋命中時可進入 `Tech_Job`
+- 看板列表搜尋未成功時會先回主索引再手動進板
+
+**實站驗證：**
+
+修正後在實際 PTT session 依序進入：
+
+- `Tech_Job`
+- `Stock`
+- `C_Chat`
+- `Gossiping`
+- `Test`
+
+皆可正常載入文章列表。
+
+---
+
+## Bug #9：作者在自己文章下方回文後 UI 未立即刷新
+
+**現象：**
+
+在 `Test` 板發文成功後，於該篇文章使用 UI 的「回覆此文」送出回文，Composer 會關閉，但文章下方仍顯示
+`0 則第一層回覆`。使用者若再次送出，實際上 PTT 會接受多次回文，造成重複留言。
+
+**根因：**
+
+`Article.tsx` 的 `handleComposerSubmit()` 在 `actions.replyToArticle()` 回傳 `{ ok: true }` 後只關閉
+Composer，沒有重新抓取文章內容。PTT 寫入成功後，前端仍保留舊的 article state。
+
+同時，作者對自己的文章回覆時，PTT terminal 會顯示：
+
+```text
+作者本人, 使用 → 加註方式
+→ MBB200291:
+```
+
+這不是一般推 / 噓選單，而是強制使用 `→` 加註。adapter 的寫入序列仍可成功送出，但 UI 需要重新讀取
+文章才能看到新增的 neutral push。
+
+**修正：**
+
+`Article.tsx` 在回文成功後：
+
+1. 關閉 Composer
+2. 呼叫 `liveReload()` 重新抓取文章
+
+```typescript
+void actions.replyToArticle(payload.body, payload.pushType, boardName).then((result) => {
+  if (!result.ok) return;
+  setComposer(null);
+  void liveReload();
+});
+```
+
+**實站驗證：**
+
+在 `Test` 板發表文章 `pttzzz 測試 2218` 後，確認文章列表出現：
+
+```text
+#365 pttzzz 測試 2218 MBB200291
+```
+
+接著在該篇下方送出 `→` 回文，重新打開文章後確認回文已出現在下方。測試過程中因 UI 未刷新先重複送出，
+最後文章顯示 3 則 `→` 回文。此現象確認了 bug 的風險，也驗證修正方向為「成功後必須重新載入文章」。
 
 ---
 

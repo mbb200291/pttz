@@ -221,6 +221,7 @@ type BotLike = {
   send: (msg: string) => Promise<boolean>;
   getLines?: () => Promise<string[]>;
   enterBoardByName?: (boardName: string) => Promise<boolean>;
+  enterFavorite?: (offsets?: number[]) => Promise<boolean>;
   enterIndex?: () => Promise<boolean>;
   getArticles: (
     boardName: string,
@@ -687,13 +688,8 @@ class PttClientAdapter implements PttAdapter {
   async getFavoriteBoards(): Promise<string[]> {
     return this.runSerial(async () => {
       await this.waitUntilLoggedIn();
-      if (!this.bot.getFavorite) {
-        if (import.meta.env.DEV) console.log("[getFavoriteBoards] bot.getFavorite not available");
-        return [];
-      }
       try {
-        const boards = await this.bot.getFavorite();
-        const names = boards.map((b: Board) => b.name);
+        const names = await fetchFavoriteBoardNamesFromBot(this.bot);
         if (import.meta.env.DEV) console.log("[getFavoriteBoards] Got", names.length, "favorites:", names);
         return names;
       } catch (err) {
@@ -948,6 +944,94 @@ export function mapHotBoardRow(
   };
 }
 
+export function parseFavoriteBoardNamesFromScreen(screen: string): string[] {
+  const plain = stripAnsi(screen).replace(/\r/g, "");
+  const names: string[] = [];
+  const seen = new Set<string>();
+
+  for (const line of plain.split("\n")) {
+    const match = line.match(
+      /^\s*[●> ]?\s*\d+\s+[ˇ+*=!~ ]*\s*([A-Za-z][A-Za-z0-9_.+-]{1,31})\b/u,
+    );
+    const name = match?.[1]?.trim();
+    if (!name) continue;
+
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+
+    seen.add(key);
+    names.push(name);
+  }
+
+  return names;
+}
+
+export async function fetchFavoriteBoardNamesFromBot(
+  bot: Partial<
+    Pick<BotLike, "getFavorite" | "enterFavorite" | "enterIndex" | "getLine" | "send">
+  >,
+): Promise<string[]> {
+  await leaveArticleReaderIfNeeded(bot);
+  await bot.enterIndex?.();
+
+  if (bot.getFavorite) {
+    try {
+      const boards = await bot.getFavorite();
+      const names = boards.map((board) => board.name.trim()).filter(Boolean);
+      if (names.length > 0) return names;
+    } catch {
+      // ptt-client can fail parsing some favorite rows; read the terminal view below.
+    }
+  }
+
+  if (!bot.enterFavorite || !bot.getLine) return [];
+
+  const entered = await bot.enterFavorite([]);
+  if (!entered) return [];
+
+  try {
+    const names: string[] = [];
+    const seen = new Set<string>();
+    let screen = readVisibleScreen(bot);
+
+    for (let pageIndex = 0; pageIndex < 20; pageIndex += 1) {
+      for (const name of parseFavoriteBoardNamesFromScreen(screen)) {
+        const key = name.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        names.push(name);
+      }
+
+      if (!bot.send) break;
+
+      await bot.send(PTT_KEY_PGDOWN);
+      await sleep(80);
+
+      const nextScreen = readVisibleScreen(bot);
+      if (stripAnsi(nextScreen).replace(/\r/g, "") === stripAnsi(screen).replace(/\r/g, "")) {
+        break;
+      }
+      screen = nextScreen;
+    }
+
+    return names;
+  } finally {
+    await bot.enterIndex?.();
+  }
+}
+
+async function leaveArticleReaderIfNeeded(
+  bot: Partial<Pick<BotLike, "getLine" | "send">>,
+): Promise<void> {
+  if (!bot.getLine || !bot.send) return;
+
+  const plain = stripAnsi(readVisibleScreen(bot)).replace(/\r/g, "");
+  if (!/瀏覽 第\s*\d+\/\d+\s*頁/u.test(plain)) return;
+
+  await bot.send("q");
+  await sleep(150);
+}
+
 export function parsePostCategoryOptions(screen: string): string[] {
   const plain = stripAnsi(screen).replace(/\r/g, "");
   const lines = plain.split("\n");
@@ -1165,6 +1249,11 @@ function isFilterModeScreen(screen: string): boolean {
     .some((line) => line.trim().startsWith("系列《"));
 }
 
+function isBoardDirectoryScreen(screen: string): boolean {
+  const plain = stripAnsi(screen).replace(/\r/g, "");
+  return /【看板列表】/u.test(plain) && /\[\/\]搜尋/u.test(plain);
+}
+
 export function extractCurrentBoardName(screen: string): string | null {
   const plain = stripAnsi(screen).replace(/\r/g, "");
   const articleMatch = plain.match(/^.*看板\s+([A-Za-z0-9_+\-]+).*$/mu);
@@ -1307,9 +1396,33 @@ async function ensureNormalBoardView(
     return false;
   }
 
+  if (isBoardDirectoryScreen(screen)) {
+    log(`In board directory, searching board with /${boardName}`);
+    await bot.send("/");
+    await sleep(150);
+    await bot.send(`${boardName}\r`);
+    await sleep(350);
+    await bot.send("r");
+    await sleep(350);
+
+    screen = readVisibleScreen(bot);
+    const directorySearchBoard = extractCurrentBoardName(screen);
+    const directorySearchSuccess =
+      directorySearchBoard?.toLowerCase() === boardName.toLowerCase() &&
+      isBoardListScreen(screen);
+    log(`Board directory search result: ${directorySearchSuccess}`);
+    if (directorySearchSuccess) return true;
+
+    if (bot.enterIndex) {
+      log(`Board directory search failed, returning to index before manual entry`);
+      await bot.enterIndex();
+      await sleep(250);
+    }
+  }
+
   log(`Sending manual board entry command: s${boardName}\\r`);
-  await bot.send(`s${boardName}\r`);
-  await sleep(200);  // Increased from 150ms to 200ms
+  await bot.send(`s${boardName}\r \x1b[1~\x1b[4~`);
+  await sleep(350);
 
   screen = readVisibleScreen(bot);
   const newPlainScreen = stripAnsi(screen).replace(/\r/g, "");
@@ -1324,7 +1437,85 @@ async function ensureNormalBoardView(
   log(`Board entry result: ${success}`);
   return success;
 }
-async function fetchPostCategoryOptionsFromBot(
+
+async function cancelPostComposeFlow(
+  bot: BoardFetchBot,
+  boardName: string,
+): Promise<boolean> {
+  if (!bot.send || !bot.getLine) return false;
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const screen = readVisibleScreen(bot);
+    const plain = stripAnsi(screen).replace(/\r/g, "");
+    const currentBoard = extractCurrentBoardName(screen);
+
+    if (
+      currentBoard?.toLowerCase() === boardName.toLowerCase() &&
+      isBoardListScreen(screen)
+    ) {
+      return true;
+    }
+
+    if (/標題[:：]/u.test(plain)) {
+      await bot.send(PTT_KEY_CTRL_C);
+      await sleep(150);
+      continue;
+    }
+
+    if (parsePostCategoryOptions(screen).length > 0 || /分類|類別|種類/u.test(plain)) {
+      await bot.send(PTT_KEY_CTRL_C);
+      await sleep(150);
+      continue;
+    }
+
+    if (isPostGuidelineScreen(plain)) {
+      await bot.send(PTT_KEY_CTRL_C);
+      await sleep(150);
+      continue;
+    }
+
+    if (/放棄|取消編輯|是否離開/u.test(plain)) {
+      await bot.send("y\r");
+      await sleep(150);
+      continue;
+    }
+
+    if (/\[Y\/n\]/iu.test(plain) || /要儲存|是否儲存|存檔/u.test(plain)) {
+      await bot.send("n\r");
+      await sleep(150);
+      continue;
+    }
+
+    if (isPostEditorScreen(plain)) {
+      await bot.send(PTT_KEY_CTRL_X);
+      await sleep(250);
+      continue;
+    }
+
+    if (/任意鍵/u.test(plain)) {
+      await bot.send("\r");
+      await sleep(150);
+      continue;
+    }
+
+    if (currentBoard?.toLowerCase() === boardName.toLowerCase()) {
+      await bot.send("q");
+      await sleep(150);
+      continue;
+    }
+
+    await bot.send(PTT_KEY_CTRL_C);
+    await sleep(150);
+  }
+
+  const finalScreen = readVisibleScreen(bot);
+  return (
+    extractCurrentBoardName(finalScreen)?.toLowerCase() === boardName.toLowerCase() &&
+    isBoardListScreen(finalScreen)
+  );
+}
+
+export async function fetchPostCategoryOptionsFromBot(
   bot: BoardFetchBot,
   boardName: string,
 ): Promise<string[]> {
@@ -1350,24 +1541,7 @@ async function fetchPostCategoryOptionsFromBot(
     await sleep(60);
   }
 
-  // 取消發文編輯
-  await bot.send(PTT_KEY_CTRL_C);
-  await sleep(150);
-
-  // 部分情境 Ctrl+C 會問「確定放棄編輯？[Y/n]」，需再回 y
-  const afterCancel = stripAnsi(readVisibleScreen(bot)).replace(/\r/g, "");
-  if (/放棄|取消編輯|是否離開/u.test(afterCancel)) {
-    await bot.send("y\r");
-    await sleep(150);
-  }
-
-  // 嚴格驗證：若已不在目標看板，嘗試恢復
-  const current = extractCurrentBoardName(
-    stripAnsi(readVisibleScreen(bot)).replace(/\r/g, ""),
-  );
-  if (!current || current.toLowerCase() !== boardName.toLowerCase()) {
-    await ensureNormalBoardView(bot, boardName);
-  }
+  await cancelPostComposeFlow(bot, boardName);
 
   return options;
 }
@@ -1615,7 +1789,7 @@ async function submitPostFromBot(
   }
 
   // Phase 4: 解析並選擇分類
-  let screen = readVisibleScreen(bot);
+  const screen = readVisibleScreen(bot);
   const options = parsePostCategoryOptions(screen);
   log(`Available categories: ${options.join(", ")}`);
 

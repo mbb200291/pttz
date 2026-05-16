@@ -2,12 +2,12 @@
  * BoardInput — 輸入看板名稱的首頁
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 export interface PopularBoard {
   name: string;
   zh?: string;
-  online?: string;
+  online?: string | number;
 }
 
 const DEFAULT_BOARD_SHORTCUTS: PopularBoard[] = [
@@ -21,13 +21,26 @@ const DEFAULT_BOARD_SHORTCUTS: PopularBoard[] = [
   { name: "joke", zh: "就可" },
 ];
 
+const FAVORITE_FALLBACKS: PopularBoard[] = [
+  { name: "Tech_Job", zh: "科技業" },
+  { name: "Stock", zh: "股票板" },
+  { name: "C_Chat", zh: "西恰" },
+  { name: "movie", zh: "電影板" },
+  { name: "Lifeismoney", zh: "省錢板" },
+];
+
+const POPULAR_INITIAL = 6;
+
 interface BoardInputProps {
   onEnter: (board: string) => void;
   pttState: string;
   wsStatus: string;
   popularBoards?: PopularBoard[];
   popularBoardsLoading?: boolean;
+  favoriteBoards?: string[];
+  favoriteBoardsLoading?: boolean;
   recentBoards?: string[];
+  currentUser?: string;
 }
 
 export function BoardInput({
@@ -36,20 +49,86 @@ export function BoardInput({
   wsStatus,
   popularBoards,
   popularBoardsLoading = false,
+  favoriteBoards,
+  favoriteBoardsLoading = false,
   recentBoards = [],
+  currentUser,
 }: BoardInputProps) {
   const [input, setInput] = useState("");
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const b = input.trim();
-    if (b) onEnter(b);
-  };
+  const [popularExpanded, setPopularExpanded] = useState(false);
+  const [favoriteOverrides, setFavoriteOverrides] = useState<Record<string, boolean>>({});
 
   const isConnected = pttState === "ready";
   const hasLivePopularBoards = Boolean(popularBoards?.length);
   const boards = hasLivePopularBoards ? popularBoards! : DEFAULT_BOARD_SHORTCUTS;
-  const displayedBoards = boards.slice(0, 8);
+  const searchTerm = input.trim().toLowerCase();
+  const isSearching = searchTerm.length > 0;
+  const filteredBoards = useMemo(
+    () =>
+      isSearching
+        ? boards.filter((board) =>
+            `${board.name}${board.zh ?? ""}`.toLowerCase().includes(searchTerm),
+          )
+        : boards,
+    [boards, isSearching, searchTerm],
+  );
+  const displayedBoards =
+    isSearching || popularExpanded ? filteredBoards : filteredBoards.slice(0, POPULAR_INITIAL);
+  const hiddenPopularCount = Math.max(0, filteredBoards.length - displayedBoards.length);
+
+  const baseFavoriteNames = useMemo(
+    () =>
+      favoriteBoards !== undefined
+        ? favoriteBoards
+        : favoriteBoardsLoading
+          ? []
+          : FAVORITE_FALLBACKS.map((board) => board.name),
+    [favoriteBoards, favoriteBoardsLoading],
+  );
+
+  const favoriteNames = useMemo(() => {
+    const byKey = new Map(baseFavoriteNames.map((name) => [name.toLowerCase(), name]));
+    Object.entries(favoriteOverrides).forEach(([name, enabled]) => {
+      if (enabled) byKey.set(name.toLowerCase(), name);
+      else byKey.delete(name.toLowerCase());
+    });
+    return Array.from(byKey.values());
+  }, [baseFavoriteNames, favoriteOverrides]);
+
+  const favoriteCards = useMemo(() => {
+    const metadata = new Map(
+      [...boards, ...FAVORITE_FALLBACKS].map((board) => [board.name.toLowerCase(), board]),
+    );
+
+    return favoriteNames.map((name) => {
+      const board = metadata.get(name.toLowerCase());
+      return {
+        name,
+        zh: board?.zh,
+        online: board?.online,
+      };
+    });
+  }, [boards, favoriteNames]);
+
+  const submitBoard = (board = input.trim()) => {
+    const nextBoard = board.trim();
+    if (nextBoard && isConnected) onEnter(nextBoard);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    submitBoard();
+  };
+
+  const toggleFavorite = (name: string) => {
+    const isFavorite = favoriteNames.some(
+      (favoriteName) => favoriteName.toLowerCase() === name.toLowerCase(),
+    );
+    setFavoriteOverrides((current) => ({
+      ...current,
+      [name]: !isFavorite,
+    }));
+  };
 
   return (
     <div
@@ -213,7 +292,7 @@ export function BoardInput({
             alignItems: "center",
             gap: 0,
             maxWidth: 640,
-            marginBottom: 40,
+            marginBottom: 48,
             padding: 6,
             borderRadius: 14,
             background: "var(--surface)",
@@ -222,7 +301,7 @@ export function BoardInput({
           }}
         >
           <span style={{ padding: "0 8px 0 12px", color: "var(--text-dim)" }}>
-            ⌕
+            <SearchIcon />
           </span>
           <input
             type="text"
@@ -264,157 +343,560 @@ export function BoardInput({
           </button>
         </form>
 
-{(recentBoards?.length ?? 0) > 0 && (
+        {favoriteCards.length > 0 && !isSearching && (
           <section style={{ marginBottom: 40 }}>
+            <SectionHead
+              icon={<StarIcon filled />}
+              title="我的最愛"
+              hint={`${currentUser ?? "PTT"} · ${favoriteCards.length} 個關注看板`}
+              accent
+            />
             <div
               style={{
-                fontSize: 12,
-                fontWeight: 700,
-                letterSpacing: "0.06em",
-                color: "var(--text-dim)",
-                marginBottom: 12,
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+                gap: 12,
               }}
             >
-              最近瀏覽
-            </div>
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 8,
-              }}
-            >
-              {(recentBoards ?? []).map((name) => (
-                <button
-                  key={name}
-                  onClick={() => onEnter(name)}
+              {favoriteCards.map((board) => (
+                <FavoriteCard
+                  key={board.name}
+                  board={board}
                   disabled={!isConnected}
-                  style={{
-                    padding: "8px 14px",
-                    borderRadius: 10,
-                    border: "1px solid var(--border)",
-                    background: "var(--surface)",
-                    color: "var(--text)",
-                    fontWeight: 600,
-                    fontSize: 13.5,
-                    letterSpacing: "-0.01em",
-                    cursor: isConnected ? "pointer" : "not-allowed",
-                    fontFamily: "var(--font-mono)",
-                    opacity: isConnected ? 1 : 0.45,
-                  }}
-                >
-                  {name}
-                </button>
+                  onOpen={() => submitBoard(board.name)}
+                  onUnstar={() => toggleFavorite(board.name)}
+                />
               ))}
             </div>
           </section>
         )}
 
+        {(recentBoards?.length ?? 0) > 0 && !isSearching && (
+          <section style={{ marginBottom: 40 }}>
+            <SectionHead icon={<ClockIcon />} title="最近瀏覽" />
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {(recentBoards ?? []).map((name) => {
+                const isFavorite = favoriteNames.some(
+                  (favoriteName) => favoriteName.toLowerCase() === name.toLowerCase(),
+                );
+                return (
+                  <div
+                    key={name}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "stretch",
+                      overflow: "hidden",
+                      borderRadius: 10,
+                      border: "1px solid var(--border)",
+                      background: "var(--surface)",
+                      opacity: isConnected ? 1 : 0.45,
+                    }}
+                  >
+                    <button
+                      onClick={() => submitBoard(name)}
+                      disabled={!isConnected}
+                      style={{
+                        padding: "8px 12px",
+                        border: 0,
+                        background: "transparent",
+                        color: "var(--text)",
+                        fontWeight: 600,
+                        fontSize: 13.5,
+                        letterSpacing: "-0.01em",
+                        cursor: isConnected ? "pointer" : "not-allowed",
+                        fontFamily: "var(--font-mono)",
+                      }}
+                    >
+                      {name}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleFavorite(name)}
+                      title={isFavorite ? "從最愛移除" : "加入最愛"}
+                      disabled={!isConnected}
+                      style={{
+                        width: 34,
+                        border: 0,
+                        borderLeft: "1px solid var(--border)",
+                        background: "transparent",
+                        color: isFavorite ? "var(--accent-ink)" : "var(--text-dim)",
+                        cursor: isConnected ? "pointer" : "not-allowed",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <StarIcon filled={isFavorite} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
         <section>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "baseline",
-              justifyContent: "space-between",
-              marginBottom: 14,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 12,
-                fontWeight: 700,
-                letterSpacing: "0.06em",
-                color: "var(--text-dim)",
-              }}
-            >
-              {hasLivePopularBoards ? "熱門看板" : "常用看板"}
-            </div>
-            <div style={{ fontSize: 12, color: "var(--text-dim)" }}>
-              {popularBoardsLoading
+          <SectionHead
+            icon={<FlameIcon />}
+            title={hasLivePopularBoards ? "熱門看板" : "常用看板"}
+            hint={
+              popularBoardsLoading
                 ? "同步中"
-                : hasLivePopularBoards
-                  ? `${boards.length} 個 · 即時人數`
-                  : "即時人數待同步"}
-            </div>
-          </div>
+                : isSearching
+                  ? `${filteredBoards.length} 個搜尋結果`
+                  : hasLivePopularBoards
+                    ? `${boards.length} 個 · 即時人數`
+                    : "即時人數待同步"
+            }
+          />
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+              gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
               gap: 10,
             }}
           >
-            {displayedBoards.map((board) => (
+            {displayedBoards.map((board) => {
+              const isFavorite = favoriteNames.some(
+                (favoriteName) => favoriteName.toLowerCase() === board.name.toLowerCase(),
+              );
+              return (
+                <div
+                  key={board.name}
+                  onClick={() => submitBoard(board.name)}
+                  style={{
+                    textAlign: "left",
+                    padding: "14px 16px",
+                    borderRadius: 12,
+                    border: "1px solid var(--border)",
+                    background: "var(--surface)",
+                    color: "var(--text)",
+                    cursor: isConnected ? "pointer" : "not-allowed",
+                    opacity: isConnected ? 1 : 0.45,
+                    fontFamily: "var(--font)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      marginBottom: 4,
+                    }}
+                  >
+                    <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700 }}>
+                      {board.name}
+                    </span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                      {hasLivePopularBoards && (
+                        <span
+                          style={{
+                            color: "var(--accent-ink)",
+                            background: "var(--accent-soft)",
+                            borderRadius: 999,
+                            padding: "1px 6px",
+                            fontSize: 11,
+                            fontWeight: 700,
+                          }}
+                        >
+                          HOT
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggleFavorite(board.name);
+                        }}
+                        title={isFavorite ? "從最愛移除" : "加入最愛"}
+                        disabled={!isConnected}
+                        style={{
+                          width: 24,
+                          height: 24,
+                          padding: 0,
+                          border: 0,
+                          background: "transparent",
+                          color: isFavorite ? "var(--accent-ink)" : "var(--text-dim)",
+                          cursor: isConnected ? "pointer" : "not-allowed",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <StarIcon filled={isFavorite} />
+                      </button>
+                    </span>
+                  </div>
+                  <div style={{ color: "var(--text-muted)", fontSize: 13, marginBottom: 12 }}>
+                    {board.zh || "—"}
+                  </div>
+                  <div
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      color: "var(--text-dim)",
+                      fontSize: 11.5,
+                      fontFamily: "var(--font-mono)",
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: 3,
+                        background: "oklch(0.72 0.16 155)",
+                      }}
+                    />
+                    {formatOnlineCount(board.online)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {!isSearching && hiddenPopularCount > 0 && (
+            <div style={{ display: "flex", justifyContent: "center", marginTop: 18 }}>
               <button
-                key={board.name}
-                onClick={() => onEnter(board.name)}
-                disabled={!isConnected}
+                type="button"
+                onClick={() => setPopularExpanded((expanded) => !expanded)}
                 style={{
-                  textAlign: "left",
-                  padding: "14px 16px",
-                  borderRadius: 12,
-                  border: "1px solid var(--border)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "9px 16px",
+                  borderRadius: 10,
                   background: "var(--surface)",
-                  color: "var(--text)",
-                  cursor: isConnected ? "pointer" : "not-allowed",
-                  opacity: isConnected ? 1 : 0.45,
+                  border: "1px solid var(--border)",
+                  color: "var(--text-muted)",
+                  fontWeight: 600,
+                  fontSize: 13,
+                  cursor: "pointer",
                   fontFamily: "var(--font)",
                 }}
               >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 12,
-                    marginBottom: 4,
-                  }}
-                >
-                  <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700 }}>
-                    {board.name}
-                  </span>
-                  {hasLivePopularBoards && (
-                    <span
-                      style={{
-                        color: "var(--accent-ink)",
-                        background: "var(--accent-soft)",
-                        borderRadius: 999,
-                        padding: "1px 6px",
-                        fontSize: 11,
-                        fontWeight: 700,
-                      }}
-                    >
-                      HOT
-                    </span>
-                  )}
-                </div>
-                <div style={{ color: "var(--text-muted)", fontSize: 13, marginBottom: 12 }}>
-                  {board.zh || "—"}
-                </div>
-                <div
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 6,
-                    color: "var(--text-dim)",
-                    fontSize: 11.5,
-                    fontFamily: "var(--font-mono)",
-                  }}
-                >
-                  <span
-                    style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: 3,
-                      background: "oklch(0.72 0.16 155)",
-                    }}
-                  />
-                  {board.online ? `${board.online} 在線` : "即時人數待同步"}
-                </div>
+                {popularExpanded ? (
+                  <>
+                    <ChevronUpIcon /> 收起
+                  </>
+                ) : (
+                  <>
+                    <ChevronDownIcon /> 展開全部 {filteredBoards.length} 個看板（再 +
+                    {hiddenPopularCount}）
+                  </>
+                )}
               </button>
-            ))}
-          </div>
+            </div>
+          )}
         </section>
       </main>
     </div>
+  );
+}
+
+function SectionHead({
+  icon,
+  title,
+  hint,
+  accent = false,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  hint?: string;
+  accent?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "baseline",
+        justifyContent: "space-between",
+        gap: 16,
+        marginBottom: 14,
+      }}
+    >
+      <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: 22,
+            height: 22,
+            borderRadius: 6,
+            background: accent ? "var(--accent-soft)" : "var(--surface)",
+            border: accent ? "1px solid var(--accent-border)" : "1px solid var(--border)",
+            color: accent ? "var(--accent-ink)" : "var(--text-muted)",
+          }}
+        >
+          {icon}
+        </span>
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: 700,
+            letterSpacing: "0.06em",
+            color: accent ? "var(--accent-ink)" : "var(--text-dim)",
+          }}
+        >
+          {title}
+        </span>
+      </div>
+      {hint && (
+        <div style={{ color: "var(--text-dim)", fontSize: 12, fontFamily: "var(--font-mono)" }}>
+          {hint}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FavoriteCard({
+  board,
+  disabled,
+  onOpen,
+  onUnstar,
+}: {
+  board: PopularBoard;
+  disabled: boolean;
+  onOpen: () => void;
+  onUnstar: () => void;
+}) {
+  return (
+    <div
+      onClick={onOpen}
+      style={{
+        position: "relative",
+        textAlign: "left",
+        overflow: "hidden",
+        padding: "16px 16px 14px",
+        borderRadius: 14,
+        border: "1px solid var(--border)",
+        background: "var(--surface)",
+        color: "var(--text)",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.45 : 1,
+        fontFamily: "var(--font)",
+      }}
+    >
+      <span
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: 3,
+          background: "linear-gradient(180deg, var(--accent), oklch(0.55 0.18 320))",
+        }}
+      />
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+        <Monogram name={board.name} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 14 }}>
+            {board.name}
+          </div>
+          <div style={{ color: "var(--text-muted)", fontSize: 12, marginTop: 1 }}>
+            {board.zh || "我的最愛看板"}
+          </div>
+        </div>
+        <button
+          type="button"
+          title="從最愛移除"
+          disabled={disabled}
+          onClick={(event) => {
+            event.stopPropagation();
+            onUnstar();
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              event.stopPropagation();
+              onUnstar();
+            }
+          }}
+          style={{
+            width: 26,
+            height: 26,
+            padding: 0,
+            border: 0,
+            background: "transparent",
+            color: "var(--accent-ink)",
+            cursor: disabled ? "not-allowed" : "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <StarIcon filled />
+        </button>
+      </div>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          paddingTop: 10,
+          borderTop: "1px dashed var(--border)",
+          color: "var(--text-dim)",
+          fontSize: 11.5,
+          fontFamily: "var(--font-mono)",
+        }}
+      >
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+          <span
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: 3,
+              background: "oklch(0.72 0.16 155)",
+            }}
+          />
+          {formatOnlineCount(board.online)}
+        </span>
+        <span style={{ flex: 1 }} />
+        <span style={{ color: "var(--accent-ink)" }}>進入 →</span>
+      </div>
+    </div>
+  );
+}
+
+function Monogram({ name }: { name: string }) {
+  const hue = Array.from(name).reduce((value, char) => value + char.charCodeAt(0), 0) % 360;
+  return (
+    <span
+      style={{
+        width: 32,
+        height: 32,
+        borderRadius: 10,
+        background: `oklch(0.42 0.10 ${hue})`,
+        color: `oklch(0.95 0.04 ${hue})`,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontWeight: 700,
+        fontSize: 13,
+        letterSpacing: 0,
+        flexShrink: 0,
+      }}
+    >
+      {name.slice(0, 2).toUpperCase()}
+    </span>
+  );
+}
+
+function formatOnlineCount(online?: string | number) {
+  if (online === undefined || online === "") return "即時人數待同步";
+  const value = typeof online === "number" ? online.toLocaleString() : online;
+  return `${value} 在線`;
+}
+
+function StarIcon({ filled = false }: { filled?: boolean }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </svg>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </svg>
+  );
+}
+
+function ClockIcon() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </svg>
+  );
+}
+
+function FlameIcon() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+    </svg>
+  );
+}
+
+function ChevronDownIcon() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  );
+}
+
+function ChevronUpIcon() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="18 15 12 9 6 15" />
+    </svg>
   );
 }
