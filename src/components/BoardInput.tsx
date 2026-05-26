@@ -30,7 +30,7 @@ const FAVORITE_FALLBACKS: PopularBoard[] = [
 ];
 
 const POPULAR_INITIAL = 6;
-const FAVORITE_INITIAL = 12;
+const FAVORITE_INITIAL = 6;
 
 interface BoardInputProps {
   onEnter: (board: string) => void;

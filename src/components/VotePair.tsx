@@ -13,7 +13,7 @@ export interface VotePairProps {
   onBoo: () => void;
   voters?: { push: string[]; boo: string[] };
   myVote?: -1 | 0 | 1;
-  size?: "sm" | "lg";
+  size?: "xs" | "sm" | "lg";
 }
 
 // ─── SVG icons ────────────────────────────────────────────────────────────────
@@ -202,15 +202,18 @@ export function VotePair({
   const isBoo = value === -1;
   const pushDisabled = myVote === 1;
   const booDisabled = myVote === -1;
-  const padX = size === "lg" ? 12 : 8;
-  const padY = size === "lg" ? 7 : 5;
-  const fontSize = size === "lg" ? 13 : 12;
-  const iconSize = size === "lg" ? 14 : 12;
+  const padX = size === "lg" ? 12 : size === "xs" ? 6 : 8;
+  const padY = size === "lg" ? 7 : size === "xs" ? 3 : 5;
+  const fontSize = size === "lg" ? 13 : size === "xs" ? 11 : 12;
+  const iconSize = size === "lg" ? 14 : size === "xs" ? 11 : 12;
+  const radius = size === "xs" ? 7 : 9;
+  const innerRadius = size === "xs" ? 5 : 7;
+  const gap = size === "xs" ? 3 : 5;
 
   return (
     <div style={{
       display: "inline-flex", padding: 2, gap: 2,
-      background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 9,
+      background: "var(--surface)", border: "1px solid var(--border)", borderRadius: radius,
     }}>
       <button
         ref={pushRef}
@@ -232,8 +235,8 @@ export function VotePair({
         onFocus={(e) => openPopover("push", e.currentTarget)}
         onBlur={closePopover}
         style={{
-          display: "inline-flex", alignItems: "center", gap: 5,
-          padding: `${padY}px ${padX}px`, borderRadius: 7, border: 0,
+          display: "inline-flex", alignItems: "center", gap,
+          padding: `${padY}px ${padX}px`, borderRadius: innerRadius, border: 0,
           cursor: pushDisabled ? "not-allowed" : "pointer",
           background: isPush ? "var(--push-bg)" : "transparent",
           color: isPush ? "var(--push-fg)" : "var(--text-muted)",
@@ -266,8 +269,8 @@ export function VotePair({
         onFocus={(e) => openPopover("boo", e.currentTarget)}
         onBlur={closePopover}
         style={{
-          display: "inline-flex", alignItems: "center", gap: 5,
-          padding: `${padY}px ${padX}px`, borderRadius: 7, border: 0,
+          display: "inline-flex", alignItems: "center", gap,
+          padding: `${padY}px ${padX}px`, borderRadius: innerRadius, border: 0,
           cursor: booDisabled ? "not-allowed" : "pointer",
           background: isBoo ? "var(--boo-bg)" : "transparent",
           color: isBoo ? "var(--boo-fg)" : "var(--text-muted)",

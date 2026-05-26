@@ -180,9 +180,13 @@ function VoterPopover({ kind, count, voters, t, anchorRect, scrollKey }) {
 // Thumbs-up / thumbs-down compact group with hover voter list
 function VotePair({ value, count, onPush, onBoo, t, size = "sm", voterSeed = "x" }) {
   const isPush = value === 1, isBoo = value === -1;
-  const padX = size === "lg" ? 12 : 8, padY = size === "lg" ? 7 : 5;
-  const fontSize = size === "lg" ? 13 : 12;
-  const iconSize = size === "lg" ? 14 : 12;
+  const padX = size === "lg" ? 12 : size === "xs" ? 6 : 8;
+  const padY = size === "lg" ? 7 : size === "xs" ? 3 : 5;
+  const fontSize = size === "lg" ? 13 : size === "xs" ? 11 : 12;
+  const iconSize = size === "lg" ? 14 : size === "xs" ? 11 : 12;
+  const gap = size === "xs" ? 3 : 5;
+  const radius = size === "xs" ? 7 : 9;
+  const innerRadius = size === "xs" ? 5 : 7;
   const pushBtnRef = React.useRef(null);
   const booBtnRef = React.useRef(null);
   const [hover, setHover] = React.useState(null); // null | "push" | "boo"
@@ -214,7 +218,7 @@ function VotePair({ value, count, onPush, onBoo, t, size = "sm", voterSeed = "x"
   return (
     <div style={{
       display: "inline-flex", padding: 2, gap: 2, position: "relative",
-      background: t.surface, border: `1px solid ${t.border}`, borderRadius: 9,
+      background: t.surface, border: `1px solid ${t.border}`, borderRadius: radius,
     }}>
       <button ref={pushBtnRef} onClick={onPush}
         onMouseEnter={e => { if (!isPush) e.currentTarget.style.background = t.bgSubtle; open("push", e.currentTarget); }}
@@ -224,8 +228,8 @@ function VotePair({ value, count, onPush, onBoo, t, size = "sm", voterSeed = "x"
         title=""
         aria-label={`推 (${count.push} 人)`}
         style={{
-          display: "inline-flex", alignItems: "center", gap: 5,
-          padding: `${padY}px ${padX}px`, borderRadius: 7, border: 0, cursor: "pointer",
+          display: "inline-flex", alignItems: "center", gap,
+          padding: `${padY}px ${padX}px`, borderRadius: innerRadius, border: 0, cursor: "pointer",
           background: isPush ? t.pushBg : "transparent",
           color: isPush ? t.pushFg : t.textMuted,
           fontFamily: t.fontMono, fontWeight: 700, fontSize,
@@ -242,8 +246,8 @@ function VotePair({ value, count, onPush, onBoo, t, size = "sm", voterSeed = "x"
         title=""
         aria-label={`噓 (${count.boo} 人)`}
         style={{
-          display: "inline-flex", alignItems: "center", gap: 5,
-          padding: `${padY}px ${padX}px`, borderRadius: 7, border: 0, cursor: "pointer",
+          display: "inline-flex", alignItems: "center", gap,
+          padding: `${padY}px ${padX}px`, borderRadius: innerRadius, border: 0, cursor: "pointer",
           background: isBoo ? t.booBg : "transparent",
           color: isBoo ? t.booFg : t.textMuted,
           fontFamily: t.fontMono, fontWeight: 700, fontSize,
@@ -325,36 +329,38 @@ function EditHistoryPanel({ history, t, onClose }) {
 
 function PushCard({ p, t, depth = 0, kids = [], childMap, layout, dense, onReply, onEdit, onVote, votes, currentUser }) {
   const visualDepth = Math.min(depth, 3);
-  const indent = visualDepth * (layout === "messaging" ? 28 : 22);
+  const indent = visualDepth * (layout === "messaging" ? 24 : 18);
   const isEdit = p.type === "edit";
   const isOP = p.isOP;
-  const padX = dense ? 12 : 14;
-  const padY = dense ? 10 : 12;
+  const padX = dense ? 10 : 12;
+  const padY = dense ? 6 : 8;
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const v = votes[p.id] ?? { value: 0, push: 0, boo: 0 };
   const wasEdited = p.history && p.history.length > 1;
   const canEdit = currentUser && p.author === currentUser && p.type !== "edit";
 
-  const ActionRow = () => (
+  // Compact action cluster — sits on right column under the timestamp
+  const ActionCluster = () => (
     !isEdit && (
       <div style={{
-        paddingLeft: layout === "messaging" ? 0 : 32,
-        marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap",
+        display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap",
+        justifyContent: "flex-end",
       }}>
         <VotePair value={v.value} count={v} voterSeed={p.id}
           onPush={() => onVote(p.id, v.value === 1 ? 0 : 1)}
-          onBoo={() => onVote(p.id, v.value === -1 ? 0 : -1)} t={t} />
-        <button onClick={() => onReply(p)} style={ghostBtn(t)}>
-          <Icon.Reply s={12} /> 回覆
+          onBoo={() => onVote(p.id, v.value === -1 ? 0 : -1)} t={t} size="xs" />
+        <button onClick={() => onReply(p)} style={iconBtn(t)} title="回覆" aria-label="回覆">
+          <Icon.Reply s={12} />
         </button>
         {canEdit && (
-          <button onClick={() => onEdit(p)} style={ghostBtn(t)} title="編輯回文">
-            <PencilIcon /> 編輯
+          <button onClick={() => onEdit(p)} style={iconBtn(t)} title="編輯回文" aria-label="編輯">
+            <PencilIcon />
           </button>
         )}
         {wasEdited && (
-          <button onClick={() => setHistoryOpen(o => !o)} style={ghostBtn(t, historyOpen)}>
-            <HistoryIcon /> {historyOpen ? "收起歷史" : `編輯歷史 (${p.history.length})`}
+          <button onClick={() => setHistoryOpen(o => !o)} style={iconBtn(t, historyOpen)}
+            title={historyOpen ? "收起歷史" : `編輯歷史 (${p.history.length})`}>
+            <HistoryIcon />
           </button>
         )}
       </div>
@@ -364,81 +370,101 @@ function PushCard({ p, t, depth = 0, kids = [], childMap, layout, dense, onReply
   if (layout === "messaging") {
     return (
       <div style={{ marginLeft: indent, position: "relative" }}>
-        {depth > 0 && <div style={{ position: "absolute", left: -14, top: 0, bottom: 0, width: 2, background: t.border, borderRadius: 2 }} />}
-        <div style={{ display: "flex", gap: 12, padding: `${padY}px 0`, alignItems: "flex-start" }}>
-          <Monogram name={p.author} size={32} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
-              <span style={{ fontWeight: 700, fontSize: 13.5, color: t.text }}>{p.author}</span>
-              {isOP && <Chip t={t} soft color={{ fg: t.opFg, bg: t.opBg }}>OP</Chip>}
-              <PushBadge type={p.type} t={t} />
-              {wasEdited && <Chip t={t} soft color={{ fg: t.editFg, bg: t.accentSoft }}>已編輯</Chip>}
-              {p.score !== 0 && (
-                <span style={{ fontSize: 11, color: p.score > 0 ? t.pushFg : t.booFg, fontFamily: t.fontMono, fontWeight: 600 }}>
-                  {p.score > 0 ? "+" : ""}{p.score}
+        {depth > 0 && <div style={{ position: "absolute", left: -12, top: 0, bottom: 0, width: 2, background: t.border, borderRadius: 2 }} />}
+        <div style={{ display: "flex", gap: 10, padding: `${padY}px 0`, alignItems: "flex-start" }}>
+          <Monogram name={p.author} size={28} />
+          <div style={{ flex: 1, minWidth: 0, display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 2 }}>
+                <span style={{ fontWeight: 700, fontSize: 13, color: t.text }}>{p.author}</span>
+                {isOP && <Chip t={t} soft color={{ fg: t.opFg, bg: t.opBg }}>OP</Chip>}
+                <PushBadge type={p.type} t={t} />
+                {wasEdited && <Chip t={t} soft color={{ fg: t.editFg, bg: t.accentSoft }}>已編輯</Chip>}
+                {p.score !== 0 && (
+                  <span style={{ fontSize: 11, color: p.score > 0 ? t.pushFg : t.booFg, fontFamily: t.fontMono, fontWeight: 600 }}>
+                    {p.score > 0 ? "+" : ""}{p.score}
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 13.5, lineHeight: 1.5, color: isEdit ? t.editFg : t.text, fontStyle: isEdit ? "italic" : "normal", wordBreak: "break-word" }}>
+                {stripReplyPrefix(p.content)}
+              </div>
+            </div>
+            {!isEdit && (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
+                <span style={{ fontFamily: t.fontMono, fontSize: 10.5, color: t.textDim, whiteSpace: "nowrap" }}>
+                  {p.time}{p.ip ? ` · ${p.ip}` : ""}
                 </span>
-              )}
-              <span style={{ fontFamily: t.fontMono, fontSize: 11, color: t.textDim, marginLeft: "auto" }}>{p.time} · {p.ip}</span>
-            </div>
-            <div style={{ fontSize: 14, lineHeight: 1.6, color: isEdit ? t.editFg : t.text, fontStyle: isEdit ? "italic" : "normal", wordBreak: "break-word" }}>
-              {stripReplyPrefix(p.content)}
-            </div>
-            <ActionRow />
-            {historyOpen && wasEdited && <EditHistoryPanel history={p.history} t={t} onClose={() => setHistoryOpen(false)} />}
-            {kids.length > 0 && (
-              <div style={{ marginTop: 6 }}>
-                {kids.map(k => (
-                  <PushCard key={k.id} p={k} t={t} depth={depth + 1}
-                    kids={childMap.get(k.id) ?? []} childMap={childMap} layout={layout} dense={dense}
-                    onReply={onReply} onEdit={onEdit} onVote={onVote} votes={votes} currentUser={currentUser} />
-                ))}
+                <ActionCluster />
               </div>
             )}
           </div>
         </div>
+        {historyOpen && wasEdited && <EditHistoryPanel history={p.history} t={t} onClose={() => setHistoryOpen(false)} />}
+        {kids.length > 0 && (
+          <div>
+            {kids.map(k => (
+              <PushCard key={k.id} p={k} t={t} depth={depth + 1}
+                kids={childMap.get(k.id) ?? []} childMap={childMap} layout={layout} dense={dense}
+                onReply={onReply} onEdit={onEdit} onVote={onVote} votes={votes} currentUser={currentUser} />
+            ))}
+          </div>
+        )}
       </div>
     );
   }
 
-  // threaded (default)
+  // threaded (default) — left: author + content, right: time + actions
   return (
     <div style={{ marginLeft: indent, position: "relative" }}>
-      {depth > 0 && <div style={{ position: "absolute", left: -14, top: 16, bottom: 8, width: 2, background: t.border, borderRadius: 2 }} />}
+      {depth > 0 && <div style={{ position: "absolute", left: -10, top: 12, bottom: 6, width: 2, background: t.border, borderRadius: 2 }} />}
       <div style={{
         background: depth === 0 ? t.surface : t.surface2,
         border: `1px solid ${isEdit ? t.accentBorder : t.border}`,
-        borderRadius: 12, padding: `${padY}px ${padX}px`, marginBottom: 8,
+        borderRadius: 10, padding: `${padY}px ${padX}px`, marginBottom: 4,
+        display: "flex", gap: 10, alignItems: "flex-start",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-          <Monogram name={p.author} size={24} />
-          <span style={{ fontWeight: 700, fontSize: 13, color: t.text }}>{p.author}</span>
-          {isOP && <Chip t={t} soft color={{ fg: t.opFg, bg: t.opBg }}>OP · 原PO</Chip>}
-          {isEdit && <Chip t={t} soft color={{ fg: t.editFg, bg: t.accentSoft }}>{p.marker || "作者編輯"}</Chip>}
-          {wasEdited && !isEdit && <Chip t={t} soft color={{ fg: t.editFg, bg: t.accentSoft }}>已編輯</Chip>}
-          <PushBadge type={p.type} t={t} />
-          {!isEdit && p.score !== 0 && (
-            <Chip t={t} soft color={{
-              fg: p.score > 0 ? t.pushFg : t.booFg,
-              bg: p.score > 0 ? t.pushBg : t.booBg,
-            }}>{p.score > 0 ? "推" : "噓"} {p.score > 0 ? "+" : ""}{p.score}</Chip>
-          )}
-          <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 8, fontFamily: t.fontMono, fontSize: 11, color: t.textDim }}>
+        {/* Main column */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3, flexWrap: "wrap" }}>
+            <Monogram name={p.author} size={20} />
+            <span style={{ fontWeight: 700, fontSize: 12.5, color: t.text }}>{p.author}</span>
+            {isOP && <Chip t={t} soft color={{ fg: t.opFg, bg: t.opBg }}>OP</Chip>}
+            {isEdit && <Chip t={t} soft color={{ fg: t.editFg, bg: t.accentSoft }}>{p.marker || "作者編輯"}</Chip>}
+            {wasEdited && !isEdit && <Chip t={t} soft color={{ fg: t.editFg, bg: t.accentSoft }}>已編輯</Chip>}
+            <PushBadge type={p.type} t={t} />
+            {!isEdit && p.score !== 0 && (
+              <Chip t={t} soft color={{
+                fg: p.score > 0 ? t.pushFg : t.booFg,
+                bg: p.score > 0 ? t.pushBg : t.booBg,
+              }}>{p.score > 0 ? "推" : "噓"} {p.score > 0 ? "+" : ""}{p.score}</Chip>
+            )}
             {!isEdit && <FloorChip n={p.floor} t={t} />}
-            <span>{p.time}</span>
-            {p.ip && <span style={{ opacity: 0.7 }}>·  {p.ip}</span>}
+          </div>
+          <div style={{
+            fontSize: 13.5, lineHeight: 1.5, color: isEdit ? t.editFg : t.text,
+            paddingLeft: 26, fontStyle: isEdit ? "italic" : "normal", wordBreak: "break-word",
+          }}>
+            {stripReplyPrefix(p.content)}
+          </div>
+        </div>
+        {/* Right meta column: time + actions */}
+        {!isEdit ? (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0, paddingTop: 1 }}>
+            <span style={{ fontFamily: t.fontMono, fontSize: 10.5, color: t.textDim, whiteSpace: "nowrap" }}>
+              {p.time}{p.ip ? ` · ${p.ip}` : ""}
+            </span>
+            <ActionCluster />
+          </div>
+        ) : (
+          <span style={{ fontFamily: t.fontMono, fontSize: 10.5, color: t.textDim, whiteSpace: "nowrap", flexShrink: 0 }}>
+            {p.time}
           </span>
-        </div>
-        <div style={{
-          fontSize: 14, lineHeight: 1.65, color: isEdit ? t.editFg : t.text,
-          paddingLeft: 32, fontStyle: isEdit ? "italic" : "normal", wordBreak: "break-word",
-        }}>
-          {stripReplyPrefix(p.content)}
-        </div>
-        <ActionRow />
-        {historyOpen && wasEdited && <EditHistoryPanel history={p.history} t={t} onClose={() => setHistoryOpen(false)} />}
+        )}
       </div>
+      {historyOpen && wasEdited && <EditHistoryPanel history={p.history} t={t} onClose={() => setHistoryOpen(false)} />}
       {kids.length > 0 && (
-        <div style={{ marginLeft: 12, marginBottom: 8 }}>
+        <div style={{ marginLeft: 10, marginBottom: 4 }}>
           {kids.map(k => (
             <PushCard key={k.id} p={k} t={t} depth={depth + 1}
               kids={childMap.get(k.id) ?? []} childMap={childMap} layout={layout} dense={dense}
@@ -458,6 +484,17 @@ function ghostBtn(t, active = false) {
     color: active ? t.accentInk : t.textMuted,
     fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
     transition: "background 100ms",
+  };
+}
+function iconBtn(t, active = false) {
+  return {
+    display: "inline-flex", alignItems: "center", justifyContent: "center",
+    width: 24, height: 24, padding: 0, borderRadius: 6,
+    border: `1px solid ${active ? t.accentBorder : t.border}`,
+    background: active ? t.accentSoft : t.surface,
+    color: active ? t.accentInk : t.textMuted,
+    cursor: "pointer", fontFamily: "inherit",
+    transition: "background 100ms, color 100ms",
   };
 }
 function PencilIcon() { return (<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>); }

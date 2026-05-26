@@ -170,6 +170,23 @@ function ghostBtnStyle(active = false): React.CSSProperties {
   };
 }
 
+function iconBtnStyle(active = false): React.CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 26,
+    height: 26,
+    padding: 0,
+    borderRadius: 7,
+    border: `1px solid ${active ? "var(--accent-border)" : "var(--border)"}`,
+    background: active ? "var(--accent-soft)" : "transparent",
+    color: active ? "var(--accent-ink)" : "var(--text-muted)",
+    cursor: "pointer",
+    fontFamily: "inherit",
+  };
+}
+
 // ─── EditHistoryPanel ─────────────────────────────────────────────────────────
 
 function EditHistoryPanel({
@@ -331,6 +348,65 @@ function PushItem({
   const scoreLabel = push.score > 0 ? `推 +${scoreAbs}` : `噓 -${scoreAbs}`;
   const scoreFg = push.score > 0 ? "var(--push-fg)" : "var(--boo-fg)";
   const scoreBg = push.score > 0 ? "var(--push-bg)" : "var(--boo-bg)";
+  const canEdit = Boolean(onEdit && currentUser && push.author === currentUser && !isEditNode);
+
+  const actionCluster = !isEditNode && (
+    <div style={{
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "flex-end",
+      gap: 4,
+      flexWrap: "wrap",
+    }}>
+      {onVote && (
+        <VotePair
+          value={displayVoteState.value}
+          count={displayVoteState.count}
+          voters={{ push: push.pushVoters, boo: push.booVoters }}
+          myVote={displayVoteState.value}
+          onPush={() => onVote(1)}
+          onBoo={() => onVote(-1)}
+          size="xs"
+        />
+      )}
+
+      {onReply && (
+        <button
+          type="button"
+          onClick={() => onReply(push)}
+          aria-label="回覆"
+          title="回覆"
+          style={iconBtnStyle()}
+        >
+          <ReplyIcon />
+        </button>
+      )}
+
+      {canEdit && (
+        <button
+          type="button"
+          onClick={() => onEdit?.(push)}
+          aria-label="編輯"
+          title="編輯"
+          style={iconBtnStyle()}
+        >
+          <PencilIcon />
+        </button>
+      )}
+
+      {editData && editData.history.length > 1 && (
+        <button
+          type="button"
+          onClick={toggleHistory}
+          aria-label={showHistory ? "收起歷史" : "編輯歷史"}
+          title={showHistory ? "收起歷史" : "編輯歷史"}
+          style={iconBtnStyle(showHistory)}
+        >
+          <HistoryIcon />
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <div style={{ marginLeft: indent, position: "relative" }}>
@@ -347,175 +423,128 @@ function PushItem({
 
       <div style={{
         border: cardBorder,
-        borderRadius: 12,
-        padding: 14,
-        marginBottom: 8,
+        borderRadius: 10,
+        padding: "8px 10px",
+        marginBottom: 4,
         background: cardBackground,
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 10,
+        flexWrap: "wrap",
       }}>
-        {/* Card header */}
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          marginBottom: 8,
-          flexWrap: "wrap",
-        }}>
-          <Monogram name={push.author} size={24} />
-
-          <span style={{ fontWeight: 700, fontSize: 13, color: "var(--text)" }}>
-            {push.author}
-          </span>
-
-          {push.isOP && (
-            <span style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color: "var(--op-fg)",
-              background: "var(--op-bg)",
-              borderRadius: 5,
-              padding: "1px 6px",
-            }}>
-              OP · 原PO
-            </span>
-          )}
-
-          {isEditNode && push.marker && (
-            <span style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color: "var(--edit-fg)",
-              background: "var(--accent-soft)",
-              borderRadius: 5,
-              padding: "1px 6px",
-            }}>
-              {push.marker.trim()}
-            </span>
-          )}
-
-          <PushBadge type={push.type} />
-
-          {push.score !== 0 && !isEditNode && (
-            <span style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color: scoreFg,
-              background: scoreBg,
-              borderRadius: 5,
-              padding: "1px 6px",
-            }}
-              title="此回文收到的巢狀推噓分數"
-            >
-              {scoreLabel}
-            </span>
-          )}
-
-          {/* Right side: floor chip, time, ip */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Card header */}
           <div style={{
-            marginLeft: "auto",
             display: "flex",
             alignItems: "center",
-            gap: 5,
+            gap: 6,
+            marginBottom: 3,
             flexWrap: "wrap",
           }}>
+            <Monogram name={push.author} size={20} />
+
+            <span style={{ fontWeight: 700, fontSize: 12.5, color: "var(--text)" }}>
+              {push.author}
+            </span>
+
+            {push.isOP && (
+              <span style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: "var(--op-fg)",
+                background: "var(--op-bg)",
+                borderRadius: 5,
+                padding: "1px 6px",
+              }}>
+                OP · 原PO
+              </span>
+            )}
+
+            {isEditNode && push.marker && (
+              <span style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: "var(--edit-fg)",
+                background: "var(--accent-soft)",
+                borderRadius: 5,
+                padding: "1px 6px",
+              }}>
+                {push.marker.trim()}
+              </span>
+            )}
+
+            <PushBadge type={push.type} />
+
+            {push.score !== 0 && !isEditNode && (
+              <span style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: scoreFg,
+                background: scoreBg,
+                borderRadius: 5,
+                padding: "1px 6px",
+              }}
+                title="此回文收到的巢狀推噓分數"
+              >
+                {scoreLabel}
+              </span>
+            )}
+
             {push.floorNumber > 0 && (
               <FloorChip floor={push.floorNumber} />
             )}
-            {push.time && (
-              <span style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: 11,
-                color: "var(--text-dim)",
-              }}>
-                {push.time}
-              </span>
-            )}
-            {ipLabel && (
-              <span style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: 11,
-                color: "var(--text-dim)",
-              }}>
-                {ipLabel}
-              </span>
-            )}
           </div>
-        </div>
 
-        {/* Content */}
-        <div style={{
-          fontSize: 14,
-          lineHeight: 1.65,
-          color: isEditNode ? "var(--edit-fg)" : "var(--text)",
-          paddingLeft: 32,
-          fontStyle: isEditNode ? "italic" : undefined,
-        }}>
-          <RichContent text={push.content} variant="inline" />
-        </div>
-
-        {/* Action row */}
-        {!isEditNode && (
+          {/* Content */}
           <div style={{
-            paddingLeft: 32,
-            marginTop: 8,
-            display: "flex",
-            gap: 8,
-            alignItems: "center",
-            flexWrap: "wrap",
+            fontSize: 13.5,
+            lineHeight: 1.5,
+            color: isEditNode ? "var(--edit-fg)" : "var(--text)",
+            paddingLeft: 26,
+            fontStyle: isEditNode ? "italic" : undefined,
+            wordBreak: "break-word",
           }}>
-            {onVote && (
-              <VotePair
-                value={displayVoteState.value}
-                count={displayVoteState.count}
-                voters={{ push: push.pushVoters, boo: push.booVoters }}
-                myVote={displayVoteState.value}
-                onPush={() => onVote(1)}
-                onBoo={() => onVote(-1)}
-                size="sm"
-              />
-            )}
-
-            {onReply && (
-              <button
-                type="button"
-                onClick={() => onReply(push)}
-                style={ghostBtnStyle()}
-              >
-                <ReplyIcon />
-                回覆
-              </button>
-            )}
-
-            {onEdit && currentUser && push.author === currentUser && push.type !== "edit" && (
-              <button
-                type="button"
-                onClick={() => onEdit(push)}
-                style={ghostBtnStyle()}
-              >
-                <PencilIcon />
-                編輯
-              </button>
-            )}
-
-            {editData && editData.history.length > 1 && (
-              <button
-                type="button"
-                onClick={toggleHistory}
-                style={ghostBtnStyle(showHistory)}
-              >
-                <HistoryIcon />
-                {showHistory ? "收起歷史" : "編輯歷史"}
-              </button>
-            )}
+            <RichContent text={push.content} variant="inline" />
           </div>
-        )}
+        </div>
+
+        <div style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-end",
+          gap: 4,
+          flexShrink: 0,
+          paddingTop: 1,
+          maxWidth: 220,
+        }}>
+          {(push.time || ipLabel) && (
+            <span style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: 10.5,
+              color: "var(--text-dim)",
+              whiteSpace: "nowrap",
+            }}>
+              {[push.time, ipLabel].filter(Boolean).join(" · ")}
+            </span>
+          )}
+          {actionCluster}
+        </div>
 
         {showHistory && editData && (
-          <EditHistoryPanel editData={editData} onClose={toggleHistory} />
+          <div style={{ flexBasis: "100%" }}>
+            <EditHistoryPanel editData={editData} onClose={toggleHistory} />
+          </div>
         )}
 
         {/* Nested children */}
         {children.length > 0 && (
-          <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
+          <div style={{
+            flexBasis: "100%",
+            marginTop: 8,
+            marginLeft: 10,
+            paddingTop: 8,
+            borderTop: "1px solid var(--border)",
+          }}>
             {children.map((child) => (
               <PushItem
                 key={child.id}

@@ -80,13 +80,13 @@ describe("BoardInput", () => {
     );
 
     expect(screen.getByText("Fav1")).toBeTruthy();
-    expect(screen.getByText("Fav12")).toBeTruthy();
-    expect(screen.queryByText("Fav13")).toBeNull();
+    expect(screen.getByText("Fav6")).toBeTruthy();
+    expect(screen.queryByText("Fav7")).toBeNull();
     expect(screen.getByText(/展開全部 14 個最愛/)).toBeTruthy();
 
     fireEvent.click(screen.getByText(/展開全部 14 個最愛/));
 
-    expect(screen.getByText("Fav13")).toBeTruthy();
+    expect(screen.getByText("Fav7")).toBeTruthy();
     expect(screen.getByText("收起")).toBeTruthy();
   });
 
