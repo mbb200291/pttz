@@ -6,7 +6,8 @@
   並將規則近一步具體化
 - 實作單一個目標的時候，請你把實作的一些坑和一些實作時才會遇到的細節記錄在implementation-notes
 - 完成一次目標的時候，也請更新implementation.md，這個會用更高level去紀錄目前spec.MD中的列像的實作方法
-- 請勿控制git修改行為，例如staging, commit或是reset、rebase、cherry-pick等，你僅允許操作git讀取相關指令
+- 當我請你開始實作一個goal的時候，請你開一個feature分支，並當完成一個段落的修改，請你自行commit。必要時你可以用subagent，使用Worktree同時進行多個branch的開發。當完成該branch開發，在沒有我的指示下，切勿將feature branch自行合併回main或是dev這兩個分支。
+- git操作，切勿用commit或是merge或是rebase影響"dev"和"main"這兩個分支，僅允許讀相關的git操作在這兩個分支上。
 - 和我的對話，除了推理過程外，請用正體中文和我對話
 - 程式碼註解請使用英文
 - markdown文件請優先使用正體中文和英文
