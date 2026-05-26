@@ -1,8 +1,6 @@
 import Ptt from "ptt-client";
-import { Board } from "ptt-client/dist/sites/ptt/model";
 import sleep from "sleep-promise";
 import type PttConfig from "ptt-client/dist/config";
-import { substrWidth } from "ptt-client/dist/utils/char";
 import {
   aggregatePushes,
   calcArticleScore,
@@ -48,6 +46,13 @@ export interface PttClientArticleRow {
 }
 
 export interface HotBoardSummary {
+  name: string;
+  title: string;
+  users: string;
+}
+
+interface PttBoardRow {
+  id?: number;
   name: string;
   title: string;
   users: string;
@@ -221,6 +226,7 @@ type BotLike = {
   send: (msg: string) => Promise<boolean>;
   getLines?: () => Promise<string[]>;
   enterBoardByName?: (boardName: string) => Promise<boolean>;
+  enterBoardByOffset?: (offsets?: number[]) => Promise<boolean>;
   enterFavorite?: (offsets?: number[]) => Promise<boolean>;
   enterIndex?: () => Promise<boolean>;
   getArticles: (
@@ -237,7 +243,7 @@ type BotLike = {
     boardname?: string;
     lines?: string[];
   }>;
-  getFavorite?: (offsets?: number | number[]) => Promise<Board[]>;
+  getFavorite?: (offsets?: number | number[]) => Promise<PttBoardRow[]>;
   getLine?: (n: number) => { str?: string };
 };
 
@@ -254,7 +260,10 @@ type ArticleFetchBot = Partial<
 >;
 
 type BoardFetchBot = Partial<
-  Pick<BotLike, "send" | "getLine" | "enterBoardByName" | "enterIndex">
+  Pick<
+    BotLike,
+    "send" | "getLine" | "enterBoardByName" | "enterBoardByOffset" | "enterIndex"
+  >
 >;
 
 type WriteBot = BoardFetchBot;
@@ -680,8 +689,8 @@ class PttClientAdapter implements PttAdapter {
   async listHotBoards(): Promise<HotBoardSummary[]> {
     return this.runSerial(async () => {
       await this.waitUntilLoggedIn();
-      const boards = await Board.select(this.bot).where("entry", "hot").get();
-      return boards.map(mapHotBoardRow).filter((board) => board.name !== "");
+      await leaveArticleReaderIfNeeded(this.bot);
+      return fetchHotBoardsFromBotManually(this.bot);
     });
   }
 
@@ -935,13 +944,132 @@ function dropDisconnectedBoardTail(rows: ArticleSummary[]): ArticleSummary[] {
 }
 
 export function mapHotBoardRow(
-  board: Pick<Board, "name" | "title" | "users">,
+  board: Pick<PttBoardRow, "name" | "title" | "users">,
 ): HotBoardSummary {
+  const name = board.name.trim();
+  if (!isLikelyBoardName(name)) {
+    return {
+      name: "",
+      title: "",
+      users: "",
+    };
+  }
+
   return {
-    name: board.name.trim(),
+    name,
     title: board.title.trim(),
     users: board.users.trim(),
   };
+}
+
+function isLikelyBoardName(name: string): boolean {
+  return /^[A-Za-z][A-Za-z0-9_.+-]{1,31}$/.test(name);
+}
+
+function dbcsWidth(str: string): number {
+  return str.split("").reduce((sum, char) => {
+    return sum + (char.charCodeAt(0) > 255 ? 2 : 1);
+  }, 0);
+}
+
+function indexOfDbcsWidth(str: string, width: number): number {
+  for (let i = 0; i <= str.length; i += 1) {
+    if (dbcsWidth(str.substring(0, i)) > width) return i - 1;
+  }
+
+  return str.length;
+}
+
+function substrDbcsWidth(str: string, startWidth: number, width?: number): string {
+  const ignoreWidth = typeof width === "undefined";
+  let length = width;
+  let start = indexOfDbcsWidth(str, startWidth);
+  let prefixSpace = 0;
+  let suffixSpace = 0;
+
+  if (dbcsWidth(str.substring(0, start)) < startWidth) {
+    start += 1;
+    prefixSpace = Math.max(dbcsWidth(str.substring(0, start)) - startWidth, 0);
+  }
+
+  if (!ignoreWidth) {
+    length = indexOfDbcsWidth(str.substring(start), width - prefixSpace);
+    suffixSpace =
+      Math.min(width, dbcsWidth(str.substring(start))) -
+      (prefixSpace + dbcsWidth(str.substring(start, start + length)));
+  }
+
+  const substr = ignoreWidth
+    ? str.substring(start)
+    : str.substring(start, start + (length ?? 0));
+
+  return `${" ".repeat(prefixSpace)}${substr}${" ".repeat(suffixSpace)}`;
+}
+
+export function parseBoardRowFromScreenLine(line: string): PttBoardRow | null {
+  const id = Number(substrDbcsWidth(line, 3, 4).trim());
+  const name = substrDbcsWidth(line, 10, 12).trim();
+  const flag = substrDbcsWidth(line, 28, 2).trim();
+
+  if (!Number.isFinite(id) || !isLikelyBoardName(name)) return null;
+  if (flag !== "◎" && flag !== "Σ") return null;
+
+  return {
+    id,
+    name,
+    title: substrDbcsWidth(line, 30, 31).replace(/\s+$/, ""),
+    users: substrDbcsWidth(line, 62, 5).trim(),
+  };
+}
+
+export async function fetchHotBoardsFromBotManually(
+  bot: BoardFetchBot,
+): Promise<HotBoardSummary[]> {
+  if (!bot.enterBoardByOffset || !bot.getLine) return [];
+
+  const found = await bot.enterBoardByOffset([-1]);
+  if (!found) return [];
+
+  const boards: HotBoardSummary[] = [];
+  const seen = new Set<string>();
+  let expectedId = 1;
+
+  try {
+    for (let page = 0; page < 20; page += 1) {
+      let stopLoop = false;
+      let pageRows = 0;
+
+      for (let rowIndex = 3; rowIndex < 23; rowIndex += 1) {
+        const line = bot.getLine(rowIndex)?.str ?? "";
+        if (line.trim() === "") {
+          stopLoop = true;
+          break;
+        }
+
+        const row = parseBoardRowFromScreenLine(line);
+        if (!row || row.id !== expectedId) {
+          stopLoop = true;
+          break;
+        }
+
+        const board = mapHotBoardRow(row);
+        if (board.name && !seen.has(board.name.toLowerCase())) {
+          boards.push(board);
+          seen.add(board.name.toLowerCase());
+        }
+        expectedId += 1;
+        pageRows += 1;
+      }
+
+      if (stopLoop || pageRows === 0 || !bot.send) break;
+      await bot.send("\x1b[6~");
+      await sleep(80);
+    }
+  } finally {
+    await bot.enterIndex?.();
+  }
+
+  return boards;
 }
 
 export function parseFavoriteBoardNamesFromScreen(screen: string): string[] {
@@ -974,16 +1102,6 @@ export async function fetchFavoriteBoardNamesFromBot(
   await leaveArticleReaderIfNeeded(bot);
   await bot.enterIndex?.();
 
-  if (bot.getFavorite) {
-    try {
-      const boards = await bot.getFavorite();
-      const names = boards.map((board) => board.name.trim()).filter(Boolean);
-      if (names.length > 0) return names;
-    } catch {
-      // ptt-client can fail parsing some favorite rows; read the terminal view below.
-    }
-  }
-
   if (!bot.enterFavorite || !bot.getLine) return [];
 
   const entered = await bot.enterFavorite([]);
@@ -995,13 +1113,15 @@ export async function fetchFavoriteBoardNamesFromBot(
     let screen = readVisibleScreen(bot);
 
     for (let pageIndex = 0; pageIndex < 20; pageIndex += 1) {
-      for (const name of parseFavoriteBoardNamesFromScreen(screen)) {
+      const pageNames = parseFavoriteBoardNamesFromScreen(screen);
+      for (const name of pageNames) {
         const key = name.toLowerCase();
         if (seen.has(key)) continue;
         seen.add(key);
         names.push(name);
       }
 
+      if (pageNames.length < 20) break;
       if (!bot.send) break;
 
       await bot.send(PTT_KEY_PGDOWN);
@@ -1113,12 +1233,12 @@ export function parsePartialBoardScreen(screen: string): ArticleSummary[] {
       continue;
     }
     if (line.length < 32) continue;
-    const indexRaw = substrWidth("dbcs", line, 1, 7).trim();
-    const pushCount = substrWidth("dbcs", line, 9, 2).trim();
-    const date = substrWidth("dbcs", line, 11, 5).trim();
-    const author = substrWidth("dbcs", line, 17, 12).trim();
-    const rawStatus = substrWidth("dbcs", line, 30, 2).trim();
-    const titleCell = substrWidth("dbcs", line, 32).trim();
+    const indexRaw = substrDbcsWidth(line, 1, 7).trim();
+    const pushCount = substrDbcsWidth(line, 9, 2).trim();
+    const date = substrDbcsWidth(line, 11, 5).trim();
+    const author = substrDbcsWidth(line, 17, 12).trim();
+    const rawStatus = substrDbcsWidth(line, 30, 2).trim();
+    const titleCell = substrDbcsWidth(line, 32).trim();
     const title =
       rawStatus === "R:" && titleCell ? `Re: ${titleCell}` : titleCell;
     const index = Number(indexRaw.replace(/[^\d]/g, ""));

@@ -259,6 +259,22 @@ describe("ptt adapter module", () => {
     });
   });
 
+  it("drops article-list rows that were misread as hot board rows", async () => {
+    const mod = await import("../adapter");
+
+    expect(
+      mod.mapHotBoardRow({
+        name: "6 2/11 Levi",
+        title: "",
+        users: "HOT",
+      }),
+    ).toEqual({
+      name: "",
+      title: "",
+      users: "",
+    });
+  });
+
   it("parses category options from the real post prompt screen", async () => {
     const mod = await import("../adapter");
 
@@ -1044,7 +1060,7 @@ describe("ptt adapter module", () => {
     ]);
   });
 
-  it("falls back to manual favorite parsing when ptt-client getFavorite throws", async () => {
+  it("reads favorites from the terminal screen instead of ptt-client getFavorite", async () => {
     const mod = await import("../adapter");
     const calls: string[] = [];
     const rows = [
@@ -1057,7 +1073,8 @@ describe("ptt adapter module", () => {
 
     const bot = {
       async getFavorite() {
-        throw new RangeError("Invalid count value: -1");
+        calls.push("getFavorite");
+        return [{ name: "Brother" }] as never;
       },
       async enterFavorite() {
         calls.push("enterFavorite");
@@ -1082,21 +1099,30 @@ describe("ptt adapter module", () => {
   it("resets to the PTT index before reading favorites", async () => {
     const mod = await import("../adapter");
     const calls: string[] = [];
+    const rows = [
+      "【看板列表】                     批踢踢實業坊                     我的最愛",
+      "",
+      "",
+      "●    1 ˇBaseball     棒球 ◎[棒球] 一馬首轟不一樣富貴邦MFGA   爆!Matthew10244",
+    ];
     const bot = {
-      async getFavorite() {
-        calls.push("getFavorite");
-        return [{ name: "Baseball" }] as never;
-      },
       async enterIndex() {
         calls.push("enterIndex");
         return true;
+      },
+      async enterFavorite() {
+        calls.push("enterFavorite");
+        return true;
+      },
+      getLine(index: number) {
+        return { str: rows[index] ?? "" };
       },
     };
 
     await expect(mod.fetchFavoriteBoardNamesFromBot(bot)).resolves.toEqual([
       "Baseball",
     ]);
-    expect(calls).toEqual(["enterIndex", "getFavorite"]);
+    expect(calls).toEqual(["enterIndex", "enterFavorite", "enterIndex"]);
   });
 
   it("leaves an article reader before reading favorites", async () => {
@@ -1104,13 +1130,13 @@ describe("ptt adapter module", () => {
     const calls: string[] = [];
     let inArticle = true;
     const bot = {
-      async getFavorite() {
-        calls.push("getFavorite");
-        return [{ name: "Baseball" }] as never;
-      },
       async send(command: string) {
         calls.push(command);
         if (command === "q") inArticle = false;
+        return true;
+      },
+      async enterFavorite() {
+        calls.push("enterFavorite");
         return true;
       },
       async enterIndex() {
@@ -1118,7 +1144,15 @@ describe("ptt adapter module", () => {
         return true;
       },
       getLine(index: number) {
-        if (!inArticle) return { str: index === 0 ? "【主功能表】 批踢踢實業坊" : "" };
+        if (!inArticle) {
+          const rows = [
+            "【看板列表】                     批踢踢實業坊                     我的最愛",
+            "",
+            "",
+            "●    1 ˇBaseball     棒球 ◎[棒球] 一馬首轟不一樣富貴邦MFGA   爆!Matthew10244",
+          ];
+          return { str: rows[index] ?? "" };
+        }
         const rows = [
           " 標題  [公告] 申請組務時 請用預設的分類",
           " 時間  Thu Jan 26 04:21:47 2006",
@@ -1133,7 +1167,7 @@ describe("ptt adapter module", () => {
     await expect(mod.fetchFavoriteBoardNamesFromBot(bot)).resolves.toEqual([
       "Baseball",
     ]);
-    expect(calls).toEqual(["q", "enterIndex", "getFavorite"]);
+    expect(calls).toEqual(["q", "enterIndex", "enterFavorite", "enterIndex"]);
   });
 
   it("continues manual favorite parsing across multiple favorite pages", async () => {
@@ -1147,6 +1181,24 @@ describe("ptt adapter module", () => {
         "   編號   看  板       類別   中   文   敘   述               人氣 板   主",
         "●    1 ˇBaseball     棒球 ◎[棒球] 一馬首轟不一樣富貴邦MFGA   爆!Matthew10244",
         "     2 ˇStock        學術 ◎[股票] ＊溫聲股票板＊             爆!rayccccc/Pau",
+        "     3 ˇBoard03      分類 ◎[測試] 第三個看板                   1 admin",
+        "     4 ˇBoard04      分類 ◎[測試] 第四個看板                   1 admin",
+        "     5 ˇBoard05      分類 ◎[測試] 第五個看板                   1 admin",
+        "     6 ˇBoard06      分類 ◎[測試] 第六個看板                   1 admin",
+        "     7 ˇBoard07      分類 ◎[測試] 第七個看板                   1 admin",
+        "     8 ˇBoard08      分類 ◎[測試] 第八個看板                   1 admin",
+        "     9 ˇBoard09      分類 ◎[測試] 第九個看板                   1 admin",
+        "    10 ˇBoard10      分類 ◎[測試] 第十個看板                   1 admin",
+        "    11 ˇBoard11      分類 ◎[測試] 第十一個看板                 1 admin",
+        "    12 ˇBoard12      分類 ◎[測試] 第十二個看板                 1 admin",
+        "    13 ˇBoard13      分類 ◎[測試] 第十三個看板                 1 admin",
+        "    14 ˇBoard14      分類 ◎[測試] 第十四個看板                 1 admin",
+        "    15 ˇBoard15      分類 ◎[測試] 第十五個看板                 1 admin",
+        "    16 ˇBoard16      分類 ◎[測試] 第十六個看板                 1 admin",
+        "    17 ˇBoard17      分類 ◎[測試] 第十七個看板                 1 admin",
+        "    18 ˇBoard18      分類 ◎[測試] 第十八個看板                 1 admin",
+        "    19 ˇBoard19      分類 ◎[測試] 第十九個看板                 1 admin",
+        "    20 ˇBoard20      分類 ◎[測試] 第二十個看板                 1 admin",
       ],
       [
         "【看板列表】                     批踢踢實業坊                     我的最愛",
@@ -1182,13 +1234,30 @@ describe("ptt adapter module", () => {
     await expect(mod.fetchFavoriteBoardNamesFromBot(bot)).resolves.toEqual([
       "Baseball",
       "Stock",
+      "Board03",
+      "Board04",
+      "Board05",
+      "Board06",
+      "Board07",
+      "Board08",
+      "Board09",
+      "Board10",
+      "Board11",
+      "Board12",
+      "Board13",
+      "Board14",
+      "Board15",
+      "Board16",
+      "Board17",
+      "Board18",
+      "Board19",
+      "Board20",
       "C_Chat",
       "Test",
     ]);
     expect(calls).toEqual([
       "enterIndex",
       "enterFavorite",
-      "\x1b[6~",
       "\x1b[6~",
       "enterIndex",
     ]);

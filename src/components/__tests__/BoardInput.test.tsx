@@ -1,9 +1,13 @@
 /* @vitest-environment jsdom */
 
-import { describe, expect, it } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { BoardInput } from "../BoardInput";
+
+afterEach(() => {
+  cleanup();
+});
 
 describe("BoardInput", () => {
   it("uses the design-token home surface and product copy", () => {
@@ -60,6 +64,30 @@ describe("BoardInput", () => {
     expect(html).toContain("Stock");
     expect(html).toContain("C_Chat");
     expect(html).toContain("456 在線");
+  });
+
+  it("collapses long favorite board lists behind an expand button", () => {
+    const favoriteBoards = Array.from({ length: 14 }, (_, index) => `Fav${index + 1}`);
+
+    render(
+      <BoardInput
+        pttState="ready"
+        wsStatus="connected"
+        onEnter={() => {}}
+        currentUser="pttzzz"
+        favoriteBoards={favoriteBoards}
+      />,
+    );
+
+    expect(screen.getByText("Fav1")).toBeTruthy();
+    expect(screen.getByText("Fav12")).toBeTruthy();
+    expect(screen.queryByText("Fav13")).toBeNull();
+    expect(screen.getByText(/展開全部 14 個最愛/)).toBeTruthy();
+
+    fireEvent.click(screen.getByText(/展開全部 14 個最愛/));
+
+    expect(screen.getByText("Fav13")).toBeTruthy();
+    expect(screen.getByText("收起")).toBeTruthy();
   });
 
   it("does not replace a loaded empty favorite list with fallback boards", () => {

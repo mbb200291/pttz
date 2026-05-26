@@ -30,6 +30,7 @@ const FAVORITE_FALLBACKS: PopularBoard[] = [
 ];
 
 const POPULAR_INITIAL = 6;
+const FAVORITE_INITIAL = 12;
 
 interface BoardInputProps {
   onEnter: (board: string) => void;
@@ -56,6 +57,7 @@ export function BoardInput({
 }: BoardInputProps) {
   const [input, setInput] = useState("");
   const [popularExpanded, setPopularExpanded] = useState(false);
+  const [favoriteExpanded, setFavoriteExpanded] = useState(false);
   const [favoriteOverrides, setFavoriteOverrides] = useState<Record<string, boolean>>({});
 
   const isConnected = pttState === "ready";
@@ -109,6 +111,13 @@ export function BoardInput({
       };
     });
   }, [boards, favoriteNames]);
+  const displayedFavoriteCards = favoriteExpanded
+    ? favoriteCards
+    : favoriteCards.slice(0, FAVORITE_INITIAL);
+  const hiddenFavoriteCount = Math.max(
+    0,
+    favoriteCards.length - displayedFavoriteCards.length,
+  );
 
   const submitBoard = (board = input.trim()) => {
     const nextBoard = board.trim();
@@ -358,7 +367,7 @@ export function BoardInput({
                 gap: 12,
               }}
             >
-              {favoriteCards.map((board) => (
+              {displayedFavoriteCards.map((board) => (
                 <FavoriteCard
                   key={board.name}
                   board={board}
@@ -368,6 +377,39 @@ export function BoardInput({
                 />
               ))}
             </div>
+            {favoriteCards.length > FAVORITE_INITIAL && (
+              <div style={{ display: "flex", justifyContent: "center", marginTop: 18 }}>
+                <button
+                  type="button"
+                  onClick={() => setFavoriteExpanded((expanded) => !expanded)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "9px 16px",
+                    borderRadius: 10,
+                    background: "var(--surface)",
+                    border: "1px solid var(--border)",
+                    color: "var(--text-muted)",
+                    fontWeight: 600,
+                    fontSize: 13,
+                    cursor: "pointer",
+                    fontFamily: "var(--font)",
+                  }}
+                >
+                  {favoriteExpanded ? (
+                    <>
+                      <ChevronUpIcon /> 收起
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDownIcon /> 展開全部 {favoriteCards.length} 個最愛（再 +
+                      {hiddenFavoriteCount}）
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
           </section>
         )}
 

@@ -556,6 +556,17 @@ export function ArticleList({
     setSearchInput("");
   }
 
+  function handleClearSearchFilter() {
+    if (activeFilter?.type !== "search") return;
+    setActiveFilter(null);
+    setSearchInput("");
+  }
+
+  function handleClearPushFilter() {
+    if (activeFilter?.type !== "push") return;
+    setActiveFilter(null);
+  }
+
   function handleTouchStart(event: TouchEvent<HTMLDivElement>) {
     if (!isAtTopBoundary()) return;
     touchStartYRef.current = event.touches[0]?.clientY ?? null;
@@ -928,6 +939,144 @@ export function ArticleList({
             })}
           </div>
         </div>
+
+        {activeFilter && (
+          <div
+            style={{
+              maxWidth: 1100,
+              margin: "0 auto",
+              padding: "0 24px 14px",
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 800,
+                letterSpacing: "0.06em",
+                color: "var(--text-dim)",
+                textTransform: "uppercase",
+                marginRight: 2,
+              }}
+            >
+              篩選中
+            </span>
+            {activeFilter.type === "search" && (
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "4px 4px 4px 10px",
+                  borderRadius: 999,
+                  background: "var(--accent-soft)",
+                  color: "var(--accent-ink)",
+                  border: "1px solid var(--accent-border)",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  letterSpacing: "-0.005em",
+                }}
+              >
+                <span aria-hidden="true">⌕</span>
+                <span>
+                  關鍵字{" "}
+                  <span style={{ fontFamily: "var(--font-mono)" }}>
+                    「{activeFilter.keyword}」
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={handleClearSearchFilter}
+                  title="清除關鍵字"
+                  style={{
+                    background: "transparent",
+                    border: 0,
+                    color: "inherit",
+                    cursor: "pointer",
+                    padding: "3px 5px",
+                    borderRadius: 999,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    opacity: 0.75,
+                    fontFamily: "var(--font)",
+                    fontSize: 12,
+                  }}
+                >
+                  ×
+                </button>
+              </span>
+            )}
+            {activeFilter.type === "push" && (
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "4px 4px 4px 10px",
+                  borderRadius: 999,
+                  background: "var(--accent-soft)",
+                  color: "var(--accent-ink)",
+                  border: "1px solid var(--accent-border)",
+                  fontSize: 12,
+                  fontWeight: 700,
+                }}
+              >
+                <span>推噓 ≥{activeFilter.threshold}</span>
+                <button
+                  type="button"
+                  onClick={handleClearPushFilter}
+                  title="清除推噓篩選"
+                  style={{
+                    background: "transparent",
+                    border: 0,
+                    color: "inherit",
+                    cursor: "pointer",
+                    padding: "3px 5px",
+                    borderRadius: 999,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    opacity: 0.75,
+                    fontFamily: "var(--font)",
+                    fontSize: 12,
+                  }}
+                >
+                  ×
+                </button>
+              </span>
+            )}
+            <span
+              style={{
+                fontSize: 12,
+                color: "var(--text-dim)",
+                fontFamily: "var(--font-mono)",
+                marginLeft: 4,
+              }}
+            >
+              · {articles.length} 篇符合
+            </span>
+            <span style={{ flex: 1 }} />
+            <button
+              type="button"
+              onClick={handleClearFilter}
+              style={{
+                background: "transparent",
+                border: 0,
+                color: "var(--text-muted)",
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: "pointer",
+                padding: "4px 8px",
+                borderRadius: 6,
+                fontFamily: "var(--font)",
+              }}
+            >
+              清除全部
+            </button>
+          </div>
+        )}
       </div>
 
       <div

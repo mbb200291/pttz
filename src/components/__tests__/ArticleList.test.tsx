@@ -138,7 +138,31 @@ describe("ArticleList", () => {
     );
 
     expect(html).toContain("系列《花生》");
+    expect(html).toContain("篩選中");
+    expect(html).toContain("關鍵字");
+    expect(html).toContain("「花生」");
+    expect(html).toContain("清除全部");
     expect(html).not.toContain(">看板<");
+  });
+
+  it("shows an active push filter chip in the filter toolbar", async () => {
+    const { ArticleList } = await import("../ArticleList");
+    const html = renderToStaticMarkup(
+      <ArticleList
+        boardName="Gossiping"
+        initialFilter={{ type: "push", threshold: 50 }}
+        onBack={() => {}}
+        onSelectArticle={() => {}}
+        onSelectArticleByAid={() => {}}
+        mockArticles={[]}
+        mockLoading={false}
+      />,
+    );
+
+    expect(html).toContain("篩選中");
+    expect(html).toContain("推噓");
+    expect(html).toContain("≥50");
+    expect(html).toContain("清除全部");
   });
 
   it("shows no filter label when initialFilter is absent", async () => {
