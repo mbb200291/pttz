@@ -221,6 +221,51 @@ describe("ptt adapter module", () => {
     ]);
   });
 
+  it("applies combined board filters by push threshold before title keyword", async () => {
+    const mod = await import("../adapter");
+    const adapter = mod.createPttAdapter();
+    const sent: string[] = [];
+    const screen = [
+      "看板《Baseball》",
+      buildBoardLine({
+        index: 16250,
+        push: "23",
+        date: "5/27",
+        author: "ak852456",
+        title: "[分享] 今日陳子豪",
+      }),
+    ];
+
+    (adapter as unknown as { bot: unknown }).bot = {
+      async send(command: string) {
+        sent.push(command);
+        return true;
+      },
+      async enterBoardByName(boardName: string) {
+        sent.push(`enter:${boardName}`);
+        return true;
+      },
+      getLine(index: number) {
+        return { str: screen[index] ?? "" };
+      },
+    };
+
+    await adapter.filterArticlesByTitleAndPush("Baseball", ["今日", "郭泓志"], 10);
+
+    const pushCommandIndex = sent.indexOf("Z10\r");
+    const titleCommandIndex = sent.indexOf("/今日\r");
+    const secondTitleCommandIndex = sent.indexOf("/郭泓志\r");
+    const enterCommandIndex = sent.indexOf("enter:Baseball");
+
+    expect(enterCommandIndex).toBeGreaterThanOrEqual(0);
+    expect(pushCommandIndex).toBeGreaterThanOrEqual(0);
+    expect(titleCommandIndex).toBeGreaterThanOrEqual(0);
+    expect(secondTitleCommandIndex).toBeGreaterThanOrEqual(0);
+    expect(enterCommandIndex).toBeLessThan(pushCommandIndex);
+    expect(pushCommandIndex).toBeLessThan(titleCommandIndex);
+    expect(titleCommandIndex).toBeLessThan(secondTitleCommandIndex);
+  });
+
   it("maps library article rows into the current ArticleSummary shape", async () => {
     const mod = await import("../adapter");
 

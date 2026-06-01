@@ -165,8 +165,19 @@ export interface PttAdapter {
     keyword: string,
     beforeIndex?: number,
   ) => Promise<ArticleSummary[]>;
+  searchArticlesByKeywords: (
+    boardName: string,
+    keywords: string[],
+    beforeIndex?: number,
+  ) => Promise<ArticleSummary[]>;
   filterArticlesByPush: (
     boardName: string,
+    threshold: number,
+    beforeIndex?: number,
+  ) => Promise<ArticleSummary[]>;
+  filterArticlesByTitleAndPush: (
+    boardName: string,
+    keywords: string[],
     threshold: number,
     beforeIndex?: number,
   ) => Promise<ArticleSummary[]>;
@@ -627,7 +638,7 @@ class PttClientAdapter implements PttAdapter {
 
     if (!sameFilterActive) {
       // Enter normal board mode first (exits filter mode or article view)
-      const entered = await ensureNormalBoardView(this.bot, boardName);
+      const entered = await ensureNormalBoardView(this.bot, boardName, true);
       if (!entered) throw new Error(`無法進入看板 ${boardName}`);
 
       // Go to most recent articles
@@ -672,6 +683,20 @@ class PttClientAdapter implements PttAdapter {
     );
   }
 
+  async searchArticlesByKeywords(
+    boardName: string,
+    keywords: string[],
+    beforeIndex?: number,
+  ): Promise<ArticleSummary[]> {
+    return this.runSerial(() =>
+      this.listArticlesWithConditions(
+        boardName,
+        keywords.map((keyword) => ({ type: "title", criteria: keyword })),
+        beforeIndex,
+      ),
+    );
+  }
+
   async filterArticlesByPush(
     boardName: string,
     threshold: number,
@@ -681,6 +706,24 @@ class PttClientAdapter implements PttAdapter {
       this.listArticlesWithConditions(
         boardName,
         [{ type: "push", criteria: String(threshold) }],
+        beforeIndex,
+      ),
+    );
+  }
+
+  async filterArticlesByTitleAndPush(
+    boardName: string,
+    keywords: string[],
+    threshold: number,
+    beforeIndex?: number,
+  ): Promise<ArticleSummary[]> {
+    return this.runSerial(() =>
+      this.listArticlesWithConditions(
+        boardName,
+        [
+          { type: "push", criteria: String(threshold) },
+          ...keywords.map((keyword) => ({ type: "title" as const, criteria: keyword })),
+        ],
         beforeIndex,
       ),
     );

@@ -9,8 +9,13 @@ const boardScrollCache = new Map<string, number>();
 const boardAnchorCache = new Map<string, BoardAnchorCache>();
 
 function filteredBoardKey(boardName: string, filter: BoardFilter): string {
-  if (filter.type === "search") return `${boardName}:search:${filter.keyword}`;
+  if (filter.type === "search") {
+    return `${boardName}:search:${filter.keywords.join("/")}`;
+  }
   if (filter.type === "push") return `${boardName}:push:${filter.threshold}`;
+  if (filter.type === "combined") {
+    return `${boardName}:search:${filter.keywords.join("/")}:push:${filter.threshold}`;
+  }
   return boardName;
 }
 

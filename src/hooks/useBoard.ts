@@ -158,10 +158,18 @@ export function useBoard(
     (beforeIndex?: number) => {
       if (!client) return Promise.resolve([]);
       if (filter?.type === "search") {
-        return client.searchArticles(boardName, filter.keyword, beforeIndex);
+        return client.searchArticlesByKeywords(boardName, filter.keywords, beforeIndex);
       }
       if (filter?.type === "push") {
         return client.filterArticlesByPush(boardName, filter.threshold, beforeIndex);
+      }
+      if (filter?.type === "combined") {
+        return client.filterArticlesByTitleAndPush(
+          boardName,
+          filter.keywords,
+          filter.threshold,
+          beforeIndex,
+        );
       }
       return client.listArticles(boardName, beforeIndex);
     },
@@ -228,6 +236,8 @@ export function useBoard(
                 ? "沒有符合的搜尋結果"
                 : filter?.type === "push"
                   ? "沒有符合推噓文數條件的文章"
+                  : filter?.type === "combined"
+                    ? "沒有符合關鍵字與推噓文數條件的文章"
                   : "找不到文章列表或看板不存在",
             );
             setHasMore(false);

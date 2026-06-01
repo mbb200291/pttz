@@ -2,8 +2,9 @@ import type { PttState } from "../../hooks/usePttSocket";
 import type { ArticleSummary } from "./parser";
 
 export type BoardFilter =
-  | { type: "search"; keyword: string }
-  | { type: "push"; threshold: number };
+  | { type: "search"; keywords: string[] }
+  | { type: "push"; threshold: number }
+  | { type: "combined"; keywords: string[]; threshold: number };
 
 export type AppView =
   | { type: "home" }

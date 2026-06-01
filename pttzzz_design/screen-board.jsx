@@ -11,6 +11,103 @@ const PUSH_FILTERS = [
   { label: "爆", value: "boom" },
 ];
 
+// Custom threshold popover — slider + number input
+function CustomThresholdPopover({ t, value, onApply, onClose }) {
+  const initial = typeof value === "number" && ![10, 20, 30].includes(value) ? value : 50;
+  const [n, setN] = React.useState(initial);
+  const ref = React.useRef(null);
+
+  React.useEffect(() => {
+    function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) onClose(); }
+    function onKey(e) {
+      if (e.key === "Escape") onClose();
+      if (e.key === "Enter") onApply(n);
+    }
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
+  }, [n, onApply, onClose]);
+
+  const QUICK = [5, 15, 25, 50, 75];
+
+  return (
+    <div ref={ref} style={{
+      position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 30,
+      width: 280, padding: 14,
+      background: t.surface, border: `1px solid ${t.border}`,
+      borderRadius: 12, boxShadow: "0 10px 30px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.06)",
+      fontFamily: t.font, color: t.text,
+    }}>
+      <div style={{
+        fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", color: t.textDim,
+        textTransform: "uppercase", marginBottom: 10,
+      }}>自訂推文門檻</div>
+
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
+        <span style={{ fontSize: 13, color: t.textMuted }}>推噓 ≥</span>
+        <input
+          type="number" min={1} max={999} value={n}
+          onChange={e => {
+            const v = parseInt(e.target.value, 10);
+            if (!Number.isNaN(v)) setN(Math.max(1, Math.min(999, v)));
+            else setN("");
+          }}
+          autoFocus
+          style={{
+            flex: 1, padding: "6px 10px",
+            background: t.bg, border: `1px solid ${t.border}`, borderRadius: 7,
+            color: t.text, fontSize: 16, fontFamily: t.fontMono, fontWeight: 700,
+            letterSpacing: "-0.01em", outline: "none", textAlign: "right",
+          }}
+        />
+        <span style={{ fontSize: 12, color: t.textDim, fontFamily: t.fontMono }}>推</span>
+      </div>
+
+      <input
+        type="range" min={1} max={100} value={typeof n === "number" ? n : 1}
+        onChange={e => setN(parseInt(e.target.value, 10))}
+        style={{
+          width: "100%", accentColor: t.accentInk, margin: "2px 0 8px",
+        }}
+      />
+
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: t.textDim, fontFamily: t.fontMono, marginBottom: 12 }}>
+        <span>1</span><span>25</span><span>50</span><span>75</span><span>100+</span>
+      </div>
+
+      <div style={{ display: "flex", gap: 4, marginBottom: 14, flexWrap: "wrap" }}>
+        {QUICK.map(q => (
+          <button key={q} onClick={() => setN(q)}
+            style={{
+              padding: "4px 9px", borderRadius: 6,
+              background: n === q ? t.accentSoft : "transparent",
+              border: `1px solid ${n === q ? t.accentBorder : t.border}`,
+              color: n === q ? t.accentInk : t.textMuted,
+              fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: t.fontMono,
+            }}>≥{q}</button>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <button onClick={onClose} style={{
+          padding: "6px 12px", borderRadius: 7,
+          background: "transparent", border: `1px solid ${t.border}`,
+          color: t.textMuted, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: t.font,
+        }}>取消</button>
+        <button
+          onClick={() => onApply(typeof n === "number" ? n : 1)}
+          disabled={typeof n !== "number" || n < 1}
+          style={{
+            padding: "6px 14px", borderRadius: 7,
+            background: t.accentInk, border: `1px solid ${t.accentInk}`,
+            color: t.surface, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: t.font,
+            opacity: (typeof n !== "number" || n < 1) ? 0.5 : 1,
+          }}>套用</button>
+      </div>
+    </div>
+  );
+}
+
 function ArticleRow({ a, t, density, showAuthor, onOpen }) {
   const tone = pushCountStyle(a.push, t);
   const isRe = a.title.startsWith("Re:");
@@ -111,6 +208,10 @@ function Board({ t, boardName, density, showAuthor, onBack, onOpen, onCompose })
   const meta = POPULAR_BOARDS.find(b => b.name === boardName);
   const [search, setSearch] = React.useState("");
   const [filter, setFilter] = React.useState(null);
+  const [customOpen, setCustomOpen] = React.useState(false);
+
+  const PRESETS = [null, 10, 20, 30, "boom"];
+  const isCustom = typeof filter === "number" && !PRESETS.includes(filter);
 
   const all = [...PINNED, ...ARTICLES];
   const filtered = all.filter(a => {
@@ -183,10 +284,10 @@ function Board({ t, boardName, density, showAuthor, onBack, onOpen, onCompose })
             )}
           </div>
 
-          <div style={{ display: "inline-flex", padding: 3, background: t.surface, borderRadius: 10, border: `1px solid ${t.border}`, gap: 1 }}>
+          <div style={{ position: "relative", display: "inline-flex", padding: 3, background: t.surface, borderRadius: 10, border: `1px solid ${t.border}`, gap: 1 }}>
             {PUSH_FILTERS.map(f => (
               <button key={f.label}
-                onClick={() => setFilter(f.value)}
+                onClick={() => { setFilter(f.value); setCustomOpen(false); }}
                 style={{
                   padding: "5px 11px", borderRadius: 7, border: 0,
                   background: filter === f.value ? t.accentSoft : "transparent",
@@ -195,6 +296,27 @@ function Board({ t, boardName, density, showAuthor, onBack, onOpen, onCompose })
                   fontFamily: t.font,
                 }}>{f.label}</button>
             ))}
+            <span style={{ width: 1, background: t.border, margin: "2px 2px" }} />
+            <button
+              onClick={() => setCustomOpen(o => !o)}
+              title="自訂推文門檻"
+              style={{
+                padding: "5px 11px", borderRadius: 7, border: 0,
+                background: isCustom ? t.accentSoft : "transparent",
+                color: isCustom ? t.accentInk : t.textMuted,
+                fontSize: 12, fontWeight: 600, cursor: "pointer", letterSpacing: "-0.01em",
+                fontFamily: t.font, display: "inline-flex", alignItems: "center", gap: 4,
+              }}>
+              {isCustom ? `≥${filter}` : "自訂"}
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.6 }}>
+                <path d="m6 9 6 6 6-6"/>
+              </svg>
+            </button>
+            {customOpen && (
+              <CustomThresholdPopover t={t} value={filter}
+                onApply={n => { setFilter(n); setCustomOpen(false); }}
+                onClose={() => setCustomOpen(false)} />
+            )}
           </div>
         </div>
 

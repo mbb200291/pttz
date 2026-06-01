@@ -119,7 +119,8 @@ describe("ArticleList", () => {
       />,
     );
 
-    expect(html).toContain("推文數 ≥100");
+    expect(html).toContain("推噓");
+    expect(html).toContain("爆文");
     expect(html).not.toContain(">看板<");
   });
 
@@ -128,7 +129,7 @@ describe("ArticleList", () => {
     const html = renderToStaticMarkup(
       <ArticleList
         boardName="Gossiping"
-        initialFilter={{ type: "search", keyword: "花生" }}
+        initialFilter={{ type: "search", keywords: ["花生"] }}
         onBack={() => {}}
         onSelectArticle={() => {}}
         onSelectArticleByAid={() => {}}
@@ -163,6 +164,94 @@ describe("ArticleList", () => {
     expect(html).toContain("推噓");
     expect(html).toContain("≥50");
     expect(html).toContain("清除全部");
+  });
+
+  it("applies a custom push threshold from the filter popover", async () => {
+    const { ArticleList } = await import("../ArticleList");
+    render(
+      <ArticleList
+        boardName="Gossiping"
+        onBack={() => {}}
+        onSelectArticle={() => {}}
+        onSelectArticleByAid={() => {}}
+        mockArticles={[]}
+        mockLoading={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /自訂/ }));
+    const input = screen.getByRole("spinbutton");
+    fireEvent.change(input, { target: { value: "75" } });
+    fireEvent.click(screen.getByRole("button", { name: "套用" }));
+
+    expect(screen.getAllByText("推噓 ≥75").length).toBeGreaterThan(0);
+    expect(screen.getByTitle("自訂推文門檻").textContent).toContain("≥75");
+
+    fireEvent.click(screen.getByTitle("清除推噓篩選"));
+
+    expect(screen.queryByText("推噓 ≥75")).toBeNull();
+  });
+
+  it("keeps an existing push filter when applying a keyword search", async () => {
+    const { ArticleList } = await import("../ArticleList");
+    render(
+      <ArticleList
+        boardName="Gossiping"
+        initialFilter={{ type: "push", threshold: 30 }}
+        onBack={() => {}}
+        onSelectArticle={() => {}}
+        onSelectArticleByAid={() => {}}
+        mockArticles={[]}
+        mockLoading={false}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText(/搜尋標題/), {
+      target: { value: "花生" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "搜尋" }));
+
+    expect(screen.getByText("「花生」")).toBeTruthy();
+    expect(screen.getAllByText("推噓 ≥30").length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByTitle("清除關鍵字 花生"));
+
+    expect(screen.queryByText("「花生」")).toBeNull();
+    expect(screen.getAllByText("推噓 ≥30").length).toBeGreaterThan(0);
+  });
+
+  it("adds multiple keyword filters and clears the search input after each commit", async () => {
+    const { ArticleList } = await import("../ArticleList");
+    render(
+      <ArticleList
+        boardName="Baseball"
+        onBack={() => {}}
+        onSelectArticle={() => {}}
+        onSelectArticleByAid={() => {}}
+        mockArticles={[]}
+        mockLoading={false}
+      />,
+    );
+
+    const input = screen.getByPlaceholderText(/搜尋標題/) as HTMLInputElement;
+
+    fireEvent.change(input, { target: { value: "今日" } });
+    fireEvent.click(screen.getByRole("button", { name: "搜尋" }));
+
+    expect(input.value).toBe("");
+    expect(screen.getByText("「今日」")).toBeTruthy();
+
+    fireEvent.change(input, { target: { value: "郭泓志" } });
+    fireEvent.click(screen.getByRole("button", { name: "搜尋" }));
+
+    expect(input.value).toBe("");
+    expect(screen.getByText("「今日」")).toBeTruthy();
+    expect(screen.getByText("「郭泓志」")).toBeTruthy();
+
+    fireEvent.click(screen.getByTitle("清除關鍵字 今日"));
+
+    expect(screen.queryByText("「今日」")).toBeNull();
+    expect(screen.getByText("「郭泓志」")).toBeTruthy();
   });
 
   it("shows no filter label when initialFilter is absent", async () => {

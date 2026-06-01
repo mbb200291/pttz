@@ -11,6 +11,7 @@ import type {
   KeyboardEvent,
   MouseEvent,
   PointerEvent,
+  RefObject,
   TouchEvent,
   WheelEvent,
 } from "react";
@@ -334,12 +335,16 @@ function ArticleRow({
   );
 }
 
-const PUSH_QUICK_FILTERS = [
+const PUSH_QUICK_FILTERS: Array<{ label: string; value: number | null }> = [
+  { label: "全部", value: null },
   { label: "≥10", value: 10 },
+  { label: "≥20", value: 20 },
   { label: "≥30", value: 30 },
-  { label: "≥100", value: 100 },
   { label: "爆", value: 100 },
 ] as const;
+const PUSH_FILTER_PRESETS = new Set([10, 20, 30, 100]);
+const CUSTOM_PUSH_DEFAULT = 50;
+const CUSTOM_PUSH_QUICK_VALUES = [5, 15, 25, 50, 75];
 
 export const ARTICLE_LIST_PRELOAD_ROOT_MARGIN = "0px 0px 720px 0px";
 const PULL_REFRESH_THRESHOLD_PX = 72;
@@ -354,6 +359,313 @@ function getRubberBandDistance(rawDistance: number): number {
   if (rawDistance <= 0) return 0;
   const normalized = 1 - Math.exp(-rawDistance / PULL_REFRESH_MAX_DISTANCE_PX);
   return Math.round(PULL_REFRESH_MAX_DISTANCE_PX * normalized);
+}
+
+function clampPushThreshold(value: number): number {
+  return Math.max(1, Math.min(999, Math.round(value)));
+}
+
+function parsePushThreshold(value: string): number | null {
+  const numeric = Number.parseInt(value, 10);
+  if (!Number.isFinite(numeric)) return null;
+  return clampPushThreshold(numeric);
+}
+
+function getFilterKeywords(filter: BoardFilter | null): string[] {
+  if (filter?.type === "search" || filter?.type === "combined") {
+    return filter.keywords;
+  }
+  return [];
+}
+
+function getFilterThreshold(filter: BoardFilter | null): number | null {
+  if (filter?.type === "push" || filter?.type === "combined") {
+    return filter.threshold;
+  }
+  return null;
+}
+
+function mergeFilter(next: {
+  keywords?: string[] | null;
+  threshold?: number | null;
+}): BoardFilter | null {
+  const keywords = dedupeKeywords(next.keywords ?? []);
+  const threshold = next.threshold ?? null;
+
+  if (keywords.length > 0 && threshold !== null) {
+    return { type: "combined", keywords, threshold };
+  }
+  if (keywords.length > 0) return { type: "search", keywords };
+  if (threshold !== null) return { type: "push", threshold };
+  return null;
+}
+
+function dedupeKeywords(keywords: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const keyword of keywords) {
+    const trimmed = keyword.trim();
+    const key = trimmed.toLowerCase();
+    if (!trimmed || seen.has(key)) continue;
+    seen.add(key);
+    result.push(trimmed);
+  }
+
+  return result;
+}
+
+function FilterCloseIcon() {
+  return (
+    <svg
+      width={11}
+      height={11}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
+    </svg>
+  );
+}
+
+function ChevronDownMiniIcon() {
+  return (
+    <svg
+      width={9}
+      height={9}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      style={{ opacity: 0.6 }}
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+function CustomThresholdPopover({
+  value,
+  anchorRef,
+  onApply,
+  onClose,
+}: {
+  value: number | null;
+  anchorRef: RefObject<HTMLDivElement | null>;
+  onApply: (threshold: number) => void;
+  onClose: () => void;
+}) {
+  const initial =
+    value !== null && !PUSH_FILTER_PRESETS.has(value)
+      ? value
+      : CUSTOM_PUSH_DEFAULT;
+  const [draft, setDraft] = useState(String(initial));
+  const parsed = parsePushThreshold(draft);
+
+  useEffect(() => {
+    function handlePointerDown(event: globalThis.MouseEvent) {
+      const target = event.target;
+      if (
+        target instanceof Node &&
+        anchorRef.current &&
+        !anchorRef.current.contains(target)
+      ) {
+        onClose();
+      }
+    }
+
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+      if (event.key === "Enter" && parsed !== null) onApply(parsed);
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [anchorRef, onApply, onClose, parsed]);
+
+  const rangeValue = parsed ?? 1;
+
+  return (
+    <div
+      role="dialog"
+      aria-label="自訂推文門檻"
+      style={{
+        position: "absolute",
+        top: "calc(100% + 6px)",
+        right: 0,
+        zIndex: 30,
+        width: 280,
+        padding: 14,
+        background: "var(--surface)",
+        border: "1px solid var(--border)",
+        borderRadius: 12,
+        boxShadow:
+          "0 10px 30px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.06)",
+        fontFamily: "var(--font)",
+        color: "var(--text)",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: "0.06em",
+          color: "var(--text-dim)",
+          textTransform: "uppercase",
+          marginBottom: 10,
+        }}
+      >
+        自訂推文門檻
+      </div>
+
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
+        <span style={{ fontSize: 13, color: "var(--text-muted)" }}>推噓 ≥</span>
+        <input
+          type="number"
+          min={1}
+          max={999}
+          value={draft}
+          onChange={(event) => {
+            const next = event.target.value;
+            if (next === "") {
+              setDraft("");
+              return;
+            }
+            const parsedNext = parsePushThreshold(next);
+            if (parsedNext !== null) setDraft(String(parsedNext));
+          }}
+          autoFocus
+          style={{
+            flex: 1,
+            padding: "6px 10px",
+            background: "var(--bg)",
+            border: "1px solid var(--border)",
+            borderRadius: 7,
+            color: "var(--text)",
+            fontSize: 16,
+            fontFamily: "var(--font-mono)",
+            fontWeight: 700,
+            letterSpacing: "-0.01em",
+            outline: "none",
+            textAlign: "right",
+          }}
+        />
+        <span style={{ fontSize: 12, color: "var(--text-dim)", fontFamily: "var(--font-mono)" }}>
+          推
+        </span>
+      </div>
+
+      <input
+        aria-label="推文門檻"
+        type="range"
+        min={1}
+        max={100}
+        value={rangeValue}
+        onChange={(event) =>
+          setDraft(String(clampPushThreshold(Number(event.target.value))))
+        }
+        style={{ width: "100%", accentColor: "var(--accent-ink)", margin: "2px 0 8px" }}
+      />
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          fontSize: 10,
+          color: "var(--text-dim)",
+          fontFamily: "var(--font-mono)",
+          marginBottom: 12,
+        }}
+      >
+        <span>1</span>
+        <span>25</span>
+        <span>50</span>
+        <span>75</span>
+        <span>100+</span>
+      </div>
+
+      <div style={{ display: "flex", gap: 4, marginBottom: 14, flexWrap: "wrap" }}>
+        {CUSTOM_PUSH_QUICK_VALUES.map((quickValue) => (
+          <button
+            key={quickValue}
+            type="button"
+            onClick={() => setDraft(String(quickValue))}
+            style={{
+              padding: "4px 9px",
+              borderRadius: 6,
+              background:
+                parsed === quickValue ? "var(--accent-soft)" : "transparent",
+              border: `1px solid ${
+                parsed === quickValue ? "var(--accent-border)" : "var(--border)"
+              }`,
+              color:
+                parsed === quickValue ? "var(--accent-ink)" : "var(--text-muted)",
+              fontSize: 11.5,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: "var(--font-mono)",
+            }}
+          >
+            ≥{quickValue}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            padding: "6px 12px",
+            borderRadius: 7,
+            background: "transparent",
+            border: "1px solid var(--border)",
+            color: "var(--text-muted)",
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: "pointer",
+            fontFamily: "var(--font)",
+          }}
+        >
+          取消
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (parsed !== null) onApply(parsed);
+          }}
+          disabled={parsed === null}
+          style={{
+            padding: "6px 14px",
+            borderRadius: 7,
+            background: "var(--accent-ink)",
+            border: "1px solid var(--accent-ink)",
+            color: "var(--surface)",
+            fontSize: 12,
+            fontWeight: 700,
+            cursor: parsed === null ? "not-allowed" : "pointer",
+            fontFamily: "var(--font)",
+            opacity: parsed === null ? 0.5 : 1,
+          }}
+        >
+          套用
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export function ArticleList({
@@ -372,11 +684,13 @@ export function ArticleList({
   onMockRefresh,
 }: ArticleListProps) {
   const [searchInput, setSearchInput] = useState(
-    initialFilter?.type === "search" ? initialFilter.keyword : "",
+    "",
   );
   const [activeFilter, setActiveFilter] = useState<BoardFilter | null>(
     initialFilter ?? null,
   );
+  const [customPushFilterOpen, setCustomPushFilterOpen] = useState(false);
+  const pushFilterRef = useRef<HTMLDivElement>(null);
 
   const {
     articles: liveArticles,
@@ -421,10 +735,12 @@ export function ArticleList({
   const [pullReady, setPullReady] = useState(false);
   const restoreListKey = `${boardName}:${activeFilter?.type ?? "all"}:${
     activeFilter?.type === "search"
-      ? activeFilter.keyword
+      ? activeFilter.keywords.join("/")
       : activeFilter?.type === "push"
         ? activeFilter.threshold
-        : ""
+        : activeFilter?.type === "combined"
+          ? `${activeFilter.keywords.join("/")}:${activeFilter.threshold}`
+          : ""
   }`;
 
   // IntersectionObserver sentinel
@@ -528,43 +844,70 @@ export function ArticleList({
   function handleSearchCommit() {
     const val = searchInput.trim();
     if (!val) {
-      setActiveFilter(null);
       return;
     }
     if (isAid(val)) {
       onSelectArticleByAid(normalizeAid(val));
       return;
     }
-    setActiveFilter({ type: "search", keyword: val });
+    setActiveFilter((prev) =>
+      mergeFilter({
+        keywords: [...getFilterKeywords(prev), val],
+        threshold: getFilterThreshold(prev),
+      }),
+    );
+    setSearchInput("");
   }
 
   function handleSearchKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") handleSearchCommit();
   }
 
-  function handlePushFilterClick(threshold: number) {
-    setSearchInput("");
+  function handlePushFilterClick(threshold: number | null) {
+    setCustomPushFilterOpen(false);
+    if (threshold === null) {
+      setActiveFilter((prev) =>
+        mergeFilter({ keywords: getFilterKeywords(prev) }),
+      );
+      return;
+    }
     setActiveFilter((prev) =>
-      prev?.type === "push" && prev.threshold === threshold
-        ? null
-        : { type: "push", threshold },
+      getFilterThreshold(prev) === threshold
+        ? mergeFilter({ keywords: getFilterKeywords(prev) })
+        : mergeFilter({ keywords: getFilterKeywords(prev), threshold }),
+    );
+  }
+
+  function handleCustomPushFilterApply(threshold: number) {
+    setCustomPushFilterOpen(false);
+    setActiveFilter((prev) =>
+      mergeFilter({ keywords: getFilterKeywords(prev), threshold }),
     );
   }
 
   function handleClearFilter() {
     setActiveFilter(null);
     setSearchInput("");
+    setCustomPushFilterOpen(false);
   }
 
-  function handleClearSearchFilter() {
-    if (activeFilter?.type !== "search") return;
-    setActiveFilter(null);
-    setSearchInput("");
+  function handleClearKeywordFilter(keyword: string) {
+    setActiveFilter((prev) =>
+      mergeFilter({
+        keywords: getFilterKeywords(prev).filter(
+          (currentKeyword) => currentKeyword.toLowerCase() !== keyword.toLowerCase(),
+        ),
+        threshold: getFilterThreshold(prev),
+      }),
+    );
   }
 
   function handleClearPushFilter() {
-    if (activeFilter?.type !== "push") return;
-    setActiveFilter(null);
+    if (getFilterThreshold(activeFilter) === null) return;
+    setActiveFilter((prev) =>
+      mergeFilter({ keywords: getFilterKeywords(prev) }),
+    );
+    setCustomPushFilterOpen(false);
   }
 
   function handleTouchStart(event: TouchEvent<HTMLDivElement>) {
@@ -669,11 +1012,15 @@ export function ArticleList({
   }
 
   const filterLabel =
-    activeFilter?.type === "search"
-      ? `系列《${activeFilter.keyword}》`
+    activeFilter?.type === "search" || activeFilter?.type === "combined"
+      ? `系列《${activeFilter.keywords.join(" / ")}》`
       : activeFilter?.type === "push"
-        ? `推文數 ≥${activeFilter.threshold}`
+        ? `推噓 ≥${activeFilter.threshold}`
         : null;
+  const activeKeywords = getFilterKeywords(activeFilter);
+  const activePushThreshold = getFilterThreshold(activeFilter);
+  const isCustomPushFilter =
+    activePushThreshold !== null && !PUSH_FILTER_PRESETS.has(activePushThreshold);
 
   return (
     <div
@@ -903,7 +1250,9 @@ export function ArticleList({
           </div>
 
           <div
+            ref={pushFilterRef}
             style={{
+              position: "relative",
               display: "inline-flex",
               gap: 1,
               padding: 3,
@@ -914,8 +1263,9 @@ export function ArticleList({
           >
             {PUSH_QUICK_FILTERS.map(({ label, value }) => {
               const active =
-                activeFilter?.type === "push" &&
-                activeFilter.threshold === value;
+                value === null
+                  ? activePushThreshold === null
+                  : activePushThreshold === value;
               return (
                 <button
                   key={label}
@@ -937,6 +1287,43 @@ export function ArticleList({
                 </button>
               );
             })}
+            <span
+              style={{
+                width: 1,
+                background: "var(--border)",
+                margin: "2px 2px",
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => setCustomPushFilterOpen((open) => !open)}
+              title="自訂推文門檻"
+              style={{
+                border: 0,
+                borderRadius: 7,
+                background: isCustomPushFilter ? "var(--accent-soft)" : "transparent",
+                color: isCustomPushFilter ? "var(--accent-ink)" : "var(--text-muted)",
+                cursor: "pointer",
+                fontFamily: "var(--font)",
+                fontSize: 12,
+                fontWeight: 700,
+                padding: "5px 11px",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
+              {isCustomPushFilter ? `≥${activePushThreshold}` : "自訂"}
+              <ChevronDownMiniIcon />
+            </button>
+            {customPushFilterOpen && (
+              <CustomThresholdPopover
+                value={activePushThreshold}
+                anchorRef={pushFilterRef}
+                onApply={handleCustomPushFilterApply}
+                onClose={() => setCustomPushFilterOpen(false)}
+              />
+            )}
           </div>
         </div>
 
@@ -964,8 +1351,9 @@ export function ArticleList({
             >
               篩選中
             </span>
-            {activeFilter.type === "search" && (
+            {activeKeywords.map((keyword) => (
               <span
+                key={keyword}
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -984,13 +1372,13 @@ export function ArticleList({
                 <span>
                   關鍵字{" "}
                   <span style={{ fontFamily: "var(--font-mono)" }}>
-                    「{activeFilter.keyword}」
+                    「{keyword}」
                   </span>
                 </span>
                 <button
                   type="button"
-                  onClick={handleClearSearchFilter}
-                  title="清除關鍵字"
+                  onClick={() => handleClearKeywordFilter(keyword)}
+                  title={`清除關鍵字 ${keyword}`}
                   style={{
                     background: "transparent",
                     border: 0,
@@ -1005,11 +1393,11 @@ export function ArticleList({
                     fontSize: 12,
                   }}
                 >
-                  ×
+                  <FilterCloseIcon />
                 </button>
               </span>
-            )}
-            {activeFilter.type === "push" && (
+            ))}
+            {activePushThreshold !== null && (
               <span
                 style={{
                   display: "inline-flex",
@@ -1024,7 +1412,9 @@ export function ArticleList({
                   fontWeight: 700,
                 }}
               >
-                <span>推噓 ≥{activeFilter.threshold}</span>
+                <span>
+                  推噓 {activePushThreshold >= 100 ? "爆文" : `≥${activePushThreshold}`}
+                </span>
                 <button
                   type="button"
                   onClick={handleClearPushFilter}
@@ -1043,7 +1433,7 @@ export function ArticleList({
                     fontSize: 12,
                   }}
                 >
-                  ×
+                  <FilterCloseIcon />
                 </button>
               </span>
             )}
