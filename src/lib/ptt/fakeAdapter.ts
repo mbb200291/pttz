@@ -1,13 +1,20 @@
 import type {
   AdapterArticleData,
+  ActionResult,
   ConnectionStatus,
   HotBoardSummary,
+  EditArticleRequest,
   LoginResult,
   PartialArticleData,
   PttAdapter,
   PushType,
 } from "./adapter";
-import type { ArticleSummary, RawPush } from "./parser";
+import {
+  formatPttzzzEditSummary,
+  splitArticleBody,
+  type ArticleSummary,
+  type RawPush,
+} from "./parser";
 import { aggregatePushes, calcArticleScore } from "./pushAggregator";
 
 export const FAKE_PTT_STORE_KEY = "pttzzz_fake_ptt_store_v1";
@@ -210,14 +217,16 @@ function toSummary(article: FakeArticleRecord): ArticleSummary {
 function toArticleData(article: FakeArticleRecord): AdapterArticleData {
   const thread = aggregatePushes(article.rawPushes, article.author);
   const score = calcArticleScore(thread.pushes);
+  const parsedBody = splitArticleBody(article.body);
   return {
     title: article.title,
     author: article.author,
     date: article.date,
     board: article.board,
-    body: `作者 ${article.author}\n看板 ${article.board}\n標題 ${article.title}\n時間 ${article.date}\n\n${article.body}`,
+    body: parsedBody.body,
     pushes: thread.pushes,
     articleNotes: thread.articleNotes,
+    revisions: parsedBody.revisions,
     score,
   };
 }
@@ -420,7 +429,43 @@ class FakePttAdapter implements PttAdapter {
     return { ok: true };
   }
 
-  async editArticle(): Promise<{ ok: boolean }> {
+  async editArticle(request: EditArticleRequest): Promise<ActionResult> {
+    if (!this.currentUser) {
+      return { ok: false, reason: "尚未登入 fake PTT" };
+    }
+
+    const store = readStore();
+    const article = getArticleRecord(
+      store,
+      request.boardName,
+      request.articleIndex,
+    );
+    if (!article) {
+      return { ok: false, reason: "找不到要編輯的文章" };
+    }
+    if (article.author !== this.currentUser) {
+      return { ok: false, reason: "只有文章作者可以編輯文章" };
+    }
+    if (
+      article.author !== request.expectedAuthor ||
+      article.title !== request.expectedTitle
+    ) {
+      return { ok: false, reason: "文章身分已變更，請重新載入" };
+    }
+
+    const marker = formatPttzzzEditSummary(request.editSummary);
+    if (!marker) {
+      return { ok: false, reason: "編輯摘要不可為空" };
+    }
+
+    const previousRevisions = splitArticleBody(article.body).revisions.map(
+      (revision) => revision.rawBlock,
+    );
+    article.body = [request.body.trimEnd(), ...previousRevisions, marker]
+      .filter(Boolean)
+      .join("\n");
+    writeStore(store);
+    this.emitScreen("[Fake PTT] article edited");
     return { ok: true };
   }
 

@@ -12,6 +12,7 @@ import {
   splitArticleBody,
   stripAnsi,
   type ArticleEditRecord,
+  type ArticleRevision,
   type OpEditedReplySegment,
   type ArticleSummary,
   type RawPush,
@@ -66,6 +67,7 @@ export interface AdapterArticleData {
   body: string;
   pushes: AggregatedPush[];
   articleNotes: ArticleEditRecord[];
+  revisions?: ArticleRevision[];
   score: number;
   debug?: ArticleDebugDump;
 }
@@ -78,6 +80,7 @@ export interface PartialArticleData {
   body: string;
   pushes?: AggregatedPush[];
   articleNotes?: ArticleEditRecord[];
+  revisions?: ArticleRevision[];
   score?: number;
 }
 

@@ -73,4 +73,59 @@ describe("fake PTT adapter", () => {
     expect(firstPush?.pushVoters).toContain("pushVoter");
     expect(firstPush?.booVoters).toContain("booVoter");
   });
+
+  it("persists article body edits and structured revisions for the author", async () => {
+    const adapter = createFakePttAdapter();
+    await adapter.login("opUser", "pw");
+
+    await expect(
+      adapter.editArticle({
+        boardName: "test",
+        articleIndex: 1001,
+        expectedAuthor: "opUser",
+        expectedTitle: "[測試] Fake PTT 多帳號互動測試",
+        body: "更新後的正文",
+        editSummary: "修正測試說明",
+      }),
+    ).resolves.toEqual({ ok: true });
+
+    const article = await adapter.getArticle("test", 1001);
+    expect(article?.body).toBe("更新後的正文");
+    expect(article?.revisions).toEqual([
+      expect.objectContaining({ summary: "修正測試說明" }),
+    ]);
+  });
+
+  it("rejects article edits from a different fake user", async () => {
+    const adapter = createFakePttAdapter();
+    await adapter.login("mallory", "pw");
+
+    const result = await adapter.editArticle({
+      boardName: "test",
+      articleIndex: 1001,
+      expectedAuthor: "opUser",
+      expectedTitle: "[測試] Fake PTT 多帳號互動測試",
+      body: "不應寫入",
+      editSummary: "未授權編輯",
+    });
+
+    expect(result).toEqual({ ok: false, reason: "只有文章作者可以編輯文章" });
+    expect((await adapter.getArticle("test", 1001))?.body).not.toBe("不應寫入");
+  });
+
+  it("rejects article edits when the expected identity is stale", async () => {
+    const adapter = createFakePttAdapter();
+    await adapter.login("opUser", "pw");
+
+    const result = await adapter.editArticle({
+      boardName: "test",
+      articleIndex: 1001,
+      expectedAuthor: "opUser",
+      expectedTitle: "錯誤標題",
+      body: "不應寫入",
+      editSummary: "過期快照",
+    });
+
+    expect(result).toEqual({ ok: false, reason: "文章身分已變更，請重新載入" });
+  });
 });
