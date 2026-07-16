@@ -1844,13 +1844,9 @@ export async function submitArticleEditFromBot(
     ...(article.revisions ?? []).map((revision) => revision.rawBlock),
   ].filter(Boolean).join("\n");
   const { preservedFooter } = splitArticleEditableContent(revisionSourceBody);
-  const previousRevisionLines = (article.revisions ?? []).map(
-    (revision) => revision.rawBlock,
-  );
   const replacement = [
     cleanBody,
     preservedFooter,
-    ...previousRevisionLines,
     summaryMarker,
   ]
     .filter(Boolean)

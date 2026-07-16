@@ -459,15 +459,10 @@ class FakePttAdapter implements PttAdapter {
       return { ok: false, reason: "編輯摘要不可為空" };
     }
 
-    const parsedCurrentBody = splitArticleBody(article.body);
     const { preservedFooter } = splitArticleEditableContent(article.body);
-    const previousRevisions = parsedCurrentBody.revisions.map(
-      (revision) => revision.rawBlock,
-    );
     article.body = [
       request.body.trimEnd(),
       preservedFooter,
-      ...previousRevisions,
       marker,
     ]
       .filter(Boolean)

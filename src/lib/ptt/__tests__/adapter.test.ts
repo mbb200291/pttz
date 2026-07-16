@@ -2826,6 +2826,8 @@ describe("ptt adapter module", () => {
     expect(sent.indexOf("※ 編輯: alice, 07/16/2026 10:00:00\r")).toBeLessThan(
       sent.indexOf("※ PTTzzz 編輯摘要：第二次修正\r"),
     );
+    expect(sent.filter((command) => command === "※ PTTzzz 編輯摘要：第一次修正\r")).toHaveLength(1);
+    expect(sent.filter((command) => command === "※ PTTzzz 編輯摘要：中間修正\r")).toHaveLength(1);
     expect(sent).toContain("※ PTTzzz 編輯摘要：第二次修正\r");
     expect(sent).toContain("y\r");
   });

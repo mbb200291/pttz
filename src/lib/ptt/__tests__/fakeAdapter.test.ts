@@ -163,6 +163,8 @@ describe("fake PTT adapter", () => {
     expect(updated.indexOf("07/15/2026")).toBeLessThan(updated.indexOf("編輯摘要：第二次"));
     expect(updated.indexOf("編輯摘要：第二次")).toBeLessThan(updated.indexOf("07/16/2026"));
     expect(updated.indexOf("07/16/2026")).toBeLessThan(updated.indexOf("編輯摘要：第三次"));
+    expect(updated.match(/編輯摘要：第一次/gu)).toHaveLength(1);
+    expect(updated.match(/編輯摘要：第二次/gu)).toHaveLength(1);
   });
 
   it("rejects article edits from a different fake user", async () => {
