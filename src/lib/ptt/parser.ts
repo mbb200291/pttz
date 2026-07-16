@@ -64,6 +64,12 @@ export interface ArticleEditRecord {
   markerOffset: number;
 }
 
+export interface ArticleRevision {
+  summary: string;
+  rawBlock: string;
+  markerOffset: number;
+}
+
 export interface OpEditedReplySegment {
   marker: string;
   content: string;
@@ -278,6 +284,54 @@ function isEditMarkerLine(line: string): boolean {
   return /^※\s*編輯:/u.test(stripAnsi(line).trimStart());
 }
 
+const PTTZZZ_EDIT_SUMMARY_RE =
+  /^\s*※\s*PTTzzz\s*編輯摘要\s*[：:]\s*(.*?)\s*$/iu;
+const MAX_EDIT_SUMMARY_LENGTH = 120;
+
+export function formatPttzzzEditSummary(summary: string): string | null {
+  const normalized = stripAnsi(summary)
+    .replace(/[\r\n]+/gu, " ")
+    .replace(/[\x00-\x1F\x7F]/gu, "")
+    .replace(/\s+/gu, " ")
+    .trim()
+    .slice(0, MAX_EDIT_SUMMARY_LENGTH)
+    .trim();
+
+  return normalized ? `※ PTTzzz 編輯摘要：${normalized}` : null;
+}
+
+function extractPttzzzRevisions(body: string): {
+  body: string;
+  revisions: ArticleRevision[];
+} {
+  const lines = splitLinesWithOffsets(body);
+  const revisions: ArticleRevision[] = [];
+  const chunks: string[] = [];
+  let cursor = 0;
+
+  for (const line of lines) {
+    const match = stripAnsi(line.line).match(PTTZZZ_EDIT_SUMMARY_RE);
+    const summary = match?.[1]?.trim();
+    if (!summary) continue;
+
+    chunks.push(body.slice(cursor, line.start));
+    cursor = line.lineEnd;
+    revisions.push({
+      summary,
+      rawBlock: line.line,
+      markerOffset: line.start,
+    });
+  }
+
+  if (revisions.length === 0) return { body, revisions };
+
+  chunks.push(body.slice(cursor));
+  return {
+    body: chunks.join("").trimEnd(),
+    revisions,
+  };
+}
+
 function isTerminalStatusLine(line: string): boolean {
   const plain = stripAnsi(line).trim();
   return (
@@ -401,14 +455,18 @@ export function extractArticleThreadEvents(raw: string): {
 export function splitArticleBody(raw: string): {
   body: string;
   pushLines: string[];
+  revisions: ArticleRevision[];
 } {
   const lines = raw.split("\n");
   const firstPushIndex = lines.findIndex((line) => parsePushLine(line) !== null);
 
   if (firstPushIndex >= 0) {
+    const articleBody = lines.slice(0, firstPushIndex).join("\n").trimEnd();
+    const parsedBody = extractPttzzzRevisions(articleBody);
     return {
-      body: lines.slice(0, firstPushIndex).join("\n").trimEnd(),
+      body: parsedBody.body,
       pushLines: lines.slice(firstPushIndex).filter((line) => line.trim()),
+      revisions: parsedBody.revisions,
     };
   }
 
@@ -417,12 +475,17 @@ export function splitArticleBody(raw: string): {
     .filter((index) => index >= 0);
 
   if (separatorIndexes.length < 2) {
-    return { body: raw, pushLines: [] };
+    const parsedBody = extractPttzzzRevisions(raw);
+    return { body: parsedBody.body, pushLines: [], revisions: parsedBody.revisions };
   }
 
   const separatorIndex = separatorIndexes[separatorIndexes.length - 1];
+  const parsedBody = extractPttzzzRevisions(
+    lines.slice(0, separatorIndex).join("\n"),
+  );
   return {
-    body: lines.slice(0, separatorIndex).join("\n"),
+    body: parsedBody.body,
     pushLines: lines.slice(separatorIndex + 1).filter((line) => line.trim()),
+    revisions: parsedBody.revisions,
   };
 }

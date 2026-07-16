@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   extractArticleThreadEvents,
+  formatPttzzzEditSummary,
   parsePushBuffer,
   parsePushLine,
   splitArticleBody,
@@ -37,6 +38,43 @@ describe("splitArticleBody", () => {
     expect(body).not.toContain("第一則推文");
     expect(pushLines).toHaveLength(2);
     expect(pushLines[0]).toContain("推 user1:");
+  });
+
+  it("extracts PTTzzz edit summaries from the article body", () => {
+    const parsed = splitArticleBody(
+      "原始正文\n※ PTTzzz 編輯摘要：修正來源\n※ 編輯: alice (1.2.3.4), 07/16/2026 10:30:00",
+    );
+
+    expect(parsed.body).toBe("原始正文\n※ 編輯: alice (1.2.3.4), 07/16/2026 10:30:00");
+    expect(parsed.revisions).toEqual([
+      expect.objectContaining({
+        summary: "修正來源",
+        rawBlock: "※ PTTzzz 編輯摘要：修正來源",
+      }),
+    ]);
+  });
+
+  it("only treats a line-leading PTTzzz marker as an edit summary", () => {
+    const parsed = splitArticleBody(
+      "正文提到 ※ PTTzzz 編輯摘要：但這仍是正文\n※ PTTzzz 編輯摘要：真正摘要",
+    );
+
+    expect(parsed.body).toBe("正文提到 ※ PTTzzz 編輯摘要：但這仍是正文");
+    expect(parsed.revisions.map((revision) => revision.summary)).toEqual([
+      "真正摘要",
+    ]);
+  });
+});
+
+describe("formatPttzzzEditSummary", () => {
+  it("normalizes summaries into one safe marker line", () => {
+    expect(formatPttzzzEditSummary("  修正\n來源\u001b[31m  ")).toBe(
+      "※ PTTzzz 編輯摘要：修正 來源",
+    );
+  });
+
+  it("rejects an empty summary", () => {
+    expect(formatPttzzzEditSummary(" \n\u001b ")).toBeNull();
   });
 });
 
