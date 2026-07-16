@@ -7,6 +7,7 @@
  */
 
 import { usePttSocketStore } from "./usePttSocket";
+import type { ActionResult, EditArticleRequest } from "../lib/ptt/adapter";
 
 export type PushType = "push" | "neutral" | "boo";
 
@@ -111,16 +112,16 @@ export interface PttActionsResult {
     body: string,
   ): Promise<{ ok: boolean; reason?: string }>;
   editArticle(
-    body: string,
-    editSummary: string,
-  ): Promise<{ ok: boolean }>;
+    request: EditArticleRequest,
+  ): Promise<ActionResult>;
   editPush(
     mode: "補充" | "更正" | "撤回",
     startFloor: number,
     endFloor: number | null,
     content: string,
     pushType: PushType,
-  ): Promise<{ ok: boolean }>;
+    boardName?: string,
+  ): Promise<ActionResult>;
 }
 
 /**
@@ -161,17 +162,19 @@ export function usePttActions(): PttActionsResult {
     ) {
       return client?.postArticle(board, category, title, body) ?? unavailable();
     },
-    async editArticle(body: string, editSummary: string) {
-      return client?.editArticle(body, editSummary) ?? unavailable();
+    async editArticle(request: EditArticleRequest) {
+      return client?.editArticle(request) ?? unavailable();
     },
     async editPush(
-      _mode: "補充" | "更正" | "撤回",
-      _startFloor: number,
-      _endFloor: number | null,
-      _content: string,
+      mode: "補充" | "更正" | "撤回",
+      startFloor: number,
+      endFloor: number | null,
+      content: string,
       _pushType: PushType,
+      boardName?: string,
     ) {
-      return unavailable();
+      const formatted = formatEditPush(mode, startFloor, endFloor, content);
+      return client?.replyToArticle(formatted, "neutral", boardName) ?? unavailable();
     },
   };
 }

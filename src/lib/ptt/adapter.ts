@@ -139,6 +139,20 @@ export interface ArticleOpenTrace {
   finalBoard?: string;
 }
 
+export interface ActionResult {
+  ok: boolean;
+  reason?: string;
+}
+
+export interface EditArticleRequest {
+  boardName: string;
+  articleIndex: number;
+  expectedAuthor: string;
+  expectedTitle: string;
+  body: string;
+  editSummary: string;
+}
+
 export interface PttAdapter {
   send: (data: string) => Promise<boolean>;
   login: (
@@ -211,7 +225,7 @@ export interface PttAdapter {
     title: string,
     body: string,
   ) => Promise<{ ok: boolean; reason?: string }>;
-  editArticle: (body: string, editSummary: string) => Promise<{ ok: boolean }>;
+  editArticle: (request: EditArticleRequest) => Promise<ActionResult>;
   disconnect: () => Promise<void>;
   isLoggedIn: () => boolean;
   getStatus: () => ConnectionStatus;
@@ -807,9 +821,8 @@ class PttClientAdapter implements PttAdapter {
   }
 
   async editArticle(
-    _body: string,
-    _editSummary: string,
-  ): Promise<{ ok: boolean }> {
+    _request: EditArticleRequest,
+  ): Promise<ActionResult> {
     throw new Error("Article editing is not implemented yet");
   }
 
