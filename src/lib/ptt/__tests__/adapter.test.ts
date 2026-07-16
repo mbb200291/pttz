@@ -2838,4 +2838,38 @@ describe("ptt adapter module", () => {
     expect(result).toEqual({ ok: false, reason: "文章身分已變更，請重新載入" });
     expect(sent).not.toContain("E");
   });
+
+  it("refuses an article edit that exceeds the safe line limit", async () => {
+    const mod = await import("../adapter");
+    const sent: string[] = [];
+    const articleRows = [
+      "作者 alice 看板 Test",
+      "標題 [測試] 長文章",
+      "時間 Thu Jul 16 10:00:00 2026",
+      "───────────────────────────────────────",
+      ...Array.from({ length: 2001 }, (_, index) => `第 ${index + 1} 行`),
+    ];
+    const bot = {
+      enterBoardByName: async () => true,
+      getLines: async () => articleRows,
+      getLine: (index: number) => ({ str: articleRows[index] ?? "" }),
+      send: async (command: string) => {
+        sent.push(command);
+        return true;
+      },
+    };
+
+    const result = await mod.submitArticleEditFromBot(bot, {
+      boardName: "Test",
+      articleIndex: 123,
+      expectedAuthor: "alice",
+      expectedTitle: "[測試] 長文章",
+      body: "更新正文",
+      editSummary: "修正",
+    });
+
+    expect(result).toEqual({ ok: false, reason: "文章行數超過安全編輯上限" });
+    expect(sent).not.toContain("E");
+    expect(sent.some((command) => command.includes("\x19"))).toBe(false);
+  });
 });

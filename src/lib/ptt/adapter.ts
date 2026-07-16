@@ -325,6 +325,7 @@ const PTT_KEY_CTRL_P = "\x10";
 const PTT_KEY_CTRL_X = "\x18";
 const PTT_KEY_CTRL_Y = "\x19";
 const PTT_KEY_EDITOR_TOP = "\x1b,";
+const MAX_ARTICLE_EDIT_LINES = 2000;
 const MAX_BOARD_SCREEN_INDEX_GAP = 50000;
 
 type AdapterDebugGlobal = typeof globalThis & {
@@ -1827,6 +1828,30 @@ export async function submitArticleEditFromBot(
     return { ok: false, reason: "文章身分已變更，請重新載入" };
   }
 
+  const { preservedFooter } = splitArticleEditableContent(article.body);
+  const previousRevisionLines = (article.revisions ?? []).map(
+    (revision) => revision.rawBlock,
+  );
+  const replacement = [
+    cleanBody,
+    preservedFooter,
+    ...previousRevisionLines,
+    summaryMarker,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const originalEditable = [article.body, ...previousRevisionLines]
+    .filter(Boolean)
+    .join("\n");
+  const originalLineCount = Math.max(1, originalEditable.split("\n").length);
+  const replacementLineCount = replacement.split("\n").length;
+  if (
+    originalLineCount > MAX_ARTICLE_EDIT_LINES ||
+    replacementLineCount > MAX_ARTICLE_EDIT_LINES
+  ) {
+    return { ok: false, reason: "文章行數超過安全編輯上限" };
+  }
+
   const entered = await ensureNormalBoardView(bot, request.boardName);
   if (!entered) {
     return { ok: false, reason: `無法進入看板 ${request.boardName}` };
@@ -1865,23 +1890,6 @@ export async function submitArticleEditFromBot(
     await cancelArticleEdit(bot);
     return { ok: false, reason: "無法進入文章編輯器（可能沒有編輯權限）" };
   }
-
-  const { preservedFooter } = splitArticleEditableContent(article.body);
-  const previousRevisionLines = (article.revisions ?? []).map(
-    (revision) => revision.rawBlock,
-  );
-  const replacement = [
-    cleanBody,
-    preservedFooter,
-    ...previousRevisionLines,
-    summaryMarker,
-  ]
-    .filter(Boolean)
-    .join("\n");
-  const originalEditable = [article.body, ...previousRevisionLines]
-    .filter(Boolean)
-    .join("\n");
-  const originalLineCount = Math.max(1, originalEditable.split("\n").length);
 
   await bot.send(PTT_KEY_EDITOR_TOP);
   await bot.send(PTT_KEY_CTRL_Y.repeat(originalLineCount));
