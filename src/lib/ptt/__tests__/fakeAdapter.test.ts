@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from "vitest";
-import { createFakePttAdapter } from "../fakeAdapter";
+import { createFakePttAdapter, FAKE_PTT_STORE_KEY } from "../fakeAdapter";
 
 describe("fake PTT adapter", () => {
   beforeEach(() => {
@@ -94,6 +94,29 @@ describe("fake PTT adapter", () => {
     expect(article?.revisions).toEqual([
       expect.objectContaining({ summary: "修正測試說明" }),
     ]);
+  });
+
+  it("preserves the existing signature and native edit footer", async () => {
+    const adapter = createFakePttAdapter();
+    await adapter.getArticle("test", 1001);
+    const store = JSON.parse(localStorage.getItem(FAKE_PTT_STORE_KEY) ?? "null");
+    store.boards.test.articles[0].body =
+      "原正文\n--\n簽名檔\n※ 編輯: opUser (203.0.113.1), 07/16/2026 10:00:00";
+    localStorage.setItem(FAKE_PTT_STORE_KEY, JSON.stringify(store));
+    await adapter.login("opUser", "pw");
+
+    await adapter.editArticle({
+      boardName: "test",
+      articleIndex: 1001,
+      expectedAuthor: "opUser",
+      expectedTitle: "[測試] Fake PTT 多帳號互動測試",
+      body: "更新正文",
+      editSummary: "保留 footer",
+    });
+
+    expect((await adapter.getArticle("test", 1001))?.body).toBe(
+      "更新正文\n--\n簽名檔\n※ 編輯: opUser (203.0.113.1), 07/16/2026 10:00:00",
+    );
   });
 
   it("rejects article edits from a different fake user", async () => {

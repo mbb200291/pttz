@@ -12,6 +12,7 @@ import type {
 import {
   formatPttzzzEditSummary,
   splitArticleBody,
+  splitArticleEditableContent,
   type ArticleSummary,
   type RawPush,
 } from "./parser";
@@ -458,10 +459,17 @@ class FakePttAdapter implements PttAdapter {
       return { ok: false, reason: "編輯摘要不可為空" };
     }
 
-    const previousRevisions = splitArticleBody(article.body).revisions.map(
+    const parsedCurrentBody = splitArticleBody(article.body);
+    const { preservedFooter } = splitArticleEditableContent(parsedCurrentBody.body);
+    const previousRevisions = parsedCurrentBody.revisions.map(
       (revision) => revision.rawBlock,
     );
-    article.body = [request.body.trimEnd(), ...previousRevisions, marker]
+    article.body = [
+      request.body.trimEnd(),
+      preservedFooter,
+      ...previousRevisions,
+      marker,
+    ]
       .filter(Boolean)
       .join("\n");
     writeStore(store);
