@@ -2,6 +2,20 @@ import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 describe("Article", () => {
+  it("uses the full source-floor range for an aggregated push edit", async () => {
+    const { getPushEditFloorRange } = await import("../../lib/ptt/pushEditing");
+
+    expect(
+      getPushEditFloorRange({
+        floorNumber: 7,
+        sourceFloors: [12, 10, 11],
+      } as never),
+    ).toEqual({ startFloor: 10, endFloor: 12 });
+    expect(
+      getPushEditFloorRange({ floorNumber: 7, sourceFloors: [] } as never),
+    ).toEqual({ startFloor: 7, endFloor: null });
+  });
+
   it("shows the selected list row as an immediate fallback while loading", async () => {
     const { Article } = await import("../Article");
 

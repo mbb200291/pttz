@@ -18,6 +18,7 @@ import type { VoteCount, PushEditData } from "./PushThread";
 import { Composer } from "./Composer";
 import type { ComposerMode, ComposerInitial } from "./Composer";
 import { canVote, usePttActions } from "../hooks/usePttActions";
+import { getPushEditFloorRange } from "../lib/ptt/pushEditing";
 import { Monogram } from "./Monogram";
 import { ScoreOrb } from "./ScoreOrb";
 
@@ -355,6 +356,8 @@ export function Article({
 
   // Composer state: null = closed
   const [composer, setComposer] = useState<{ mode: ComposerMode; initial: ComposerInitial } | null>(null);
+  const [composerSubmitting, setComposerSubmitting] = useState(false);
+  const [composerSubmitError, setComposerSubmitError] = useState<string | null>(null);
 
   const actions = usePttActions();
   const { isLoggedIn } = actions;
@@ -407,6 +410,7 @@ export function Article({
   }, [actions, article?.pushes, boardName, currentUser, liveReload, myPushVotes]);
 
   const openReply = useCallback(() => {
+    setComposerSubmitError(null);
     setComposer({ mode: "reply", initial: {} });
   }, []);
 
@@ -415,6 +419,7 @@ export function Article({
       alert("嵌套回文最多支援三層，無法再回覆這一層。");
       return;
     }
+    setComposerSubmitError(null);
     setComposer({
       mode: "reply-push",
       initial: {
@@ -424,17 +429,47 @@ export function Article({
   }, [article]);
 
   const openEditPush = useCallback((push: AggregatedPush) => {
-    setComposer({ mode: "edit-push", initial: { body: push.content } });
+    const { startFloor, endFloor } = getPushEditFloorRange(push);
+    setComposerSubmitError(null);
+    setComposer({
+      mode: "edit-push",
+      initial: {
+        body: push.content,
+        targetFloor: startFloor,
+        targetEndFloor: endFloor ?? undefined,
+      },
+    });
   }, []);
 
   const handleComposerClose = useCallback(() => {
+    if (composerSubmitting) return;
+    setComposerSubmitError(null);
     setComposer(null);
-  }, []);
+  }, [composerSubmitting]);
 
   const handleComposerSubmit = useCallback((payload: import("./Composer").ComposerPayload) => {
+    if (composerSubmitting) return;
+    setComposerSubmitting(true);
+    setComposerSubmitError(null);
+
     if (composer?.mode === "edit-push") {
-      // TODO: update pushEdits Map with old content in history once adapter integration is done
-      setComposer(null);
+      void actions.editPush(
+        payload.editMode,
+        payload.targetFloor ?? 0,
+        payload.targetEndFloor ?? null,
+        payload.body,
+        "neutral",
+        boardName,
+      ).then((result) => {
+        if (!result.ok) {
+          setComposerSubmitError(result.reason ?? "推文編輯失敗");
+          return;
+        }
+        setComposer(null);
+        void liveReload();
+      }).catch((error) => {
+        setComposerSubmitError(error instanceof Error ? error.message : "推文編輯失敗");
+      }).finally(() => setComposerSubmitting(false));
       return;
     }
     const body =
@@ -442,11 +477,16 @@ export function Article({
         ? `回${payload.targetFloor}樓：${payload.body}`
         : payload.body;
     void actions.replyToArticle(body, payload.pushType, boardName).then((result) => {
-      if (!result.ok) return;
+      if (!result.ok) {
+        setComposerSubmitError("回文送出失敗");
+        return;
+      }
       setComposer(null);
       void liveReload();
-    });
-  }, [actions, boardName, composer, liveReload]);
+    }).catch((error) => {
+      setComposerSubmitError(error instanceof Error ? error.message : "回文送出失敗");
+    }).finally(() => setComposerSubmitting(false));
+  }, [actions, boardName, composer, composerSubmitting, liveReload]);
 
   const initialArticle =
     initialArticleSummary && !articleAid
@@ -688,6 +728,8 @@ export function Article({
         <Composer
           mode={composer.mode}
           initial={composer.initial}
+          submitting={composerSubmitting}
+          submitError={composerSubmitError}
           onClose={handleComposerClose}
           onSubmit={handleComposerSubmit}
         />

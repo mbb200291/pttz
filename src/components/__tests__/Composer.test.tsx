@@ -98,6 +98,47 @@ describe("Composer", () => {
     expect(screen.getByRole("button", { name: "撤回" })).toBeTruthy();
   });
 
+  it("allows an empty body when retracting a push", async () => {
+    const onSubmit = vi.fn();
+    render(
+      <Composer
+        {...defaultProps}
+        mode="edit-push"
+        initial={{ editMode: "撤回", targetFloor: 12, targetEndFloor: 14 }}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    const submit = screen.getByRole("button", { name: /送出/ }) as HTMLButtonElement;
+    expect(submit.disabled).toBe(false);
+    await userEvent.click(submit);
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: "",
+        editMode: "撤回",
+        targetFloor: 12,
+        targetEndFloor: 14,
+      }),
+    );
+  });
+
+  it("keeps the edit draft visible while submitting and after an error", () => {
+    render(
+      <Composer
+        {...defaultProps}
+        mode="edit-push"
+        initial={{ body: "要保留的修正", targetFloor: 8 }}
+        submitting
+        submitError="推文編輯失敗"
+      />,
+    );
+
+    expect((screen.getByRole("button", { name: /送出中/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole("alert").textContent).toContain("推文編輯失敗");
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("要保留的修正");
+  });
+
   it("pressing Escape calls onClose", async () => {
     const onClose = vi.fn();
     render(<Composer {...defaultProps} onClose={onClose} />);
