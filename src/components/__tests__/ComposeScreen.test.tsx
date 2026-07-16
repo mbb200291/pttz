@@ -173,4 +173,31 @@ describe("ComposeScreen", () => {
         .value,
     ).toBe("仍要保留的正文");
   });
+
+  it("keeps article identity fields read-only while editing", () => {
+    render(
+      <ComposeScreen
+        {...defaultEditProps}
+        initial={{ board: "Test", title: "原標題", body: "正文" }}
+      />,
+    );
+
+    expect((screen.getByDisplayValue("Test") as HTMLInputElement).readOnly).toBe(true);
+    expect((screen.getByDisplayValue("原標題") as HTMLInputElement).readOnly).toBe(true);
+  });
+
+  it("ignores Escape while an article update is in flight", async () => {
+    const onCancel = vi.fn();
+    render(
+      <ComposeScreen
+        {...defaultEditProps}
+        initial={{ title: "原標題", body: "正文" }}
+        submitting
+        onCancel={onCancel}
+      />,
+    );
+
+    await userEvent.keyboard("{Escape}");
+    expect(onCancel).not.toHaveBeenCalled();
+  });
 });

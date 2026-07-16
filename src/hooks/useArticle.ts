@@ -245,6 +245,7 @@ export function useArticle(
             body: next.body,
             pushes: next.pushes,
             articleNotes: next.articleNotes,
+            revisions: next.revisions ?? [],
             score: next.score,
           });
         }

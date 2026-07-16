@@ -8,6 +8,8 @@
 
 import { usePttSocketStore } from "./usePttSocket";
 import type { ActionResult, EditArticleRequest } from "../lib/ptt/adapter";
+import { formatEditPush as buildEditPush } from "../lib/ptt/pushEditing";
+export { formatEditPush } from "../lib/ptt/pushEditing";
 
 export type PushType = "push" | "neutral" | "boo";
 
@@ -29,25 +31,6 @@ export function formatReplyToPush(floor: number, content: string): string {
  * @param content - The content (only used for 補充 and 更正)
  * @returns Formatted edit string
  */
-export function formatEditPush(
-  mode: "補充" | "更正" | "撤回",
-  startFloor: number,
-  endFloor: number | null,
-  content: string,
-): string {
-  if (mode === "撤回") {
-    if (endFloor !== null) {
-      return `撤回我在${startFloor}~${endFloor}樓的發言`;
-    } else {
-      return `撤回我在${startFloor}樓的發言`;
-    }
-  }
-
-  // mode === "補充" or "更正"
-  const trimmedContent = content.trim();
-  return `${mode}我在${startFloor}樓發言：${trimmedContent}`;
-}
-
 /**
  * Format a vote on an article
  * @param floor - The floor number to vote on
@@ -173,7 +156,7 @@ export function usePttActions(): PttActionsResult {
       _pushType: PushType,
       boardName?: string,
     ) {
-      const formatted = formatEditPush(mode, startFloor, endFloor, content);
+      const formatted = buildEditPush(mode, startFloor, endFloor, content);
       return client?.replyToArticle(formatted, "neutral", boardName) ?? unavailable();
     },
   };

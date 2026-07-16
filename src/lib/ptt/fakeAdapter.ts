@@ -460,7 +460,7 @@ class FakePttAdapter implements PttAdapter {
     }
 
     const parsedCurrentBody = splitArticleBody(article.body);
-    const { preservedFooter } = splitArticleEditableContent(parsedCurrentBody.body);
+    const { preservedFooter } = splitArticleEditableContent(article.body);
     const previousRevisions = parsedCurrentBody.revisions.map(
       (revision) => revision.rawBlock,
     );
@@ -510,26 +510,26 @@ class FakePttAdapter implements PttAdapter {
     boardName: string | undefined,
     content: string,
     pushType: PushType,
-  ): { ok: boolean } {
-    if (!this.currentUser) return { ok: false };
-    const targetBoardName = boardName ? normalizeBoardName(boardName) : "test";
+  ): ActionResult {
+    if (!this.currentUser) return { ok: false, reason: "尚未登入 fake PTT" };
+    const targetBoardName = boardName
+      ? normalizeBoardName(boardName)
+      : this.currentArticle?.boardName;
+    if (!targetBoardName || this.currentArticle?.boardName !== targetBoardName) {
+      return { ok: false, reason: "尚未開啟要回覆的文章" };
+    }
 
-    mutateStore((store) => {
-      const targetIndex =
-        this.currentArticle?.boardName === targetBoardName
-          ? this.currentArticle.articleIndex
-          : undefined;
-      const article =
-        targetIndex === undefined
-          ? store.boards[targetBoardName]?.articles
-              .slice()
-              .sort((a, b) => b.index - a.index)[0]
-          : getArticleRecord(store, targetBoardName, targetIndex);
-      if (!article) return;
-      article.rawPushes.push(
-        createRawPush(pushType, this.currentUser!, content.trim(), article.rawPushes.length + 1),
-      );
-    });
+    const store = readStore();
+    const article = getArticleRecord(
+      store,
+      targetBoardName,
+      this.currentArticle.articleIndex,
+    );
+    if (!article) return { ok: false, reason: "找不到要回覆的文章" };
+    article.rawPushes.push(
+      createRawPush(pushType, this.currentUser, content.trim(), article.rawPushes.length + 1),
+    );
+    writeStore(store);
 
     this.emitScreen(`[Fake PTT] ${this.currentUser}: ${content}`);
     return { ok: true };

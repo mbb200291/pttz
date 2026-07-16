@@ -70,6 +70,7 @@ export interface AdapterArticleData {
   pushes: AggregatedPush[];
   articleNotes: ArticleEditRecord[];
   revisions?: ArticleRevision[];
+  revisionSourceBody?: string;
   score: number;
   debug?: ArticleDebugDump;
 }
@@ -1765,8 +1766,18 @@ export function isArticleEditSavePrompt(screen: string): boolean {
   );
 }
 
-function isArticleEditSuccessScreen(screen: string, boardName: string): boolean {
+export function isArticleEditSuccessScreen(
+  screen: string,
+  boardName: string,
+  expectedAuthor: string,
+  expectedTitle: string,
+): boolean {
   const plain = stripAnsi(screen).replace(/\r/g, "");
+  const normalized = normalizeArticleIdentity(plain);
+  const hasExpectedIdentity =
+    normalized.includes(normalizeArticleIdentity(expectedAuthor)) &&
+    normalized.includes(normalizeArticleIdentity(expectedTitle));
+  if (!hasExpectedIdentity) return false;
   return (
     /文章已更新|修改完成|已儲存/u.test(plain) ||
     (/瀏覽 第|目前顯示/u.test(plain) && /作者\s+|標題\s+/u.test(plain)) ||
@@ -1828,7 +1839,11 @@ export async function submitArticleEditFromBot(
     return { ok: false, reason: "文章身分已變更，請重新載入" };
   }
 
-  const { preservedFooter } = splitArticleEditableContent(article.body);
+  const revisionSourceBody = article.revisionSourceBody ?? [
+    article.body,
+    ...(article.revisions ?? []).map((revision) => revision.rawBlock),
+  ].filter(Boolean).join("\n");
+  const { preservedFooter } = splitArticleEditableContent(revisionSourceBody);
   const previousRevisionLines = (article.revisions ?? []).map(
     (revision) => revision.rawBlock,
   );
@@ -1840,9 +1855,7 @@ export async function submitArticleEditFromBot(
   ]
     .filter(Boolean)
     .join("\n");
-  const originalEditable = [article.body, ...previousRevisionLines]
-    .filter(Boolean)
-    .join("\n");
+  const originalEditable = revisionSourceBody;
   const originalLineCount = Math.max(1, originalEditable.split("\n").length);
   const replacementLineCount = replacement.split("\n").length;
   if (
@@ -1913,7 +1926,12 @@ export async function submitArticleEditFromBot(
   await bot.send("y\r");
   const savedAt = Date.now();
   while (Date.now() - savedAt < 2500) {
-    if (isArticleEditSuccessScreen(readVisibleScreen(bot), request.boardName)) {
+    if (isArticleEditSuccessScreen(
+      readVisibleScreen(bot),
+      request.boardName,
+      request.expectedAuthor,
+      request.expectedTitle,
+    )) {
       return { ok: true };
     }
     await sleep(50);
@@ -2931,8 +2949,9 @@ export async function fetchArticleFromBot(
       }
 
       const rawFull = rawLines.join("\n");
-      const { body } = splitArticleBody(rawFull);
+      const { body, sourceBody, revisions } = splitArticleBody(rawFull);
       const parsed = parseArticleHeaderBlock(body);
+      const parsedSource = parseArticleHeaderBlock(sourceBody);
       const author = parsed.author || article.author?.trim() || "";
       const title = parsed.title || article.title?.trim() || "";
       const date = parsed.date || article.timestamp?.trim() || "";
@@ -2955,6 +2974,8 @@ export async function fetchArticleFromBot(
         body: parsed.content,
         pushes: thread.pushes,
         articleNotes: thread.articleNotes,
+        revisions,
+        revisionSourceBody: parsedSource.content,
         score: thread.score,
         debug,
       };
@@ -3163,8 +3184,9 @@ async function fetchArticleFromBotManuallyWithOpen(
   if (!Array.isArray(rawLines) || rawLines.length === 0) return null;
 
   const rawFull = rawLines.join("\n");
-  const { body, revisions } = splitArticleBody(rawFull);
+  const { body, sourceBody, revisions } = splitArticleBody(rawFull);
   const parsed = parseArticleHeaderBlock(body);
+  const parsedSource = parseArticleHeaderBlock(sourceBody);
   const author = parsed.author;
   const title = parsed.title;
   const date = parsed.date;
@@ -3203,6 +3225,7 @@ async function fetchArticleFromBotManuallyWithOpen(
     pushes: thread.pushes,
     articleNotes: thread.articleNotes,
     revisions,
+    revisionSourceBody: parsedSource.content,
     score: thread.score,
     debug,
   };

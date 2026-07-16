@@ -2742,6 +2742,14 @@ describe("ptt adapter module", () => {
     expect(mod.isArticleEditorScreen("文章編輯  離開[Ctrl-X]  插入模式")).toBe(true);
     expect(mod.isArticleEditorScreen("文章發表綱領")).toBe(false);
     expect(mod.isArticleEditSavePrompt("確定要儲存檔案嗎? [Y/n]")).toBe(true);
+    expect(
+      mod.isArticleEditSuccessScreen(
+        "文章已更新\n看板《Test》",
+        "Test",
+        "alice",
+        "[測試] 原標題",
+      ),
+    ).toBe(false);
   });
 
   it("edits the expected article and preserves structured revision history", async () => {
@@ -2756,6 +2764,9 @@ describe("ptt adapter module", () => {
       "--",
       "舊簽名",
       "※ PTTzzz 編輯摘要：第一次修正",
+      "※ 編輯: alice, 07/15/2026 10:00:00",
+      "※ PTTzzz 編輯摘要：中間修正",
+      "※ 編輯: alice, 07/16/2026 10:00:00",
     ];
     let screenRows = [
       "看板《Test》",
@@ -2779,7 +2790,11 @@ describe("ptt adapter module", () => {
         } else if (command === "\x18") {
           screenRows = ["確定要儲存檔案嗎? [Y/n]"];
         } else if (command === "y\r") {
-          screenRows = ["文章已更新", "看板《Test》"];
+          screenRows = [
+            "文章已更新",
+            "作者 alice 看板 Test",
+            "標題 [測試] 原標題",
+          ];
         }
         return true;
       },
@@ -2799,6 +2814,18 @@ describe("ptt adapter module", () => {
     expect(sent).toContain("\x1b,");
     expect(sent).toContain("舊簽名\r");
     expect(sent).toContain("※ PTTzzz 編輯摘要：第一次修正\r");
+    expect(sent.indexOf("※ PTTzzz 編輯摘要：第一次修正\r")).toBeLessThan(
+      sent.indexOf("※ 編輯: alice, 07/15/2026 10:00:00\r"),
+    );
+    expect(sent.indexOf("※ 編輯: alice, 07/15/2026 10:00:00\r")).toBeLessThan(
+      sent.indexOf("※ PTTzzz 編輯摘要：中間修正\r"),
+    );
+    expect(sent.indexOf("※ PTTzzz 編輯摘要：中間修正\r")).toBeLessThan(
+      sent.indexOf("※ 編輯: alice, 07/16/2026 10:00:00\r"),
+    );
+    expect(sent.indexOf("※ 編輯: alice, 07/16/2026 10:00:00\r")).toBeLessThan(
+      sent.indexOf("※ PTTzzz 編輯摘要：第二次修正\r"),
+    );
     expect(sent).toContain("※ PTTzzz 編輯摘要：第二次修正\r");
     expect(sent).toContain("y\r");
   });

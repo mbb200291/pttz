@@ -307,7 +307,7 @@ export function splitArticleEditableContent(body: string): {
   const lines = body.replace(/\r\n?/gu, "\n").split("\n");
   const footerStart = lines.findIndex((line) => {
     const plain = stripAnsi(line).trim();
-    return plain === "--" || isEditMarkerLine(line);
+    return plain === "--" || isEditMarkerLine(line) || PTTZZZ_EDIT_SUMMARY_RE.test(plain);
   });
 
   if (footerStart < 0) {
@@ -474,6 +474,7 @@ export function extractArticleThreadEvents(raw: string): {
 
 export function splitArticleBody(raw: string): {
   body: string;
+  sourceBody: string;
   pushLines: string[];
   revisions: ArticleRevision[];
 } {
@@ -485,6 +486,7 @@ export function splitArticleBody(raw: string): {
     const parsedBody = extractPttzzzRevisions(articleBody);
     return {
       body: parsedBody.body,
+      sourceBody: articleBody,
       pushLines: lines.slice(firstPushIndex).filter((line) => line.trim()),
       revisions: parsedBody.revisions,
     };
@@ -496,7 +498,12 @@ export function splitArticleBody(raw: string): {
 
   if (separatorIndexes.length < 2) {
     const parsedBody = extractPttzzzRevisions(raw);
-    return { body: parsedBody.body, pushLines: [], revisions: parsedBody.revisions };
+    return {
+      body: parsedBody.body,
+      sourceBody: raw,
+      pushLines: [],
+      revisions: parsedBody.revisions,
+    };
   }
 
   const separatorIndex = separatorIndexes[separatorIndexes.length - 1];
@@ -505,6 +512,7 @@ export function splitArticleBody(raw: string): {
   );
   return {
     body: parsedBody.body,
+    sourceBody: lines.slice(0, separatorIndex).join("\n"),
     pushLines: lines.slice(separatorIndex + 1).filter((line) => line.trim()),
     revisions: parsedBody.revisions,
   };

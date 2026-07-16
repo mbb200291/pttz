@@ -6,6 +6,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { uploadToImgur } from "../lib/imgur";
+import { approximatePttBytes, formatEditPush } from "../lib/ptt/pushEditing";
 
 export type ComposerMode = "reply" | "reply-push" | "edit-push";
 export type EditPushMode = "補充" | "更正" | "撤回";
@@ -85,9 +86,19 @@ export function Composer({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [onClose, submitting]);
 
-  const remaining = MAX_BYTES - body.length;
+  const submittedContent = mode === "edit-push"
+    ? formatEditPush(
+        editMode,
+        initial.targetFloor ?? 0,
+        initial.targetEndFloor ?? null,
+        body,
+      )
+    : body;
+  const remaining = MAX_BYTES - approximatePttBytes(submittedContent);
   const isSubmitDisabled =
-    submitting || (body.trim() === "" && !(mode === "edit-push" && editMode === "撤回"));
+    submitting ||
+    remaining < 0 ||
+    (body.trim() === "" && !(mode === "edit-push" && editMode === "撤回"));
 
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget && !submitting) {

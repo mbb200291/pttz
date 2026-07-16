@@ -23,6 +23,19 @@ describe("fake PTT adapter", () => {
     ))).toBe(true);
   });
 
+  it("does not report a fake reply as successful without an exact open article", async () => {
+    const adapter = createFakePttAdapter();
+    await adapter.login("david", "anything");
+
+    await expect(adapter.replyToArticle("不應寫入", "neutral", "test")).resolves.toEqual({
+      ok: false,
+      reason: "尚未開啟要回覆的文章",
+    });
+
+    const article = await adapter.getArticle("test", 1001);
+    expect(article?.pushes.some((push) => push.content === "不應寫入")).toBe(false);
+  });
+
   it("shares fake board data across adapter instances", async () => {
     const alice = createFakePttAdapter();
     await alice.login("alice", "pw");
@@ -117,6 +130,39 @@ describe("fake PTT adapter", () => {
     expect((await adapter.getArticle("test", 1001))?.body).toBe(
       "更新正文\n--\n簽名檔\n※ 編輯: opUser (203.0.113.1), 07/16/2026 10:00:00",
     );
+  });
+
+  it("preserves interleaved revision and native edit record order", async () => {
+    const adapter = createFakePttAdapter();
+    await adapter.getArticle("test", 1001);
+    const store = JSON.parse(localStorage.getItem(FAKE_PTT_STORE_KEY) ?? "null");
+    store.boards.test.articles[0].body = [
+      "原正文",
+      "--",
+      "簽名檔",
+      "※ PTTzzz 編輯摘要：第一次",
+      "※ 編輯: opUser, 07/15/2026 10:00:00",
+      "※ PTTzzz 編輯摘要：第二次",
+      "※ 編輯: opUser, 07/16/2026 10:00:00",
+    ].join("\n");
+    localStorage.setItem(FAKE_PTT_STORE_KEY, JSON.stringify(store));
+    await adapter.login("opUser", "pw");
+
+    await adapter.editArticle({
+      boardName: "test",
+      articleIndex: 1001,
+      expectedAuthor: "opUser",
+      expectedTitle: "[測試] Fake PTT 多帳號互動測試",
+      body: "更新正文",
+      editSummary: "第三次",
+    });
+
+    const updated = JSON.parse(localStorage.getItem(FAKE_PTT_STORE_KEY) ?? "null")
+      .boards.test.articles[0].body as string;
+    expect(updated.indexOf("編輯摘要：第一次")).toBeLessThan(updated.indexOf("07/15/2026"));
+    expect(updated.indexOf("07/15/2026")).toBeLessThan(updated.indexOf("編輯摘要：第二次"));
+    expect(updated.indexOf("編輯摘要：第二次")).toBeLessThan(updated.indexOf("07/16/2026"));
+    expect(updated.indexOf("07/16/2026")).toBeLessThan(updated.indexOf("編輯摘要：第三次"));
   });
 
   it("rejects article edits from a different fake user", async () => {

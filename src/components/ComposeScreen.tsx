@@ -132,6 +132,7 @@ export function ComposeScreen({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        if (submitting) return;
         onCancel();
         return;
       }
@@ -141,7 +142,7 @@ export function ComposeScreen({
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onCancel, handleSubmit]);
+  }, [onCancel, handleSubmit, submitting]);
 
   // Image upload
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -314,6 +315,7 @@ export function ComposeScreen({
             <button
               type="button"
               onClick={onCancel}
+              disabled={submitting}
               style={{
                 background: "transparent",
                 border: 0,
@@ -500,6 +502,7 @@ export function ComposeScreen({
               <input
                 value={board}
                 onChange={(e) => setBoard(e.target.value)}
+                readOnly={mode === "edit-article"}
                 placeholder="名稱"
                 style={{
                   background: "transparent",
@@ -538,6 +541,7 @@ export function ComposeScreen({
                     key={cat}
                     type="button"
                     onClick={() => setCategory(active ? "" : cat)}
+                    disabled={mode === "edit-article"}
                     style={{
                       padding: "5px 11px",
                       borderRadius: 7,
@@ -560,6 +564,7 @@ export function ComposeScreen({
               <input
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
+                readOnly={mode === "edit-article"}
                 placeholder="依看板規定輸入"
                 aria-label="分類"
                 style={{
@@ -581,6 +586,7 @@ export function ComposeScreen({
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            readOnly={mode === "edit-article"}
             placeholder="標題"
             onFocus={() => setTitleFocused(true)}
             onBlur={() => setTitleFocused(false)}

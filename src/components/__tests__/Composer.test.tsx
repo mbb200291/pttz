@@ -139,6 +139,20 @@ describe("Composer", () => {
     expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("要保留的修正");
   });
 
+  it("disables push edits when the formatted Big5-sized content exceeds the limit", async () => {
+    render(
+      <Composer
+        {...defaultProps}
+        mode="edit-push"
+        initial={{ targetFloor: 123 }}
+      />,
+    );
+
+    await userEvent.type(screen.getByRole("textbox"), "中".repeat(40));
+    expect((screen.getByRole("button", { name: "送出" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText((content) => content.startsWith("-"))).toBeTruthy();
+  });
+
   it("pressing Escape calls onClose", async () => {
     const onClose = vi.fn();
     render(<Composer {...defaultProps} onClose={onClose} />);
