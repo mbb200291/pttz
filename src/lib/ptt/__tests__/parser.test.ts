@@ -5,6 +5,7 @@ import {
   parsePushBuffer,
   parsePushLine,
   splitArticleBody,
+  splitArticleEditableContent,
   stripAnsi,
 } from "../parser";
 
@@ -75,6 +76,31 @@ describe("formatPttzzzEditSummary", () => {
 
   it("rejects an empty summary", () => {
     expect(formatPttzzzEditSummary(" \n\u001b ")).toBeNull();
+  });
+});
+
+describe("splitArticleEditableContent", () => {
+  it("keeps the signature and native edit records outside the editable body", () => {
+    expect(
+      splitArticleEditableContent(
+        "第一段\n第二段\n--\n簽名檔\n※ 編輯: alice (1.2.3.4), 07/16/2026 10:30:00",
+      ),
+    ).toEqual({
+      editableBody: "第一段\n第二段",
+      preservedFooter:
+        "--\n簽名檔\n※ 編輯: alice (1.2.3.4), 07/16/2026 10:30:00",
+    });
+  });
+
+  it("preserves native edit records even when no signature exists", () => {
+    expect(
+      splitArticleEditableContent(
+        "正文\n※ 編輯: alice (1.2.3.4), 07/16/2026 10:30:00",
+      ),
+    ).toEqual({
+      editableBody: "正文",
+      preservedFooter: "※ 編輯: alice (1.2.3.4), 07/16/2026 10:30:00",
+    });
   });
 });
 

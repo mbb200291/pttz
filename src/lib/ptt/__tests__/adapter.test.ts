@@ -2735,4 +2735,107 @@ describe("ptt adapter module", () => {
     ).toBe(true);
     expect(trace?.partialCandidates[0]?.title).toBe("[問卦] trace");
   });
+
+  it("recognizes article editor and save confirmation screens", async () => {
+    const mod = await import("../adapter");
+
+    expect(mod.isArticleEditorScreen("文章編輯  離開[Ctrl-X]  插入模式")).toBe(true);
+    expect(mod.isArticleEditorScreen("文章發表綱領")).toBe(false);
+    expect(mod.isArticleEditSavePrompt("確定要儲存檔案嗎? [Y/n]")).toBe(true);
+  });
+
+  it("edits the expected article and preserves structured revision history", async () => {
+    const mod = await import("../adapter");
+    const sent: string[] = [];
+    const articleRows = [
+      "作者 alice 看板 Test",
+      "標題 [測試] 原標題",
+      "時間 Thu Jul 16 10:00:00 2026",
+      "───────────────────────────────────────",
+      "舊正文",
+      "--",
+      "舊簽名",
+      "※ PTTzzz 編輯摘要：第一次修正",
+    ];
+    let screenRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 123, author: "alice", title: "[測試] 原標題" }),
+    ];
+
+    const bot = {
+      enterBoardByName: async () => true,
+      getLines: async () => articleRows,
+      getLine: (index: number) => ({ str: screenRows[index] ?? "" }),
+      send: async (command: string) => {
+        sent.push(command);
+        if (command === "123\r\r") screenRows = articleRows;
+        else if (command === "q") {
+          screenRows = [
+            "看板《Test》",
+            buildBoardLine({ index: 123, author: "alice", title: "[測試] 原標題" }),
+          ];
+        } else if (command === "E") {
+          screenRows = ["文章編輯  離開[Ctrl-X]  插入模式"];
+        } else if (command === "\x18") {
+          screenRows = ["確定要儲存檔案嗎? [Y/n]"];
+        } else if (command === "y\r") {
+          screenRows = ["文章已更新", "看板《Test》"];
+        }
+        return true;
+      },
+    };
+
+    const result = await mod.submitArticleEditFromBot(bot, {
+      boardName: "Test",
+      articleIndex: 123,
+      expectedAuthor: "alice",
+      expectedTitle: "[測試] 原標題",
+      body: "更新正文",
+      editSummary: "第二次修正",
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(sent).toContain("E");
+    expect(sent).toContain("\x1b,");
+    expect(sent).toContain("舊簽名\r");
+    expect(sent).toContain("※ PTTzzz 編輯摘要：第一次修正\r");
+    expect(sent).toContain("※ PTTzzz 編輯摘要：第二次修正\r");
+    expect(sent).toContain("y\r");
+  });
+
+  it("does not enter the editor when the article identity is stale", async () => {
+    const mod = await import("../adapter");
+    const sent: string[] = [];
+    const articleRows = [
+      "作者 alice 看板 Test",
+      "標題 [測試] 已變更標題",
+      "時間 Thu Jul 16 10:00:00 2026",
+      "───────────────────────────────────────",
+      "舊正文",
+    ];
+    let screenRows = ["看板《Test》"];
+    const bot = {
+      enterBoardByName: async () => true,
+      getLines: async () => articleRows,
+      getLine: (index: number) => ({ str: screenRows[index] ?? "" }),
+      send: async (command: string) => {
+        sent.push(command);
+        if (command === "123\r\r") screenRows = articleRows;
+        if (command === "q") screenRows = ["看板《Test》"];
+        return true;
+      },
+    };
+
+    const result = await mod.submitArticleEditFromBot(bot, {
+      boardName: "Test",
+      articleIndex: 123,
+      expectedAuthor: "alice",
+      expectedTitle: "[測試] 原標題",
+      body: "更新正文",
+      editSummary: "修正",
+    });
+
+    expect(result).toEqual({ ok: false, reason: "文章身分已變更，請重新載入" });
+    expect(sent).not.toContain("E");
+  });
 });

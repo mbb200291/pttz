@@ -8,8 +8,10 @@ import {
 } from "./pushAggregator";
 import {
   extractArticleThreadEvents,
+  formatPttzzzEditSummary,
   parsePushBuffer,
   splitArticleBody,
+  splitArticleEditableContent,
   stripAnsi,
   type ArticleEditRecord,
   type ArticleRevision,
@@ -294,7 +296,7 @@ type BoardFetchBot = Partial<
   >
 >;
 
-type WriteBot = BoardFetchBot;
+type WriteBot = BoardFetchBot & Pick<ArticleFetchBot, "getLines">;
 
 type LoginTerminalBot = Pick<BotLike, "send">;
 
@@ -321,6 +323,8 @@ const PTT_KEY_END = "\x1b[4~";
 const PTT_KEY_CTRL_C = "\x03";
 const PTT_KEY_CTRL_P = "\x10";
 const PTT_KEY_CTRL_X = "\x18";
+const PTT_KEY_CTRL_Y = "\x19";
+const PTT_KEY_EDITOR_TOP = "\x1b,";
 const MAX_BOARD_SCREEN_INDEX_GAP = 50000;
 
 type AdapterDebugGlobal = typeof globalThis & {
@@ -824,9 +828,12 @@ class PttClientAdapter implements PttAdapter {
   }
 
   async editArticle(
-    _request: EditArticleRequest,
+    request: EditArticleRequest,
   ): Promise<ActionResult> {
-    throw new Error("Article editing is not implemented yet");
+    return this.runSerial(async () => {
+      await this.waitUntilLoggedIn();
+      return submitArticleEditFromBot(this.bot, request);
+    });
   }
 
   async disconnect(): Promise<void> {
@@ -1744,6 +1751,169 @@ function getPushTypeKey(pushType: PushType): string {
   }
 }
 
+export function isArticleEditorScreen(screen: string): boolean {
+  const plain = stripAnsi(screen).replace(/\r/g, "");
+  if (isPostGuidelineScreen(plain)) return false;
+  return /文章編輯/u.test(plain) && /Ctrl-X|插入模式|取代模式/u.test(plain);
+}
+
+export function isArticleEditSavePrompt(screen: string): boolean {
+  const plain = stripAnsi(screen).replace(/\r/g, "");
+  return /(?:確定|是否).*(?:儲存|存檔)|(?:儲存|存檔).*(?:\[Y\/n\]|確定|是否)/iu.test(
+    plain,
+  );
+}
+
+function isArticleEditSuccessScreen(screen: string, boardName: string): boolean {
+  const plain = stripAnsi(screen).replace(/\r/g, "");
+  return (
+    /文章已更新|修改完成|已儲存/u.test(plain) ||
+    (/瀏覽 第|目前顯示/u.test(plain) && /作者\s+|標題\s+/u.test(plain)) ||
+    extractCurrentBoardName(plain)?.toLowerCase() === boardName.toLowerCase()
+  );
+}
+
+function normalizeArticleIdentity(value: string): string {
+  return value.replace(/[\s\u3000]+/gu, " ").trim();
+}
+
+async function cancelArticleEdit(bot: WriteBot): Promise<void> {
+  const screen = readVisibleScreen(bot);
+  if (isArticleEditorScreen(screen)) {
+    await bot.send?.(PTT_KEY_CTRL_X);
+    await sleep(80);
+  }
+  if (isArticleEditSavePrompt(readVisibleScreen(bot))) {
+    await bot.send?.("n\r");
+  } else {
+    await bot.send?.(PTT_KEY_CTRL_C);
+  }
+}
+
+export async function submitArticleEditFromBot(
+  bot: WriteBot,
+  request: EditArticleRequest,
+): Promise<ActionResult> {
+  if (!bot.send || !bot.getLine || !bot.getLines) {
+    return { ok: false, reason: "PTT client 不支援文章編輯" };
+  }
+
+  const cleanBody = sanitizePostBody(request.body).trimEnd();
+  const summaryMarker = formatPttzzzEditSummary(request.editSummary);
+  if (!cleanBody) return { ok: false, reason: "文章正文不可為空" };
+  if (!summaryMarker) return { ok: false, reason: "編輯摘要不可為空" };
+
+  let article: AdapterArticleData | null;
+  try {
+    article = await fetchArticleFromBotManually(
+      bot,
+      request.boardName,
+      request.articleIndex,
+    );
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error instanceof Error ? error.message : "無法載入待編輯文章",
+    };
+  }
+
+  if (!article) return { ok: false, reason: "找不到要編輯的文章" };
+  if (
+    normalizeArticleIdentity(article.author) !==
+      normalizeArticleIdentity(request.expectedAuthor) ||
+    normalizeArticleIdentity(article.title) !==
+      normalizeArticleIdentity(request.expectedTitle)
+  ) {
+    return { ok: false, reason: "文章身分已變更，請重新載入" };
+  }
+
+  const entered = await ensureNormalBoardView(bot, request.boardName);
+  if (!entered) {
+    return { ok: false, reason: `無法進入看板 ${request.boardName}` };
+  }
+
+  await bot.send(`${request.articleIndex}\r\r`);
+  const openedAt = Date.now();
+  let openedExpectedArticle = false;
+  while (Date.now() - openedAt < 1500) {
+    const partial = parsePartialScreen(readVisibleScreen(bot));
+    if (
+      partial &&
+      normalizeArticleIdentity(partial.author) ===
+        normalizeArticleIdentity(request.expectedAuthor) &&
+      normalizeArticleIdentity(partial.title) ===
+        normalizeArticleIdentity(request.expectedTitle)
+    ) {
+      openedExpectedArticle = true;
+      break;
+    }
+    await sleep(50);
+  }
+  if (!openedExpectedArticle) {
+    await bot.send("q");
+    return { ok: false, reason: "無法重新確認待編輯文章" };
+  }
+
+  await bot.send("E");
+  const editorReady = await waitForPattern(
+    bot,
+    /文章編輯[\s\S]*(?:Ctrl-X|插入模式|取代模式)/u,
+    1500,
+    50,
+  );
+  if (!editorReady || !isArticleEditorScreen(readVisibleScreen(bot))) {
+    await cancelArticleEdit(bot);
+    return { ok: false, reason: "無法進入文章編輯器（可能沒有編輯權限）" };
+  }
+
+  const { preservedFooter } = splitArticleEditableContent(article.body);
+  const previousRevisionLines = (article.revisions ?? []).map(
+    (revision) => revision.rawBlock,
+  );
+  const replacement = [
+    cleanBody,
+    preservedFooter,
+    ...previousRevisionLines,
+    summaryMarker,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const originalEditable = [article.body, ...previousRevisionLines]
+    .filter(Boolean)
+    .join("\n");
+  const originalLineCount = Math.max(1, originalEditable.split("\n").length);
+
+  await bot.send(PTT_KEY_EDITOR_TOP);
+  await bot.send(PTT_KEY_CTRL_Y.repeat(originalLineCount));
+  for (const line of replacement.split("\n")) {
+    await bot.send(`${line}\r`);
+    await sleep(20);
+  }
+
+  await bot.send(PTT_KEY_CTRL_X);
+  const savePrompt = await waitForPattern(
+    bot,
+    /(?:確定|是否).*(?:儲存|存檔)|(?:儲存|存檔).*\[Y\/n\]/iu,
+    2000,
+    50,
+  );
+  if (!savePrompt || !isArticleEditSavePrompt(readVisibleScreen(bot))) {
+    await cancelArticleEdit(bot);
+    return { ok: false, reason: "PTT 未顯示文章儲存確認" };
+  }
+
+  await bot.send("y\r");
+  const savedAt = Date.now();
+  while (Date.now() - savedAt < 2500) {
+    if (isArticleEditSuccessScreen(readVisibleScreen(bot), request.boardName)) {
+      return { ok: true };
+    }
+    await sleep(50);
+  }
+
+  return { ok: false, reason: "無法確認文章是否儲存成功，請重新載入檢查" };
+}
+
 async function submitPushFromCurrentArticle(
   bot: WriteBot,
   content: string,
@@ -2350,7 +2520,7 @@ function buildPartialArticleFromRawLines(
   const rawFull = rawLines.join("\n");
   const parsedHeader = parseArticleHeaderBlock(rawFull);
   if (!parsedHeader.author && !parsedHeader.title) return null;
-  const { body } = splitArticleBody(rawFull);
+  const { body, revisions } = splitArticleBody(rawFull);
   const parsedBody = parseArticleHeaderBlock(body);
   const hasPushOrEditLines = rawLines.some(
     (line) => isPushLine(line) || isEditNoteLine(line),
@@ -2367,6 +2537,7 @@ function buildPartialArticleFromRawLines(
     body: parsedBody.content,
     pushes: thread?.pushes ?? [],
     articleNotes: thread?.articleNotes ?? [],
+    revisions,
     score: thread?.score ?? 0,
   };
 }
@@ -2649,7 +2820,7 @@ export function parsePartialScreen(
   if (!title && !author) return null;
 
   const rawArticle = lines.slice(0, -1).join("\n");
-  const { body: rawBody } = splitArticleBody(rawArticle);
+  const { body: rawBody, revisions } = splitArticleBody(rawArticle);
   const parsedBody = parseArticleHeaderBlock(rawBody);
   const hasPushOrEditLines = lines.some(
     (line) => isPushLine(line) || isEditNoteLine(line),
@@ -2666,6 +2837,7 @@ export function parsePartialScreen(
     body: parsedBody.content,
     pushes: thread?.pushes ?? [],
     articleNotes: thread?.articleNotes ?? [],
+    revisions,
     score: thread?.score ?? 0,
   };
 }
@@ -2836,7 +3008,7 @@ function buildFallbackPartialArticleFromRawLines(
 ): PartialArticleData | null {
   if (rawLines.length === 0) return null;
   const rawFull = rawLines.join("\n");
-  const { body } = splitArticleBody(rawFull);
+  const { body, revisions } = splitArticleBody(rawFull);
   const parsedBody = parseArticleHeaderBlock(body);
   const author = fallbackMeta.author?.trim() ?? "";
   const hasPushOrEditLines = rawLines.some(
@@ -2855,6 +3027,7 @@ function buildFallbackPartialArticleFromRawLines(
     body: content,
     pushes: thread?.pushes ?? [],
     articleNotes: thread?.articleNotes ?? [],
+    revisions,
     score: thread?.score ?? 0,
   };
 }
@@ -2982,7 +3155,7 @@ async function fetchArticleFromBotManuallyWithOpen(
   if (!Array.isArray(rawLines) || rawLines.length === 0) return null;
 
   const rawFull = rawLines.join("\n");
-  const { body } = splitArticleBody(rawFull);
+  const { body, revisions } = splitArticleBody(rawFull);
   const parsed = parseArticleHeaderBlock(body);
   const author = parsed.author;
   const title = parsed.title;
@@ -3021,6 +3194,7 @@ async function fetchArticleFromBotManuallyWithOpen(
     body: parsed.content,
     pushes: thread.pushes,
     articleNotes: thread.articleNotes,
+    revisions,
     score: thread.score,
     debug,
   };

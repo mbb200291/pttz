@@ -300,6 +300,26 @@ export function formatPttzzzEditSummary(summary: string): string | null {
   return normalized ? `※ PTTzzz 編輯摘要：${normalized}` : null;
 }
 
+export function splitArticleEditableContent(body: string): {
+  editableBody: string;
+  preservedFooter: string;
+} {
+  const lines = body.replace(/\r\n?/gu, "\n").split("\n");
+  const footerStart = lines.findIndex((line) => {
+    const plain = stripAnsi(line).trim();
+    return plain === "--" || isEditMarkerLine(line);
+  });
+
+  if (footerStart < 0) {
+    return { editableBody: body.trimEnd(), preservedFooter: "" };
+  }
+
+  return {
+    editableBody: lines.slice(0, footerStart).join("\n").trimEnd(),
+    preservedFooter: lines.slice(footerStart).join("\n").trimEnd(),
+  };
+}
+
 function extractPttzzzRevisions(body: string): {
   body: string;
   revisions: ArticleRevision[];
