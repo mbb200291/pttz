@@ -12,6 +12,7 @@ import {
   normalizeCategoryOptions,
   resolveBoardCategoryOptions,
 } from "../lib/ptt/boardCategories";
+import type { ArticleRevision } from "../lib/ptt/parser";
 
 export type ComposeMode = "post" | "edit-article";
 
@@ -33,6 +34,9 @@ interface ComposeScreenProps {
   };
   categoryOptions?: string[];
   currentUser?: string;
+  revisions?: ArticleRevision[];
+  submitting?: boolean;
+  submitError?: string | null;
   onCancel: () => void;
   onSubmit: (payload: ComposePayload) => void;
 }
@@ -64,6 +68,9 @@ export function ComposeScreen({
   initial,
   categoryOptions,
   currentUser,
+  revisions = [],
+  submitting = false,
+  submitError = null,
   onCancel,
   onSubmit,
 }: ComposeScreenProps): JSX.Element {
@@ -117,9 +124,9 @@ export function ComposeScreen({
       : title.trim() !== "" && body.trim() !== "" && editSummary.trim() !== "";
 
   const handleSubmit = useCallback(() => {
-    if (!canSubmit) return;
+    if (!canSubmit || submitting) return;
     onSubmit({ board, category, title, body, editSummary });
-  }, [canSubmit, onSubmit, board, category, title, body, editSummary]);
+  }, [canSubmit, submitting, onSubmit, board, category, title, body, editSummary]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -389,7 +396,7 @@ export function ComposeScreen({
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={!canSubmit}
+              disabled={!canSubmit || submitting}
               style={{
                 background: "var(--accent)",
                 color: "var(--accent-on)",
@@ -398,15 +405,15 @@ export function ComposeScreen({
                 borderRadius: 8,
                 fontSize: 13,
                 fontWeight: 600,
-                cursor: canSubmit ? "pointer" : "not-allowed",
-                opacity: canSubmit ? 1 : 0.45,
+                cursor: canSubmit && !submitting ? "pointer" : "not-allowed",
+                opacity: canSubmit && !submitting ? 1 : 0.45,
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 0,
                 fontFamily: "var(--font)",
               }}
             >
-              {mode === "post" ? "發文" : "更新"}
+              {mode === "post" ? "發文" : submitting ? "更新中…" : "更新"}
               <span
                 aria-hidden="true"
                 style={{
@@ -438,6 +445,22 @@ export function ComposeScreen({
       >
         {/* Left column — editor */}
         <div>
+          {submitError && (
+            <div
+              role="alert"
+              style={{
+                marginBottom: 18,
+                padding: "10px 14px",
+                border: "1px solid var(--boo-border)",
+                borderRadius: 10,
+                color: "var(--boo-fg)",
+                background: "var(--boo-bg)",
+                fontSize: 13,
+              }}
+            >
+              {submitError}
+            </div>
+          )}
           {/* Board + category row */}
           <div
             style={{
@@ -1048,17 +1071,36 @@ export function ComposeScreen({
               >
                 修訂歷史
               </div>
-              <p
-                style={{
-                  color: "var(--text-dim)",
-                  fontSize: 12,
-                  fontFamily: "var(--font-mono)",
-                  lineHeight: 1.7,
-                  margin: 0,
-                }}
-              >
-                修訂記錄將在發布後顯示於文章頁面。
-              </p>
+              {revisions.length > 0 ? (
+                <ol
+                  style={{
+                    color: "var(--text-dim)",
+                    fontSize: 12,
+                    fontFamily: "var(--font-mono)",
+                    lineHeight: 1.7,
+                    margin: 0,
+                    paddingLeft: 18,
+                  }}
+                >
+                  {revisions.map((revision, index) => (
+                    <li key={`${revision.markerOffset}-${index}`}>
+                      {revision.summary}
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p
+                  style={{
+                    color: "var(--text-dim)",
+                    fontSize: 12,
+                    fontFamily: "var(--font-mono)",
+                    lineHeight: 1.7,
+                    margin: 0,
+                  }}
+                >
+                  尚無修訂記錄。
+                </p>
+              )}
             </div>
           )}
         </div>

@@ -1,5 +1,6 @@
 import type { PttState } from "../../hooks/usePttSocket";
 import type { ArticleSummary } from "./parser";
+import type { ArticleData } from "../../hooks/useArticle";
 
 export type BoardFilter =
   | { type: "search"; keywords: string[] }
@@ -12,7 +13,14 @@ export type AppView =
   | { type: "article"; board: string; index: number; summary?: ArticleSummary; filter?: BoardFilter | null }
   | { type: "article-by-aid"; board: string; aid: string }
   | { type: "compose"; board: string; categoryOptions?: string[] }
-  | { type: "compose-edit"; board: string; articleIndex: number };
+  | {
+      type: "compose-edit";
+      board: string;
+      articleIndex: number;
+      article: ArticleData;
+      summary?: ArticleSummary;
+      filter?: BoardFilter | null;
+    };
 
 export function getSafeViewForPttState(view: AppView, pttState: PttState): AppView {
   if (pttState === "ready" || view.type === "home") {

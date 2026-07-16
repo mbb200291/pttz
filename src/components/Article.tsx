@@ -7,6 +7,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useArticle } from "../hooks/useArticle";
 import { PushThread } from "./PushThread";
+import { ArticleRevisions } from "./ArticleRevisions";
 import { RichContent } from "./RichContent";
 import type { ArticleData, PartialArticleData } from "../hooks/useArticle";
 import type { ArticleEditRecord, ArticleSummary } from "../lib/ptt/parser";
@@ -40,7 +41,7 @@ interface ArticleProps {
   mockArticle?: ArticleData | null;
   mockLoading?: boolean;
   currentUser?: string;
-  onEditArticle?: () => void;
+  onEditArticle?: (article: ArticleData) => void;
 }
 
 function ArticleEditRecords({ records }: { records: ArticleEditRecord[] }) {
@@ -543,7 +544,7 @@ export function Article({
             {article && currentUser && article.author === currentUser && onEditArticle && (
               <button
                 type="button"
-                onClick={onEditArticle}
+                onClick={() => onEditArticle(article)}
                 style={{
                   background: "transparent",
                   color: "var(--text-muted)",
@@ -616,6 +617,7 @@ export function Article({
               score={article.score}
             />
             <ArticleBody body={article.body} />
+            <ArticleRevisions revisions={article.revisions ?? []} />
             <ArticleEditRecords records={article.articleNotes} />
 
             {/* Stats bar */}

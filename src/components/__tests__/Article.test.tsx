@@ -88,4 +88,36 @@ describe("Article", () => {
     expect(html).toContain("回文");
     expect(html).toContain("完整討論串整理中…");
   });
+
+  it("renders structured revisions after the article body", async () => {
+    vi.resetModules();
+    const { Article } = await import("../Article");
+    const html = renderToStaticMarkup(
+      <Article
+        boardName="Test"
+        articleIndex={123}
+        onBack={() => {}}
+        mockArticle={{
+          title: "[測試] revisions",
+          author: "alice",
+          date: "07/16",
+          board: "Test",
+          body: "正文",
+          pushes: [],
+          articleNotes: [],
+          revisions: [
+            {
+              summary: "修正來源",
+              rawBlock: "※ PTTzzz 編輯摘要：修正來源",
+              markerOffset: 4,
+            },
+          ],
+          score: 0,
+        }}
+      />,
+    );
+
+    expect(html.indexOf("正文")).toBeLessThan(html.indexOf("編輯紀錄"));
+    expect(html).toContain("修正來源");
+  });
 });

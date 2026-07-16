@@ -18,6 +18,7 @@ import type { PttState } from "./hooks/usePttSocket";
 import { getSafeViewForPttState, type AppView, type BoardFilter } from "./lib/ptt/viewState";
 import { resolveBoardCategoryOptions } from "./lib/ptt/boardCategories";
 import { usePttActions } from "./hooks/usePttActions";
+import { splitArticleEditableContent } from "./lib/ptt/parser";
 
 type PreviewMode = "home" | "board" | "article" | "login";
 
@@ -208,6 +209,8 @@ export default function App() {
     return { type: "home" };
   });
   const [boardFilter, setBoardFilter] = useState<BoardFilter | null>(null);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editSubmitError, setEditSubmitError] = useState<string | null>(null);
 
   const effectivePttState: PttState = isPreview ? "ready" : pttState;
   const effectiveWsStatus = isPreview ? "connected" : wsStatus;
@@ -342,9 +345,17 @@ export default function App() {
           initialArticleSummary={view.summary}
           currentUser={currentUser}
           onBack={() => setView({ type: "board", name: view.board, filter: view.filter })}
-          onEditArticle={() =>
-            setView({ type: "compose-edit", board: view.board, articleIndex: view.index })
-          }
+          onEditArticle={(article) => {
+            setEditSubmitError(null);
+            setView({
+              type: "compose-edit",
+              board: view.board,
+              articleIndex: view.index,
+              article,
+              summary: view.summary,
+              filter: view.filter,
+            });
+          }}
           mockArticle={isPreview ? MOCK_ARTICLE : undefined}
         />
       )}
@@ -386,11 +397,57 @@ export default function App() {
       {view.type === "compose-edit" && (
         <ComposeScreen
           mode="edit-article"
-          initial={{ board: view.board }}
+          initial={{
+            board: view.board,
+            title: view.article.title,
+            body: splitArticleEditableContent(view.article.body).editableBody,
+          }}
           categoryOptions={resolveBoardCategoryOptions(view.board)}
           currentUser={currentUser}
-          onCancel={() => setView({ type: "board", name: view.board })}
-          onSubmit={() => setView({ type: "board", name: view.board })}
+          revisions={view.article.revisions ?? []}
+          submitting={editSubmitting}
+          submitError={editSubmitError}
+          onCancel={() =>
+            setView({
+              type: "article",
+              board: view.board,
+              index: view.articleIndex,
+              summary: view.summary,
+              filter: view.filter,
+            })
+          }
+          onSubmit={(payload) => {
+            setEditSubmitting(true);
+            setEditSubmitError(null);
+            void actions
+              .editArticle({
+                boardName: view.board,
+                articleIndex: view.articleIndex,
+                expectedAuthor: view.article.author,
+                expectedTitle: view.article.title,
+                body: payload.body,
+                editSummary: payload.editSummary,
+              })
+              .then((result) => {
+                if (!result.ok) {
+                  setEditSubmitError(result.reason ?? "文章編輯失敗");
+                  return;
+                }
+                setView({
+                  type: "article",
+                  board: view.board,
+                  index: view.articleIndex,
+                  summary: view.summary,
+                  filter: view.filter,
+                });
+              })
+              .catch((error) => {
+                setEditSubmitError(
+                  error instanceof Error ? error.message : "文章編輯失敗",
+                );
+              })
+              .finally(() => setEditSubmitting(false));
+          }}
         />
       )}
     </>
