@@ -15,6 +15,11 @@ import {
   type LoginFailureReason,
   type PttAdapter,
 } from "../lib/ptt/adapter";
+import {
+  createFakePttAdapter,
+  getFakePttCurrentUser,
+  isFakePttMode,
+} from "../lib/ptt/fakeAdapter";
 
 export type PttState =
   | "idle"
@@ -110,12 +115,18 @@ export function usePttSocket() {
   const client = usePttSocketStore((s) => s.client);
 
   useEffect(() => {
+    const fakeMode = isFakePttMode();
     const existing = getSingletonAdapter();
-    const adapter = existing ?? createPttAdapter();
+    const adapter = existing ?? (fakeMode ? createFakePttAdapter() : createPttAdapter());
     if (!existing) setSingletonAdapter(adapter);
 
     const store = usePttSocketStore.getState();
+    const fakeUser = fakeMode ? getFakePttCurrentUser() : null;
     store.setClient(adapter);
+    if (fakeUser) {
+      store.setCredentials({ username: fakeUser, password: "" });
+      void adapter.login(fakeUser, "", false);
+    }
     store.setWsStatus(adapter.getStatus());
     store.setPttState(
       adapter.isLoggedIn()

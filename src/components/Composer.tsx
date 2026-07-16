@@ -21,6 +21,7 @@ export interface ComposerPayload {
   body: string;
   pushType: "push" | "neutral" | "boo";
   editMode: EditPushMode;
+  targetFloor?: number;
 }
 
 const MAX_BYTES = 80;
@@ -88,7 +89,7 @@ export function Composer({
 
   const handleSubmit = () => {
     if (isSubmitDisabled) return;
-    onSubmit({ body, pushType, editMode });
+    onSubmit({ body, pushType, editMode, targetFloor: initial.targetFloor });
   };
 
   const handleImageChange = async (

@@ -31,6 +31,35 @@ describe("單則推文不聚合", () => {
   });
 });
 
+describe("過深嵌套回文", () => {
+  it("將第四層以後的回文壓到第三層顯示", () => {
+    const thread = aggregatePushes(
+      [
+        push("alice", "A", "06/03 21:54", "push", 10, 1),
+        push("bob", "回1樓：B", "06/03 21:55", "push", 20, 2),
+        push("mary", "回2樓：C", "06/03 21:56", "push", 30, 3),
+        push("david", "回3樓：D", "06/03 21:57", "push", 40, 4),
+        push("erin", "回4樓：E", "06/03 21:58", "push", 50, 5),
+      ],
+      OP,
+    );
+
+    const byAuthor = new Map(thread.pushes.map((item) => [item.author, item]));
+    const alice = byAuthor.get("alice")!;
+    const bob = byAuthor.get("bob")!;
+    const mary = byAuthor.get("mary")!;
+    const david = byAuthor.get("david")!;
+    const erin = byAuthor.get("erin")!;
+
+    expect(bob.replyTo).toBe(alice.id);
+    expect(mary.replyTo).toBe(bob.id);
+    expect(david.replyTo).toBe(bob.id);
+    expect(erin.replyTo).toBe(bob.id);
+    expect(david.content).toBe("D");
+    expect(erin.content).toBe("E");
+  });
+});
+
 describe("連續同作者推文合併", () => {
   const full45 = "a".repeat(44);
 
@@ -205,6 +234,23 @@ describe("嵌套回覆識別", () => {
     expect(bobPush.replyTo).toBe(alicePush.id);
     expect(bobPush.content).toBe("回覆alice");
     expect(alicePush.sourceFloors).toEqual([1, 2]);
+  });
+
+  it("回覆標記前已有內容時仍掛到目標樓層", () => {
+    const raw = [
+      push("root", "第一層", "06/03 22:00", "push", 10, 1),
+      push("alice", "回1樓：AAAA", "06/03 22:01", "push", 20, 2),
+      push("bob", "回1樓：BBBBB", "06/03 22:02", "push", 30, 3),
+      push("mary", "BBB 回3樓：CCCC", "06/03 22:03", "push", 40, 4),
+    ];
+
+    const thread = aggregatePushes(raw, OP);
+    const bobPush = thread.pushes.find((r) => r.author === "bob")!;
+    const maryPush = thread.pushes.find((r) => r.author === "mary")!;
+
+    expect(maryPush.replyTo).toBe(bobPush.id);
+    expect(maryPush.floorNumber).toBe(bobPush.floorNumber);
+    expect(maryPush.content).toBe("BBB CCCC");
   });
 
   it.each([

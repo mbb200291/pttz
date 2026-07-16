@@ -207,6 +207,61 @@ function LightweightPushList({
   );
 }
 
+function getPushFloor(push: AggregatedPush): number {
+  return push.sourceFloors[0] ?? push.floorNumber;
+}
+
+const MAX_NESTED_REPLY_DEPTH = 2;
+
+function getPushDepth(push: AggregatedPush, pushes: AggregatedPush[]): number {
+  const byId = new Map(pushes.map((item) => [item.id, item]));
+  let depth = 0;
+  let current = push;
+  const visited = new Set<string>();
+
+  while (current.replyTo) {
+    if (visited.has(current.id)) break;
+    visited.add(current.id);
+    const parent = byId.get(current.replyTo);
+    if (!parent) break;
+    depth += 1;
+    current = parent;
+  }
+
+  return depth;
+}
+
+function getViewerPushVote(push: AggregatedPush, currentUser?: string): -1 | 0 | 1 {
+  if (!currentUser) return 0;
+  if (push.pushVoters.includes(currentUser)) return 1;
+  if (push.booVoters.includes(currentUser)) return -1;
+  return 0;
+}
+
+function buildOptimisticVoteState(
+  push: AggregatedPush,
+  currentUser: string | undefined,
+  next: -1 | 0 | 1,
+): { value: -1 | 0 | 1; count: VoteCount } {
+  const pushVoters = new Set(push.pushVoters);
+  const booVoters = new Set(push.booVoters);
+
+  if (currentUser) {
+    pushVoters.delete(currentUser);
+    booVoters.delete(currentUser);
+    if (next === 1) pushVoters.add(currentUser);
+    if (next === -1) booVoters.add(currentUser);
+  }
+
+  return {
+    value: next,
+    count: {
+      push: pushVoters.size,
+      boo: booVoters.size,
+    },
+  };
+}
+
 function PartialArticleView({ partial }: { partial: PartialArticleData }) {
   const pushes = partial.pushes ?? [];
   const articleNotes = partial.articleNotes ?? [];
@@ -319,40 +374,53 @@ export function Article({
           boo: prev.count.boo + (direction === "boo" ? 1 : 0),
         },
       }));
+      void liveReload();
     });
-  }, [actions, articleVote.value]);
+  }, [actions, articleVote.value, boardName, liveReload]);
 
   const handlePushVote = useCallback((pushId: string, next: -1 | 0 | 1) => {
-    const myVote = myPushVotes.get(pushId) ?? 0;
-    const direction = next === 1 ? "push" : "boo";
-    if (!canVote(myVote, direction)) return;
-
     const push = article?.pushes.find((item) => item.id === pushId);
-    const targetFloor = push?.floorNumber ?? 0;
+    if (!push) return;
+    const currentVote = myPushVotes.get(pushId) ?? getViewerPushVote(push, currentUser);
+
+    if (next === currentVote) return;
+
+    if (next === 0) {
+      setMyPushVotes(prev => new Map(prev).set(pushId, 0));
+      setPushVotes(prev =>
+        new Map(prev).set(pushId, buildOptimisticVoteState(push, currentUser, 0)),
+      );
+      return;
+    }
+
+    const direction = next === 1 ? "push" : "boo";
+    const targetFloor = push ? getPushFloor(push) : 0;
     void actions.votePush(targetFloor, direction, boardName).then((result) => {
       if (!result.ok) return;
       setMyPushVotes(prev => new Map(prev).set(pushId, next));
-      setPushVotes(prev => {
-        const current = prev.get(pushId) ?? { value: 0 as -1 | 0 | 1, count: { push: 0, boo: 0 } };
-        const updated = {
-          value: next,
-          count: {
-            push: current.count.push + (next === 1 ? 1 : 0),
-            boo: current.count.boo + (next === -1 ? 1 : 0),
-          },
-        };
-        return new Map(prev).set(pushId, updated);
-      });
+      setPushVotes(prev =>
+        new Map(prev).set(pushId, buildOptimisticVoteState(push, currentUser, next)),
+      );
+      void liveReload();
     });
-  }, [actions, article?.pushes, boardName, myPushVotes]);
+  }, [actions, article?.pushes, boardName, currentUser, liveReload, myPushVotes]);
 
   const openReply = useCallback(() => {
     setComposer({ mode: "reply", initial: {} });
   }, []);
 
   const openReplyPush = useCallback((push: AggregatedPush) => {
-    setComposer({ mode: "reply-push", initial: { body: `回${push.floorNumber + 1}樓：` } });
-  }, []);
+    if (article && getPushDepth(push, article.pushes) >= MAX_NESTED_REPLY_DEPTH) {
+      alert("嵌套回文最多支援三層，無法再回覆這一層。");
+      return;
+    }
+    setComposer({
+      mode: "reply-push",
+      initial: {
+        targetFloor: getPushFloor(push),
+      },
+    });
+  }, [article]);
 
   const openEditPush = useCallback((push: AggregatedPush) => {
     setComposer({ mode: "edit-push", initial: { body: push.content } });
@@ -368,7 +436,11 @@ export function Article({
       setComposer(null);
       return;
     }
-    void actions.replyToArticle(payload.body, payload.pushType, boardName).then((result) => {
+    const body =
+      composer?.mode === "reply-push" && payload.targetFloor
+        ? `回${payload.targetFloor}樓：${payload.body}`
+        : payload.body;
+    void actions.replyToArticle(body, payload.pushType, boardName).then((result) => {
       if (!result.ok) return;
       setComposer(null);
       void liveReload();

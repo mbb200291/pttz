@@ -170,7 +170,7 @@ export function VotePair({
   onPush,
   onBoo,
   voters = { push: [], boo: [] },
-  myVote = 0,
+  myVote: _myVote = 0,
   size = "sm",
 }: VotePairProps) {
   const pushRef = useRef<HTMLButtonElement>(null);
@@ -200,8 +200,8 @@ export function VotePair({
 
   const isPush = value === 1;
   const isBoo = value === -1;
-  const pushDisabled = myVote === 1;
-  const booDisabled = myVote === -1;
+  const pushDisabled = false;
+  const booDisabled = false;
   const padX = size === "lg" ? 12 : size === "xs" ? 6 : 8;
   const padY = size === "lg" ? 7 : size === "xs" ? 3 : 5;
   const fontSize = size === "lg" ? 13 : size === "xs" ? 11 : 12;
@@ -237,12 +237,12 @@ export function VotePair({
         style={{
           display: "inline-flex", alignItems: "center", gap,
           padding: `${padY}px ${padX}px`, borderRadius: innerRadius, border: 0,
-          cursor: pushDisabled ? "not-allowed" : "pointer",
+          cursor: "pointer",
           background: isPush ? "var(--push-bg)" : "transparent",
           color: isPush ? "var(--push-fg)" : "var(--text-muted)",
           fontFamily: "var(--font-mono)", fontWeight: 700, fontSize,
           transition: "background 100ms",
-          opacity: pushDisabled ? 0.45 : 1,
+          opacity: 1,
         }}
       >
         <ThumbUp s={iconSize} fill={isPush ? "currentColor" : "none"} />
@@ -271,12 +271,12 @@ export function VotePair({
         style={{
           display: "inline-flex", alignItems: "center", gap,
           padding: `${padY}px ${padX}px`, borderRadius: innerRadius, border: 0,
-          cursor: booDisabled ? "not-allowed" : "pointer",
+          cursor: "pointer",
           background: isBoo ? "var(--boo-bg)" : "transparent",
           color: isBoo ? "var(--boo-fg)" : "var(--text-muted)",
           fontFamily: "var(--font-mono)", fontWeight: 700, fontSize,
           transition: "background 100ms",
-          opacity: booDisabled ? 0.45 : 1,
+          opacity: 1,
         }}
       >
         <ThumbDown s={iconSize} fill={isBoo ? "currentColor" : "none"} />

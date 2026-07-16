@@ -62,6 +62,29 @@ describe("Composer", () => {
     expect(screen.getByRole("button", { name: "噓" })).toBeTruthy();
   });
 
+  it("does not show the hidden target floor prefix for reply-push mode", async () => {
+    const onSubmit = vi.fn();
+    render(
+      <Composer
+        {...defaultProps}
+        mode="reply-push"
+        initial={{ targetFloor: 9 }}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+    expect(textarea.value).toBe("");
+    expect(textarea.value).not.toContain("回9樓");
+
+    await userEvent.type(textarea, "測試回覆");
+    await userEvent.click(screen.getByRole("button", { name: /送出/ }));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ body: "測試回覆", targetFloor: 9 }),
+    );
+  });
+
   it("edit mode selector is shown for mode=edit-push", () => {
     render(
       <Composer

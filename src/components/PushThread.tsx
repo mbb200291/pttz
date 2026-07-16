@@ -40,10 +40,24 @@ export interface PushEditData {
 
 const INITIAL_VISIBLE_TOP_LEVEL_REPLIES = 30;
 const REPLY_RENDER_BATCH_SIZE = 30;
-const EMPTY_VOTE_STATE = {
-  value: 0 as -1 | 0 | 1,
-  count: { push: 0, boo: 0 },
-};
+const REFRESH_ANIMATION_MIN_MS = 350;
+const REFRESH_HIGHLIGHT_MS = 220;
+function getViewerVote(push: AggregatedPush, currentUser?: string): -1 | 0 | 1 {
+  if (!currentUser) return 0;
+  if (push.pushVoters.includes(currentUser)) return 1;
+  if (push.booVoters.includes(currentUser)) return -1;
+  return 0;
+}
+
+function getPushVoteState(push: AggregatedPush, currentUser?: string) {
+  return {
+    value: getViewerVote(push, currentUser),
+    count: {
+      push: push.pushVoters.length,
+      boo: push.booVoters.length,
+    },
+  };
+}
 
 function compareTopLevelReplies(
   a: AggregatedPush,
@@ -337,7 +351,7 @@ function PushItem({
   const ipLabel =
     push.ipAddresses.length === 0 ? null : push.ipAddresses.join(", ");
   const isEditNode = push.type === "edit";
-  const displayVoteState = voteState ?? EMPTY_VOTE_STATE;
+  const displayVoteState = voteState ?? getPushVoteState(push, currentUser);
 
   const cardBorder = isEditNode
     ? "1px solid var(--accent-border)"
@@ -364,8 +378,8 @@ function PushItem({
           count={displayVoteState.count}
           voters={{ push: push.pushVoters, boo: push.booVoters }}
           myVote={displayVoteState.value}
-          onPush={() => onVote(1)}
-          onBoo={() => onVote(-1)}
+          onPush={() => onVote(displayVoteState.value === 1 ? 0 : 1)}
+          onBoo={() => onVote(displayVoteState.value === -1 ? 0 : -1)}
           size="xs"
         />
       )}
@@ -605,7 +619,12 @@ export function PushThread({
   const [visibleTopLevelCount, setVisibleTopLevelCount] = useState(
     initialVisibleTopLevelCount,
   );
+  const [localRefreshing, setLocalRefreshing] = useState(false);
+  const [refreshPulse, setRefreshPulse] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pulseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showRefreshing = refreshing || localRefreshing;
 
   const childrenMap = useMemo(() => {
     const nextMap = new Map<string, AggregatedPush[]>();
@@ -636,6 +655,11 @@ export function PushThread({
   useEffect(() => {
     setVisibleTopLevelCount(initialVisibleTopLevelCount);
   }, [initialVisibleTopLevelCount, pushes, sort.direction, sort.key]);
+
+  useEffect(() => () => {
+    if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
+    if (pulseTimeoutRef.current) clearTimeout(pulseTimeoutRef.current);
+  }, []);
 
   useEffect(() => {
     if (!hasMoreTopLevel || !supportsIntersectionObserver) return;
@@ -682,9 +706,25 @@ export function PushThread({
     );
   }
 
+  function finishRefreshAfter(startedAt: number) {
+    const elapsed = Date.now() - startedAt;
+    const remaining = Math.max(0, REFRESH_ANIMATION_MIN_MS - elapsed);
+    refreshTimeoutRef.current = setTimeout(() => {
+      setLocalRefreshing(false);
+      setRefreshPulse(true);
+      pulseTimeoutRef.current = setTimeout(() => {
+        setRefreshPulse(false);
+      }, REFRESH_HIGHLIGHT_MS);
+    }, remaining);
+  }
+
   function handleRefresh() {
-    if (!onRefresh || refreshing) return;
-    void onRefresh();
+    if (!onRefresh || showRefreshing) return;
+    const startedAt = Date.now();
+    setLocalRefreshing(true);
+    Promise.resolve(onRefresh()).finally(() => {
+      finishRefreshAfter(startedAt);
+    });
   }
 
   const scoreColor =
@@ -735,6 +775,23 @@ export function PushThread({
       cursor: "pointer",
       fontFamily: "inherit",
     };
+  }
+
+  function SpinnerIcon() {
+    return (
+      <span
+        aria-hidden="true"
+        style={{
+          width: 12,
+          height: 12,
+          borderRadius: "50%",
+          border: "2px solid currentColor",
+          borderTopColor: "transparent",
+          display: "inline-block",
+          animation: "pttzzz-spin 700ms linear infinite",
+        }}
+      />
+    );
   }
 
   return (
@@ -801,21 +858,33 @@ export function PushThread({
             <button
               type="button"
               onClick={handleRefresh}
-              disabled={refreshing}
+              disabled={showRefreshing}
+              aria-busy={showRefreshing}
               style={{
                 ...ctrlBtnStyle(),
-                opacity: refreshing ? 0.6 : 1,
-                cursor: refreshing ? "not-allowed" : "pointer",
+                gap: 6,
+                opacity: showRefreshing ? 0.75 : 1,
+                cursor: showRefreshing ? "not-allowed" : "pointer",
               }}
             >
-              {refreshing ? "更新中..." : "重新整理回文"}
+              {showRefreshing && <SpinnerIcon />}
+              {showRefreshing ? "更新中..." : "重新整理回文"}
             </button>
           )}
         </div>
       </div>
 
       {/* Push cards */}
-      <div>
+      <div
+        style={{
+          transition: "background 180ms ease, box-shadow 180ms ease",
+          background: refreshPulse ? "var(--accent-soft)" : "transparent",
+          boxShadow: refreshPulse ? "0 0 0 1px var(--accent-border)" : "none",
+          borderRadius: 10,
+          padding: refreshPulse ? 8 : 0,
+          margin: refreshPulse ? -8 : 0,
+        }}
+      >
         {visibleTopLevel.map((push) => (
           <PushItem
             key={push.id}

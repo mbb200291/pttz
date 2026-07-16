@@ -13,6 +13,7 @@ import {
   type ArticleDebugDump,
   type PartialArticleData,
 } from "../lib/ptt/adapter";
+import { FAKE_PTT_STORE_KEY, isFakePttMode } from "../lib/ptt/fakeAdapter";
 import type { AggregatedPush } from "../lib/ptt/pushAggregator";
 import type { ArticleEditRecord, ArticleSummary } from "../lib/ptt/parser";
 import { readArticleCache, writeArticleCache } from "../lib/ptt/viewCache";
@@ -315,6 +316,34 @@ export function useArticle(
     loading,
     pttState,
   ]);
+
+  useEffect(() => {
+    if (
+      pttState !== "ready" ||
+      !client ||
+      !isFakePttMode() ||
+      !boardName ||
+      articleAid ||
+      articleIndex <= 0
+    ) {
+      return;
+    }
+
+    let timeoutId: number | null = null;
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== FAKE_PTT_STORE_KEY) return;
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(() => {
+        void loadArticle("reload");
+      }, 50);
+    };
+
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, [articleAid, articleIndex, boardName, client, loadArticle, pttState]);
 
   useEffect(() => {
     latestPartialRef.current = partialArticle;

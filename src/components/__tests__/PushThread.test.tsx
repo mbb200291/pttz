@@ -287,6 +287,40 @@ describe("PushThread", () => {
     expect(screen.getAllByText("0").length).toBeGreaterThanOrEqual(2);
   });
 
+  it("derives the current user's vote from push voter lists", () => {
+    const onVote = vi.fn();
+
+    render(
+      <PushThread
+        score={0}
+        currentUser="alice"
+        pushes={[
+          push({
+            id: "push-0",
+            content: "hello",
+            anchorOrder: 10,
+            pushVoters: ["alice", "bob"],
+            booVoters: ["charlie"],
+          }),
+        ]}
+        onVote={onVote}
+      />,
+    );
+
+    const pushButton = screen.getByRole("button", { name: "推" });
+    const booButton = screen.getByRole("button", { name: "噓" });
+
+    expect(pushButton.getAttribute("aria-pressed")).toBe("true");
+    expect(pushButton.textContent).toContain("2");
+    expect(booButton.textContent).toContain("1");
+
+    fireEvent.click(pushButton);
+    expect(onVote).toHaveBeenLastCalledWith("push-0", 0);
+
+    fireEvent.click(booButton);
+    expect(onVote).toHaveBeenLastCalledWith("push-0", -1);
+  });
+
   it("shows 編輯 button when push.author === currentUser", () => {
     render(
       <PushThread
@@ -367,5 +401,28 @@ describe("PushThread", () => {
 
     // Panel content should be hidden again
     expect(screen.queryByText("原始")).toBeNull();
+  });
+
+  it("shows a refresh animation state after clicking 重新整理回文", () => {
+    vi.useFakeTimers();
+    const onRefresh = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <PushThread
+        score={0}
+        pushes={[push({ id: "push-0", content: "hello", anchorOrder: 10 })]}
+        onRefresh={onRefresh}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "重新整理回文" }));
+
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+    const button = screen.getByRole("button", { name: "更新中..." });
+    expect(button.getAttribute("aria-busy")).toBe("true");
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+
+    vi.runAllTimers();
+    vi.useRealTimers();
   });
 });

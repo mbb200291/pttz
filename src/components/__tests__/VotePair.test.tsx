@@ -58,15 +58,15 @@ describe("VotePair", () => {
     expect(booBtn.className).toMatch(/red/);
   });
 
-  it("push button is disabled when myVote=1", () => {
+  it("push button remains enabled when myVote=1 so the vote can be cancelled", () => {
     const { container } = render(<VotePair {...defaultProps} myVote={1} />);
     const pushBtn = within(container).getByRole("button", { name: "推" });
-    expect((pushBtn as HTMLButtonElement).disabled).toBe(true);
+    expect((pushBtn as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it("boo button is disabled when myVote=-1", () => {
+  it("boo button remains enabled when myVote=-1 so the vote can be cancelled", () => {
     const { container } = render(<VotePair {...defaultProps} myVote={-1} />);
     const booBtn = within(container).getByRole("button", { name: "噓" });
-    expect((booBtn as HTMLButtonElement).disabled).toBe(true);
+    expect((booBtn as HTMLButtonElement).disabled).toBe(false);
   });
 });

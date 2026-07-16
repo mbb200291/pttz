@@ -48,6 +48,7 @@ export interface AggregatedThread {
 const MIN_FULL_PUSH_BYTES = 37;
 // 同作者不連續但允許合併的最大時間間隔（分鐘）
 const TIME_GAP_MINUTES = 5;
+const MAX_NESTED_REPLY_DEPTH = 2; // top-level=0, nested replies can display up to third layer
 const CONTINUATION_MARKER_RE = /\|\|\s*$/u;
 const END_TERMINATOR_RE = /[。.!?！？;；]$/u;
 
@@ -188,12 +189,13 @@ function groupPushes(rawPushes: AnchoredRawPush[]): PushGroup[] {
 
 // ─── 嵌套偵測 ─────────────────────────────────────────────────────────────────
 
+const FLOOR_NUMBER_SOURCE = "[0-9零〇一二兩三四五六七八九十百千萬]+";
 const REPLY_PATTERNS: RegExp[] = [
-  /^回\s*([0-9零〇一二兩三四五六七八九十百千萬]+)\s*樓\s*[：:]?\s*/iu,
-  /^回\s*([0-9零〇一二兩三四五六七八九十百千萬]+)\s*[fF]\b\s*[：:]?\s*/iu,
-  /^to\s*([0-9零〇一二兩三四五六七八九十百千萬]+)\s*[fF]\b\s*[：:]?\s*/iu,
-  /^reply\s+to\s+([0-9零〇一二兩三四五六七八九十百千萬]+)\s*[fF]\b\s*[：:]?\s*/iu,
-  /^>>\s*([0-9零〇一二兩三四五六七八九十百千萬]+)\s*[fF]\b\s*[：:]?\s*/iu,
+  new RegExp(`(^|[\\s\\u3000])回\\s*(${FLOOR_NUMBER_SOURCE})\\s*樓\\s*[：:]?\\s*`, "iu"),
+  new RegExp(`(^|[\\s\\u3000])回\\s*(${FLOOR_NUMBER_SOURCE})\\s*[fF]\\b\\s*[：:]?\\s*`, "iu"),
+  new RegExp(`(^|[\\s\\u3000])reply\\s+to\\s+(${FLOOR_NUMBER_SOURCE})\\s*[fF]\\b\\s*[：:]?\\s*`, "iu"),
+  new RegExp(`(^|[\\s\\u3000])to\\s*(${FLOOR_NUMBER_SOURCE})\\s*[fF]\\b\\s*[：:]?\\s*`, "iu"),
+  new RegExp(`(^|[\\s\\u3000])>>\\s*(${FLOOR_NUMBER_SOURCE})\\s*[fF]\\b\\s*[：:]?\\s*`, "iu"),
 ];
 
 interface ReplyInfo {
@@ -205,11 +207,14 @@ function detectReply(content: string): ReplyInfo | null {
   for (const pattern of REPLY_PATTERNS) {
     const m = content.match(pattern);
     if (!m) continue;
-    const targetFloor = parseFloorNumber(m[1]);
+    const targetFloor = parseFloorNumber(m[2]);
     if (targetFloor === null) return null;
+    const before = content.slice(0, m.index).trimEnd();
+    const after = content.slice((m.index ?? 0) + m[0].length).trimStart();
+    const strippedContent = [before, after].filter(Boolean).join(" ");
     return {
       targetFloor,
-      strippedContent: content.slice(m[0].length).trimStart(),
+      strippedContent,
     };
   }
 
@@ -326,6 +331,46 @@ function extractAuthorId(author: string): string {
   return author.trim().split(/\s+/u)[0] ?? "";
 }
 
+function getReplyDepth(
+  push: AggregatedPush,
+  pushById: Map<string, AggregatedPush>,
+): number {
+  let depth = 0;
+  let current = push;
+  const visited = new Set<string>();
+
+  while (current.replyTo) {
+    if (visited.has(current.id)) break;
+    visited.add(current.id);
+    const parent = pushById.get(current.replyTo);
+    if (!parent) break;
+    depth += 1;
+    current = parent;
+  }
+
+  return depth;
+}
+
+function clampReplyTargetDepth(
+  target: AggregatedPush,
+  pushById: Map<string, AggregatedPush>,
+): AggregatedPush {
+  let current = target;
+  let depth = getReplyDepth(current, pushById);
+  const visited = new Set<string>();
+
+  while (depth >= MAX_NESTED_REPLY_DEPTH && current.replyTo) {
+    if (visited.has(current.id)) break;
+    visited.add(current.id);
+    const parent = pushById.get(current.replyTo);
+    if (!parent) break;
+    current = parent;
+    depth -= 1;
+  }
+
+  return current;
+}
+
 // ─── 主要匯出 ─────────────────────────────────────────────────────────────────
 
 export function aggregatePushes(
@@ -407,6 +452,7 @@ export function aggregatePushes(
   // Step 3：偵測嵌套 → 建立 floorNumber 映射（第一層樓號）
   // 先跑一遍，把不是嵌套的推文給 floorNumber
   const topLevel: AggregatedPush[] = [];
+  const pushById = new Map(firstLayer.map((push) => [push.id, push]));
   let floor = 1;
   for (const p of firstLayer) {
     const reply = detectReply(p.content);
@@ -415,9 +461,10 @@ export function aggregatePushes(
         candidate.sourceFloors.includes(reply.targetFloor),
       );
       if (target && target.id !== p.id && target.anchorOrder < p.anchorOrder) {
-        p.replyTo = target.id;
+        const clampedTarget = clampReplyTargetDepth(target, pushById);
+        p.replyTo = clampedTarget.id;
         p.content = reply.strippedContent;
-        p.floorNumber = target.floorNumber;
+        p.floorNumber = clampedTarget.floorNumber;
       } else {
         p.replyTo = null;
         p.floorNumber = floor;
