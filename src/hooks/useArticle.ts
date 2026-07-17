@@ -15,7 +15,11 @@ import {
 } from "../lib/ptt/adapter";
 import { FAKE_PTT_STORE_KEY, isFakePttMode } from "../lib/ptt/fakeAdapter";
 import type { AggregatedPush } from "../lib/ptt/pushAggregator";
-import type { ArticleEditRecord, ArticleSummary } from "../lib/ptt/parser";
+import type {
+  ArticleEditRecord,
+  ArticleRevision,
+  ArticleSummary,
+} from "../lib/ptt/parser";
 import { readArticleCache, writeArticleCache } from "../lib/ptt/viewCache";
 
 type ArticleDebugWindow = Window & {
@@ -40,6 +44,7 @@ export interface ArticleData {
   body: string;
   pushes: AggregatedPush[];
   articleNotes: ArticleEditRecord[];
+  revisions?: ArticleRevision[];
   score: number;
   debug?: ArticleDebugDump;
 }
@@ -187,6 +192,7 @@ export function useArticle(
             body: cached.body,
             pushes: cached.pushes,
             articleNotes: cached.articleNotes ?? [],
+            revisions: cached.revisions ?? [],
             score: cached.score ?? 0,
           });
           setCachedArticle(null);
@@ -239,6 +245,7 @@ export function useArticle(
             body: next.body,
             pushes: next.pushes,
             articleNotes: next.articleNotes,
+            revisions: next.revisions ?? [],
             score: next.score,
           });
         }

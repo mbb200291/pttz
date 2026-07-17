@@ -121,4 +121,52 @@ describe("usePttActions adapter integration", () => {
     });
     expect(replyToArticle).toHaveBeenCalledWith("測試回文", "push", undefined);
   });
+
+  it("forwards the complete article edit request to the adapter", async () => {
+    const editArticle = vi.fn().mockResolvedValue({ ok: true });
+    usePttSocketStore.setState({
+      client: {
+        isLoggedIn: vi.fn().mockReturnValue(true),
+        editArticle,
+      } as unknown as PttAdapter,
+      pttState: "ready",
+    });
+
+    const { usePttActions } = await import("../usePttActions");
+    const { result } = renderHook(() => usePttActions());
+    const request = {
+      boardName: "Test",
+      articleIndex: 123,
+      expectedAuthor: "alice",
+      expectedTitle: "[測試] 原標題",
+      body: "更新正文",
+      editSummary: "修正來源",
+    };
+
+    await expect(result.current.editArticle(request)).resolves.toEqual({ ok: true });
+    expect(editArticle).toHaveBeenCalledWith(request);
+  });
+
+  it("sends a formatted push edit as a neutral article reply", async () => {
+    const replyToArticle = vi.fn().mockResolvedValue({ ok: true });
+    usePttSocketStore.setState({
+      client: {
+        isLoggedIn: vi.fn().mockReturnValue(true),
+        replyToArticle,
+      } as unknown as PttAdapter,
+      pttState: "ready",
+    });
+
+    const { usePttActions } = await import("../usePttActions");
+    const { result } = renderHook(() => usePttActions());
+
+    await expect(
+      result.current.editPush("更正", 12, null, "新內容", "push", "Test"),
+    ).resolves.toEqual({ ok: true });
+    expect(replyToArticle).toHaveBeenCalledWith(
+      "更正我在12樓發言：新內容",
+      "neutral",
+      "Test",
+    );
+  });
 });

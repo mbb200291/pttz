@@ -2,6 +2,20 @@ import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 describe("Article", () => {
+  it("uses the full source-floor range for an aggregated push edit", async () => {
+    const { getPushEditFloorRange } = await import("../../lib/ptt/pushEditing");
+
+    expect(
+      getPushEditFloorRange({
+        floorNumber: 7,
+        sourceFloors: [12, 10, 11],
+      } as never),
+    ).toEqual({ startFloor: 10, endFloor: 12 });
+    expect(
+      getPushEditFloorRange({ floorNumber: 7, sourceFloors: [] } as never),
+    ).toEqual({ startFloor: 7, endFloor: null });
+  });
+
   it("shows the selected list row as an immediate fallback while loading", async () => {
     const { Article } = await import("../Article");
 
@@ -87,5 +101,37 @@ describe("Article", () => {
     expect(html).not.toContain("舊到新");
     expect(html).toContain("回文");
     expect(html).toContain("完整討論串整理中…");
+  });
+
+  it("renders structured revisions after the article body", async () => {
+    vi.resetModules();
+    const { Article } = await import("../Article");
+    const html = renderToStaticMarkup(
+      <Article
+        boardName="Test"
+        articleIndex={123}
+        onBack={() => {}}
+        mockArticle={{
+          title: "[測試] revisions",
+          author: "alice",
+          date: "07/16",
+          board: "Test",
+          body: "正文",
+          pushes: [],
+          articleNotes: [],
+          revisions: [
+            {
+              summary: "修正來源",
+              rawBlock: "※ PTTzzz 編輯摘要：修正來源",
+              markerOffset: 4,
+            },
+          ],
+          score: 0,
+        }}
+      />,
+    );
+
+    expect(html.indexOf("正文")).toBeLessThan(html.indexOf("編輯紀錄"));
+    expect(html).toContain("修正來源");
   });
 });

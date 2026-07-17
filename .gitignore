@@ -41,6 +41,9 @@ Thumbs.db
 # 7. 測試與覆蓋率報告
 coverage/
 
+# 8. Local Git worktrees
+.worktrees/
+
 
 .venv/
 

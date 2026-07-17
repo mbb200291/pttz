@@ -6,6 +6,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { uploadToImgur } from "../lib/imgur";
+import { approximatePttBytes, formatEditPush } from "../lib/ptt/pushEditing";
 
 export type ComposerMode = "reply" | "reply-push" | "edit-push";
 export type EditPushMode = "補充" | "更正" | "撤回";
@@ -14,6 +15,7 @@ export interface ComposerInitial {
   body?: string;
   pushType?: "push" | "neutral" | "boo";
   targetFloor?: number;
+  targetEndFloor?: number;
   editMode?: EditPushMode;
 }
 
@@ -22,6 +24,7 @@ export interface ComposerPayload {
   pushType: "push" | "neutral" | "boo";
   editMode: EditPushMode;
   targetFloor?: number;
+  targetEndFloor?: number;
 }
 
 const MAX_BYTES = 80;
@@ -37,11 +40,15 @@ const EDIT_MODES: EditPushMode[] = ["補充", "更正", "撤回"];
 export function Composer({
   mode,
   initial,
+  submitting = false,
+  submitError = null,
   onClose,
   onSubmit,
 }: {
   mode: ComposerMode;
   initial: ComposerInitial;
+  submitting?: boolean;
+  submitError?: string | null;
   onClose: () => void;
   onSubmit: (payload: ComposerPayload) => void;
 }): JSX.Element {
@@ -71,25 +78,43 @@ export function Composer({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        if (submitting) return;
         onClose();
       }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  }, [onClose, submitting]);
 
-  const remaining = MAX_BYTES - body.length;
-  const isSubmitDisabled = body.trim() === "";
+  const submittedContent = mode === "edit-push"
+    ? formatEditPush(
+        editMode,
+        initial.targetFloor ?? 0,
+        initial.targetEndFloor ?? null,
+        body,
+      )
+    : body;
+  const remaining = MAX_BYTES - approximatePttBytes(submittedContent);
+  const isSubmitDisabled =
+    submitting ||
+    remaining < 0 ||
+    (body.trim() === "" && !(mode === "edit-push" && editMode === "撤回"));
 
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) {
+    if (e.target === e.currentTarget && !submitting) {
       onClose();
     }
   };
 
   const handleSubmit = () => {
     if (isSubmitDisabled) return;
-    onSubmit({ body, pushType, editMode, targetFloor: initial.targetFloor });
+    onSubmit({
+      body,
+      pushType,
+      editMode,
+      targetFloor: initial.targetFloor,
+      targetEndFloor: initial.targetEndFloor,
+    });
   };
 
   const handleImageChange = async (
@@ -155,6 +180,7 @@ export function Composer({
           <button
             type="button"
             onClick={onClose}
+            disabled={submitting}
             className="text-gray-500 hover:text-gray-300 transition-colors text-lg leading-none"
             aria-label="關閉"
           >
@@ -201,6 +227,7 @@ export function Composer({
                   key={em}
                   type="button"
                   onClick={() => setEditMode(em)}
+                  disabled={submitting}
                   className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
                     isActive
                       ? "bg-sky-500/15 border-sky-500/40 text-sky-300"
@@ -219,6 +246,7 @@ export function Composer({
           <textarea
             ref={textareaRef}
             value={body}
+            disabled={submitting}
             onChange={(e) => {
               setBody(e.target.value);
               if (uploadError) setUploadError(null);
@@ -240,6 +268,11 @@ export function Composer({
         {uploadError && (
           <p className="text-red-400 text-xs">{uploadError}</p>
         )}
+        {submitError && (
+          <p role="alert" className="text-red-400 text-xs">
+            {submitError}
+          </p>
+        )}
 
         {/* Footer */}
         <div className="flex items-center justify-between gap-3">
@@ -259,7 +292,7 @@ export function Composer({
                 if (uploadError) setUploadError(null);
                 fileInputRef.current?.click();
               }}
-              disabled={uploading}
+              disabled={uploading || submitting}
               className="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-400 hover:text-gray-200 text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               aria-label="新增圖片"
             >
@@ -274,7 +307,7 @@ export function Composer({
             disabled={isSubmitDisabled}
             className="px-6 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium text-white transition-colors"
           >
-            送出
+            {submitting ? "送出中…" : "送出"}
           </button>
         </div>
       </div>

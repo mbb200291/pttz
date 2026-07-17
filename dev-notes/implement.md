@@ -83,6 +83,8 @@ src/components/              ← React UI 元件（LoginModal、ArticleList、Ar
 3. 看板列表與文章資料映射
 4. bot 命令序列化，避免競態
 5. 文章 debug dump 產生，協助定位真站解析問題
+6. 發文、回文與文章編輯的序列化終端操作
+7. 文章編輯前後的文章身分、editor、儲存提示與完成畫面驗證
 
 ### 2. 狀態橋接層
 
@@ -118,7 +120,8 @@ src/components/              ← React UI 元件（LoginModal、ArticleList、Ar
 2. 取得正文
 3. 取得聚合後推文
 4. 取得文章層級編輯紀錄
-5. 在 dev 環境提供目前文章 debug dump
+5. 把 `PTTzzz 編輯摘要` 從正文抽離為結構化 revisions
+6. 在 dev 環境提供目前文章 debug dump
 
 ### 4. 推文聚合層
 
@@ -195,6 +198,8 @@ src/components/              ← React UI 元件（LoginModal、ArticleList、Ar
 20. 看板文章標題關鍵字搜尋（PTT `/` 鍵，系列視圖）
 21. 看板文章推噓文數篩選（PTT `Z` 鍵，快選 ≥10 / ≥30 / ≥100 / 爆 + 可清除）
 22. 以 AID 直接跳轉文章（PTT `#` 鍵，搜尋欄輸入 #XXXXXXXX）
+23. 作者文章編輯：保留簽名檔與 PTT 編輯紀錄、保存結構化摘要、失敗保留草稿
+24. 作者推文補充／更正／撤回：以中立新推文保留不可變更的原始推文
 
 ## 目前保留的舊程式邏輯
 
@@ -226,12 +231,12 @@ src/components/              ← React UI 元件（LoginModal、ArticleList、Ar
 
 目前專案仍有這些邊界：
 
-1. 以只讀能力為主
-2. 尚未實作發文、回文、推文等寫入操作
-3. 推文聚合規則目前是 heuristic，不是完整語意解析
-4. `ptt-client` 與瀏覽器整合仍偏脆弱，需要 adapter 層保護
-5. UI 已可用，但仍屬第一版，不是完整產品化狀態
-6. `ptt-client.getArticle()` 是否在所有熱門文章都能完整取回全部推文，仍需持續用 debug dump 驗證
+1. 推文聚合規則目前是 heuristic，不是完整語意解析
+2. `ptt-client` 與瀏覽器整合仍偏脆弱，需要 adapter 層保護
+3. UI 已可用，但仍屬第一版，不是完整產品化狀態
+4. `ptt-client.getArticle()` 是否在所有熱門文章都能完整取回全部推文，仍需持續用 debug dump 驗證
+5. 正式文章編輯狀態機已有自動測試，但尚未使用真實帳號對 PTT 寫入驗證
+6. 推文補充／更正／撤回會新增聲明推文，不會改寫或刪除 PTT 原始推文
 
 ## 開發狀態
 
@@ -251,6 +256,8 @@ src/components/              ← React UI 元件（LoginModal、ArticleList、Ar
 12. 文章 progressive render（partial screen parser + partialArticle hook 狀態）
 13. 文章 / 推文 rich content：imgur 圖片 + YouTube click-to-play
 14. 看板文章標題搜尋 + 推噓文數篩選 + AID 跳轉（adapter + useBoard filter + ArticleList UI）
+15. 文章編輯狀態機 + 結構化編輯摘要 + revision UI
+16. 推文補充／更正／撤回送出流程與失敗保留
 
 ### 正在維護
 
@@ -262,9 +269,9 @@ src/components/              ← React UI 元件（LoginModal、ArticleList、Ar
 
 ### 尚未開始
 
-1. 寫入型功能
-2. 更完整的論壇互動能力
-3. 更完整的產品化整理
+1. 更完整的論壇互動能力
+2. 更完整的產品化整理
+3. 正式 PTT 寫入 smoke test 與畫面 pattern 持續驗證
 
 ### Pending
 
@@ -285,3 +292,6 @@ src/components/              ← React UI 元件（LoginModal、ArticleList、Ar
 7. [goal-5-implementation-notes.md](goal-5-implementation-notes.md)
 8. [goal-6-implementation-plan.md](goal-6-implementation-plan.md)
 9. [goal-6-implementation-notes.md](goal-6-implementation-notes.md)
+10. [goal-7-editing-design.md](goal-7-editing-design.md)
+11. [goal-7-editing-implementation-plan.md](goal-7-editing-implementation-plan.md)
+12. [goal-7-editing-implementation-notes.md](goal-7-editing-implementation-notes.md)
