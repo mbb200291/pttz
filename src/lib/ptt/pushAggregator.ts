@@ -6,7 +6,7 @@
  * 2. 可續接條件：未用終止符，或以 || 明確標記續接
  * 3. 「回x樓：...」識別為嵌套回覆
  * 4. 原 po 回覆標示 isOP
- * 5. 計算每則聚合推文的 score（其嵌套回覆中 push - boo）
+ * 5. 計算每則聚合推文的 score（明確投票的 push - boo）
  */
 
 import type {
@@ -30,7 +30,7 @@ export interface AggregatedPush {
   ipAddresses: string[];
   isOP: boolean;
   replyTo: string | null; // 被回覆推文的 id
-  score: number; // 此推文收到的嵌套 push - boo
+  score: number; // 此推文收到的明確投票 push - boo
   floorNumber: number; // 在第一層的樓層號（0-indexed），嵌套推文繼承父層
   anchorOrder: number;
   sourceFloors: number[];
@@ -449,6 +449,10 @@ export function aggregatePushes(
     authorMap.set(rawPush.author, vote.direction);
   }
 
+  for (const push of firstLayer) {
+    push.score = push.pushVoters.length - push.booVoters.length;
+  }
+
   // Step 3：偵測嵌套 → 建立 floorNumber 映射（第一層樓號）
   // 先跑一遍，把不是嵌套的推文給 floorNumber
   const topLevel: AggregatedPush[] = [];
@@ -476,18 +480,6 @@ export function aggregatePushes(
       floor++;
       topLevel.push(p);
     }
-  }
-
-  // Step 4：計算 score（每則第一層推文，統計其嵌套回覆的 push-boo）
-  const scoreMap = new Map<string, number>();
-  for (const p of firstLayer) {
-    if (p.replyTo !== null) {
-      const delta = p.type === "push" ? 1 : p.type === "boo" ? -1 : 0;
-      scoreMap.set(p.replyTo, (scoreMap.get(p.replyTo) ?? 0) + delta);
-    }
-  }
-  for (const p of firstLayer) {
-    p.score = scoreMap.get(p.id) ?? 0;
   }
 
   const sortedEditNotes = [...opReplySegments].sort((a, b) => {
