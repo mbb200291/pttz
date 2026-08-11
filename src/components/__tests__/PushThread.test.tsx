@@ -287,6 +287,27 @@ describe("PushThread", () => {
     expect(screen.getAllByText("0").length).toBeGreaterThanOrEqual(2);
   });
 
+  it("disables both vote buttons only for the pending push", () => {
+    render(
+      <PushThread
+        score={0}
+        pushes={[
+          push({ id: "pending", content: "pending reply", anchorOrder: 10 }),
+          push({ id: "ready", content: "ready reply", anchorOrder: 20 }),
+        ]}
+        onVote={() => {}}
+        pendingVoteIds={new Set(["pending"])}
+      />,
+    );
+
+    const pushButtons = screen.getAllByRole("button", { name: "推" });
+    const booButtons = screen.getAllByRole("button", { name: "噓" });
+    expect((pushButtons[0] as HTMLButtonElement).disabled).toBe(true);
+    expect((booButtons[0] as HTMLButtonElement).disabled).toBe(true);
+    expect((pushButtons[1] as HTMLButtonElement).disabled).toBe(false);
+    expect((booButtons[1] as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it("derives the current user's vote from push voter lists", () => {
     const onVote = vi.fn();
 

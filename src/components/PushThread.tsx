@@ -326,6 +326,7 @@ interface PushItemProps {
   pushVotes?: Map<string, { value: -1 | 0 | 1; count: VoteCount }>;
   pushEdits?: Map<string, PushEditData>;
   onVoteRaw?: (pushId: string, next: -1 | 0 | 1) => void;
+  pendingVoteIds?: ReadonlySet<string>;
 }
 
 function PushItem({
@@ -342,6 +343,7 @@ function PushItem({
   pushVotes,
   pushEdits,
   onVoteRaw,
+  pendingVoteIds,
 }: PushItemProps) {
   const [showHistory, setShowHistory] = useState(false);
   const toggleHistory = useCallback(() => setShowHistory(v => !v), []);
@@ -381,6 +383,7 @@ function PushItem({
           onPush={() => onVote(displayVoteState.value === 1 ? 0 : 1)}
           onBoo={() => onVote(displayVoteState.value === -1 ? 0 : -1)}
           size="xs"
+          disabled={pendingVoteIds?.has(push.id) ?? false}
         />
       )}
 
@@ -498,7 +501,7 @@ function PushItem({
                 borderRadius: 5,
                 padding: "1px 6px",
               }}
-                title="此回文收到的巢狀推噓分數"
+                title="此回文收到的明確投票分數"
               >
                 {scoreLabel}
               </span>
@@ -575,6 +578,7 @@ function PushItem({
                 pushEdits={pushEdits}
                 onVote={onVoteRaw ? (next) => onVoteRaw(child.id, next) : undefined}
                 onVoteRaw={onVoteRaw}
+                pendingVoteIds={pendingVoteIds}
               />
             ))}
           </div>
@@ -599,6 +603,7 @@ interface PushThreadProps {
   pushVotes?: Map<string, { value: -1 | 0 | 1; count: VoteCount }>;
   onVote?: (pushId: string, next: -1 | 0 | 1) => void;
   pushEdits?: Map<string, PushEditData>;
+  pendingVoteIds?: ReadonlySet<string>;
 }
 
 export function PushThread({
@@ -614,6 +619,7 @@ export function PushThread({
   pushVotes,
   onVote,
   pushEdits,
+  pendingVoteIds,
 }: PushThreadProps) {
   const [sort, setSort] = useState<ReplySortState>(DEFAULT_REPLY_SORT);
   const [visibleTopLevelCount, setVisibleTopLevelCount] = useState(
@@ -901,6 +907,7 @@ export function PushThread({
             editData={pushEdits?.get(push.id)}
             pushVotes={pushVotes}
             pushEdits={pushEdits}
+            pendingVoteIds={pendingVoteIds}
           />
         ))}
       </div>
