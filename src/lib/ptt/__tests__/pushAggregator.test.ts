@@ -505,6 +505,22 @@ describe("detectVote", () => {
 // ─── 投票者收集 ───────────────────────────────────────────────────────────────
 
 describe("投票者收集", () => {
+  it("隱藏投票後仍以 PTT 原始樓號投到後續回文", () => {
+    const raw = [
+      push("alice", "第一樓", "01/01 12:00", "neutral", 10, 1),
+      push("bob", "推1樓", "01/01 12:01", "push", 20, 2),
+      push("carol", "第三樓", "01/01 12:02", "neutral", 30, 3),
+      push("dave", "推3樓", "01/01 12:03", "push", 40, 4),
+    ];
+    const thread = aggregatePushes(raw, OP);
+    const thirdFloor = thread.pushes.find((item) => item.author === "carol")!;
+
+    expect(thread.pushes.some((item) => item.content === "推1樓")).toBe(false);
+    expect(thread.pushes.some((item) => item.content === "推3樓")).toBe(false);
+    expect(thirdFloor.pushVoters).toEqual(["dave"]);
+    expect(thirdFloor.sourceFloors).toEqual([3]);
+  });
+
   it("score 等於已去重的明確投票淨值", () => {
     const raw = [
       push("alice", "第一樓", "01/01 12:00", "neutral", 10, 1),
