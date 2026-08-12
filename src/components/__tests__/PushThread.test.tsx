@@ -355,10 +355,31 @@ describe("PushThread", () => {
     expect(booButton.textContent).toContain("1");
 
     fireEvent.click(pushButton);
-    expect(onVote).toHaveBeenLastCalledWith("push-0", 0);
+    expect(onVote).toHaveBeenLastCalledWith("push-0", 1);
 
     fireEvent.click(booButton);
     expect(onVote).toHaveBeenLastCalledWith("push-0", -1);
+  });
+
+  it("keeps the boo direction when the selected boo button is clicked", () => {
+    const onVote = vi.fn();
+    render(
+      <PushThread
+        score={0}
+        currentUser="alice"
+        pushes={[
+          push({
+            id: "push-0",
+            content: "hello",
+            booVoters: ["alice"],
+          }),
+        ]}
+        onVote={onVote}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "噓" }));
+    expect(onVote).toHaveBeenCalledWith("push-0", -1);
   });
 
   it("shows 編輯 button when push.author === currentUser", () => {

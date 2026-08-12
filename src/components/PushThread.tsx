@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   detectArticleVote,
+  normalizePttId,
   type AggregatedPush,
 } from "../lib/ptt/pushAggregator";
 import { RichContent } from "./RichContent";
@@ -47,8 +48,9 @@ const REFRESH_ANIMATION_MIN_MS = 350;
 const REFRESH_HIGHLIGHT_MS = 220;
 function getViewerVote(push: AggregatedPush, currentUser?: string): -1 | 0 | 1 {
   if (!currentUser) return 0;
-  if (push.pushVoters.includes(currentUser)) return 1;
-  if (push.booVoters.includes(currentUser)) return -1;
+  const viewerId = normalizePttId(currentUser);
+  if (push.pushVoters.some((author) => normalizePttId(author) === viewerId)) return 1;
+  if (push.booVoters.some((author) => normalizePttId(author) === viewerId)) return -1;
   return 0;
 }
 
@@ -383,8 +385,8 @@ function PushItem({
           count={displayVoteState.count}
           voters={{ push: push.pushVoters, boo: push.booVoters }}
           myVote={displayVoteState.value}
-          onPush={() => onVote(displayVoteState.value === 1 ? 0 : 1)}
-          onBoo={() => onVote(displayVoteState.value === -1 ? 0 : -1)}
+          onPush={() => onVote(1)}
+          onBoo={() => onVote(-1)}
           size="xs"
           disabled={pendingVoteIds?.has(push.id) ?? false}
         />

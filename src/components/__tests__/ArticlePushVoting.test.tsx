@@ -83,14 +83,17 @@ const article = {
   ],
 };
 
-function renderArticle() {
+function renderArticle(
+  mockArticle = article,
+  currentUser = "viewer",
+) {
   return render(
     <Article
       boardName="Test"
       articleIndex={99}
       onBack={() => {}}
-      currentUser="viewer"
-      mockArticle={article}
+      currentUser={currentUser}
+      mockArticle={mockArticle}
     />,
   );
 }
@@ -103,6 +106,108 @@ beforeEach(() => {
 });
 
 describe("Article push voting", () => {
+  it("does not resend the selected direction", () => {
+    renderArticle(
+      {
+        ...article,
+        pushes: [
+          {
+            ...article.pushes[0],
+            pushVoters: ["VIEWER"],
+          },
+        ],
+      },
+      "viewer",
+    );
+
+    act(() => screen.getAllByRole("button", { name: "推" })[1].click());
+
+    expect(mocks.votePush).not.toHaveBeenCalled();
+    expect(
+      screen.getAllByRole("button", { name: "推" })[1].getAttribute(
+        "aria-pressed",
+      ),
+    ).toBe("true");
+  });
+
+  it("moves the current user from push to boo after switching direction", async () => {
+    mocks.votePush.mockResolvedValue({ ok: true });
+    renderArticle(
+      {
+        ...article,
+        pushes: [
+          {
+            ...article.pushes[0],
+            pushVoters: ["VIEWER"],
+          },
+        ],
+      },
+      "viewer",
+    );
+
+    act(() => screen.getAllByRole("button", { name: "噓" })[1].click());
+
+    await waitFor(() => expect(mocks.votePush).toHaveBeenCalledTimes(1));
+    const pushButton = screen.getAllByRole("button", { name: "推" })[1];
+    const booButton = screen.getAllByRole("button", { name: "噓" })[1];
+    expect(pushButton.textContent).toContain("0");
+    expect(booButton.textContent).toContain("1");
+    expect(pushButton.getAttribute("aria-pressed")).toBe("false");
+    expect(booButton.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("reconciles an optimistic vote after refreshed article data confirms it", async () => {
+    mocks.votePush.mockResolvedValue({ ok: true });
+    const view = renderArticle();
+
+    act(() => screen.getAllByRole("button", { name: "推" })[1].click());
+    await waitFor(() =>
+      expect(screen.getAllByRole("button", { name: "推" })[1].textContent).toContain("1"),
+    );
+
+    const confirmedArticle = {
+      ...article,
+      pushes: [
+        { ...article.pushes[0], pushVoters: ["viewer"] },
+        article.pushes[1],
+      ],
+    };
+    view.rerender(
+      <Article
+        boardName="Test"
+        articleIndex={99}
+        onBack={() => {}}
+        currentUser="viewer"
+        mockArticle={confirmedArticle}
+      />,
+    );
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("button", { name: "推" })[1].getAttribute("aria-pressed"),
+      ).toBe("true"),
+    );
+
+    view.rerender(
+      <Article
+        boardName="Test"
+        articleIndex={99}
+        onBack={() => {}}
+        currentUser="viewer"
+        mockArticle={{
+          ...confirmedArticle,
+          pushes: [
+            { ...confirmedArticle.pushes[0], pushVoters: ["viewer", "bob"] },
+            confirmedArticle.pushes[1],
+          ],
+        }}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getAllByRole("button", { name: "推" })[1].textContent).toContain("2"),
+    );
+  });
+
   it("sends only one vote for rapid clicks on the same reply", async () => {
     let resolveVote!: (result: { ok: boolean }) => void;
     mocks.votePush.mockReturnValue(

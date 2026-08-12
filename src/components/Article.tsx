@@ -13,6 +13,7 @@ import type { ArticleData, PartialArticleData } from "../hooks/useArticle";
 import type { ArticleEditRecord, ArticleSummary } from "../lib/ptt/parser";
 import {
   detectArticleVote,
+  normalizePttId,
   type AggregatedPush,
 } from "../lib/ptt/pushAggregator";
 import { getLastArticleOpenTrace } from "../lib/ptt/adapter";
@@ -241,31 +242,23 @@ function getPushDepth(push: AggregatedPush, pushes: AggregatedPush[]): number {
 
 function getViewerPushVote(push: AggregatedPush, currentUser?: string): -1 | 0 | 1 {
   if (!currentUser) return 0;
-  if (push.pushVoters.includes(currentUser)) return 1;
-  if (push.booVoters.includes(currentUser)) return -1;
+  const viewerId = normalizePttId(currentUser);
+  if (push.pushVoters.some((author) => normalizePttId(author) === viewerId)) return 1;
+  if (push.booVoters.some((author) => normalizePttId(author) === viewerId)) return -1;
   return 0;
 }
 
-function buildOptimisticVoteState(
-  push: AggregatedPush,
-  currentUser: string | undefined,
+function transitionVoteState(
+  current: { value: -1 | 0 | 1; count: VoteCount },
   next: -1 | 0 | 1,
 ): { value: -1 | 0 | 1; count: VoteCount } {
-  const pushVoters = new Set(push.pushVoters);
-  const booVoters = new Set(push.booVoters);
-
-  if (currentUser) {
-    pushVoters.delete(currentUser);
-    booVoters.delete(currentUser);
-    if (next === 1) pushVoters.add(currentUser);
-    if (next === -1) booVoters.add(currentUser);
-  }
-
   return {
     value: next,
     count: {
-      push: pushVoters.size,
-      boo: booVoters.size,
+      push: Math.max(0, current.count.push - (current.value === 1 ? 1 : 0)) +
+        (next === 1 ? 1 : 0),
+      boo: Math.max(0, current.count.boo - (current.value === -1 ? 1 : 0)) +
+        (next === -1 ? 1 : 0),
     },
   };
 }
@@ -359,9 +352,6 @@ export function Article({
     new Set(),
   );
 
-  // Current user's vote per push (for dedup)
-  const [myPushVotes, setMyPushVotes] = useState<Map<string, -1 | 0 | 1>>(new Map());
-
   // Local push edit records
   const [pushEdits, _setPushEdits] = useState<Map<string, PushEditData>>(new Map());
 
@@ -372,6 +362,22 @@ export function Article({
 
   const actions = usePttActions();
   const { isLoggedIn } = actions;
+
+  useEffect(() => {
+    if (!article || !currentUser) return;
+    setPushVotes((previous) => {
+      const next = new Map(previous);
+      let changed = false;
+      for (const [pushId, optimistic] of previous) {
+        const push = article.pushes.find((item) => item.id === pushId);
+        if (push && getViewerPushVote(push, currentUser) === optimistic.value) {
+          next.delete(pushId);
+          changed = true;
+        }
+      }
+      return changed ? next : previous;
+    });
+  }, [article, currentUser]);
 
   const handleArticleVote = useCallback((direction: "push" | "boo") => {
     if (!canVote(articleVote.value, direction)) return;
@@ -396,17 +402,16 @@ export function Article({
   const handlePushVote = useCallback((pushId: string, next: -1 | 0 | 1) => {
     const push = article?.pushes.find((item) => item.id === pushId);
     if (!push) return;
-    const currentVote = myPushVotes.get(pushId) ?? getViewerPushVote(push, currentUser);
+    const currentState = pushVotes.get(pushId) ?? {
+      value: getViewerPushVote(push, currentUser),
+      count: {
+        push: push.pushVoters.length,
+        boo: push.booVoters.length,
+      },
+    };
+    const currentVote = currentState.value;
 
-    if (next === currentVote) return;
-
-    if (next === 0) {
-      setMyPushVotes(prev => new Map(prev).set(pushId, 0));
-      setPushVotes(prev =>
-        new Map(prev).set(pushId, buildOptimisticVoteState(push, currentUser, 0)),
-      );
-      return;
-    }
+    if (next === 0 || next === currentVote) return;
 
     const direction = next === 1 ? "push" : "boo";
     const targetFloor = push ? getPushFloor(push) : 0;
@@ -418,12 +423,8 @@ export function Article({
       .votePush(targetFloor, direction, boardName)
       .then((result) => {
         if (!result.ok) return;
-        setMyPushVotes((prev) => new Map(prev).set(pushId, next));
         setPushVotes((prev) =>
-          new Map(prev).set(
-            pushId,
-            buildOptimisticVoteState(push, currentUser, next),
-          ),
+          new Map(prev).set(pushId, transitionVoteState(currentState, next)),
         );
         void liveReload();
       })
@@ -431,7 +432,7 @@ export function Article({
         pendingPushVoteIdsRef.current.delete(pushId);
         setPendingPushVoteIds(new Set(pendingPushVoteIdsRef.current));
       });
-  }, [actions, article?.pushes, boardName, currentUser, liveReload, myPushVotes]);
+  }, [actions, article?.pushes, boardName, currentUser, liveReload, pushVotes]);
 
   const openReply = useCallback(() => {
     setComposerSubmitError(null);
