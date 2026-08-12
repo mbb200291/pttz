@@ -338,6 +338,10 @@ function extractAuthorId(author: string): string {
   return author.trim().split(/\s+/u)[0] ?? "";
 }
 
+export function normalizePttId(author: string): string {
+  return extractAuthorId(author).toLowerCase();
+}
+
 function getReplyDepth(
   push: AggregatedPush,
   pushById: Map<string, AggregatedPush>,
@@ -437,14 +441,19 @@ export function aggregatePushes(
       voterDirectionMap.set(target.id, new Map());
     }
     const authorMap = voterDirectionMap.get(target.id)!;
-    const previous = authorMap.get(rawPush.author);
+    const voterId = normalizePttId(rawPush.author);
+    const previous = authorMap.get(voterId);
     if (previous === vote.direction) continue; // 無變化
 
     // 移除舊方向
     if (previous === "push") {
-      target.pushVoters = target.pushVoters.filter((a) => a !== rawPush.author);
+      target.pushVoters = target.pushVoters.filter(
+        (author) => normalizePttId(author) !== voterId,
+      );
     } else if (previous === "boo") {
-      target.booVoters = target.booVoters.filter((a) => a !== rawPush.author);
+      target.booVoters = target.booVoters.filter(
+        (author) => normalizePttId(author) !== voterId,
+      );
     }
 
     // 加入新方向
@@ -453,7 +462,7 @@ export function aggregatePushes(
     } else {
       target.booVoters.push(rawPush.author);
     }
-    authorMap.set(rawPush.author, vote.direction);
+    authorMap.set(voterId, vote.direction);
   }
 
   for (const push of firstLayer) {
