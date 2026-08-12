@@ -11,7 +11,11 @@ import { ArticleRevisions } from "./ArticleRevisions";
 import { RichContent } from "./RichContent";
 import type { ArticleData, PartialArticleData } from "../hooks/useArticle";
 import type { ArticleEditRecord, ArticleSummary } from "../lib/ptt/parser";
-import type { AggregatedPush } from "../lib/ptt/pushAggregator";
+import {
+  detectArticleVote,
+  normalizePttId,
+  type AggregatedPush,
+} from "../lib/ptt/pushAggregator";
 import { getLastArticleOpenTrace } from "../lib/ptt/adapter";
 import { VotePair } from "./VotePair";
 import type { VoteCount, PushEditData } from "./PushThread";
@@ -179,7 +183,10 @@ function LightweightPushList({
 }: {
   pushes: NonNullable<PartialArticleData["pushes"]>;
 }) {
-  if (pushes.length === 0) return null;
+  const visiblePushes = pushes.filter(
+    (push) => detectArticleVote(push.content) === null,
+  );
+  if (visiblePushes.length === 0) return null;
 
   return (
     <section className="mt-10 border-t border-gray-700 pt-6">
@@ -187,10 +194,10 @@ function LightweightPushList({
         <span className="text-sm font-semibold tracking-wide text-gray-300">
           回文
         </span>
-        <span className="text-xs text-gray-500">已載入 {pushes.length} 則</span>
+        <span className="text-xs text-gray-500">已載入 {visiblePushes.length} 則</span>
       </div>
       <div className="space-y-2">
-        {pushes.map((push) => (
+        {visiblePushes.map((push) => (
           <div
             key={push.id}
             className="rounded-xl border border-gray-800 bg-gray-900/70 px-3 py-2"
@@ -235,31 +242,23 @@ function getPushDepth(push: AggregatedPush, pushes: AggregatedPush[]): number {
 
 function getViewerPushVote(push: AggregatedPush, currentUser?: string): -1 | 0 | 1 {
   if (!currentUser) return 0;
-  if (push.pushVoters.includes(currentUser)) return 1;
-  if (push.booVoters.includes(currentUser)) return -1;
+  const viewerId = normalizePttId(currentUser);
+  if (push.pushVoters.some((author) => normalizePttId(author) === viewerId)) return 1;
+  if (push.booVoters.some((author) => normalizePttId(author) === viewerId)) return -1;
   return 0;
 }
 
-function buildOptimisticVoteState(
-  push: AggregatedPush,
-  currentUser: string | undefined,
+function transitionVoteState(
+  current: { value: -1 | 0 | 1; count: VoteCount },
   next: -1 | 0 | 1,
 ): { value: -1 | 0 | 1; count: VoteCount } {
-  const pushVoters = new Set(push.pushVoters);
-  const booVoters = new Set(push.booVoters);
-
-  if (currentUser) {
-    pushVoters.delete(currentUser);
-    booVoters.delete(currentUser);
-    if (next === 1) pushVoters.add(currentUser);
-    if (next === -1) booVoters.add(currentUser);
-  }
-
   return {
     value: next,
     count: {
-      push: pushVoters.size,
-      boo: booVoters.size,
+      push: Math.max(0, current.count.push - (current.value === 1 ? 1 : 0)) +
+        (next === 1 ? 1 : 0),
+      boo: Math.max(0, current.count.boo - (current.value === -1 ? 1 : 0)) +
+        (next === -1 ? 1 : 0),
     },
   };
 }
@@ -353,9 +352,6 @@ export function Article({
     new Set(),
   );
 
-  // Current user's vote per push (for dedup)
-  const [myPushVotes, setMyPushVotes] = useState<Map<string, -1 | 0 | 1>>(new Map());
-
   // Local push edit records
   const [pushEdits, _setPushEdits] = useState<Map<string, PushEditData>>(new Map());
 
@@ -366,6 +362,22 @@ export function Article({
 
   const actions = usePttActions();
   const { isLoggedIn } = actions;
+
+  useEffect(() => {
+    if (!article || !currentUser) return;
+    setPushVotes((previous) => {
+      const next = new Map(previous);
+      let changed = false;
+      for (const [pushId, optimistic] of previous) {
+        const push = article.pushes.find((item) => item.id === pushId);
+        if (push && getViewerPushVote(push, currentUser) === optimistic.value) {
+          next.delete(pushId);
+          changed = true;
+        }
+      }
+      return changed ? next : previous;
+    });
+  }, [article, currentUser]);
 
   const handleArticleVote = useCallback((direction: "push" | "boo") => {
     if (!canVote(articleVote.value, direction)) return;
@@ -390,17 +402,16 @@ export function Article({
   const handlePushVote = useCallback((pushId: string, next: -1 | 0 | 1) => {
     const push = article?.pushes.find((item) => item.id === pushId);
     if (!push) return;
-    const currentVote = myPushVotes.get(pushId) ?? getViewerPushVote(push, currentUser);
+    const currentState = pushVotes.get(pushId) ?? {
+      value: getViewerPushVote(push, currentUser),
+      count: {
+        push: push.pushVoters.length,
+        boo: push.booVoters.length,
+      },
+    };
+    const currentVote = currentState.value;
 
-    if (next === currentVote) return;
-
-    if (next === 0) {
-      setMyPushVotes(prev => new Map(prev).set(pushId, 0));
-      setPushVotes(prev =>
-        new Map(prev).set(pushId, buildOptimisticVoteState(push, currentUser, 0)),
-      );
-      return;
-    }
+    if (next === 0 || next === currentVote) return;
 
     const direction = next === 1 ? "push" : "boo";
     const targetFloor = push ? getPushFloor(push) : 0;
@@ -412,12 +423,8 @@ export function Article({
       .votePush(targetFloor, direction, boardName)
       .then((result) => {
         if (!result.ok) return;
-        setMyPushVotes((prev) => new Map(prev).set(pushId, next));
         setPushVotes((prev) =>
-          new Map(prev).set(
-            pushId,
-            buildOptimisticVoteState(push, currentUser, next),
-          ),
+          new Map(prev).set(pushId, transitionVoteState(currentState, next)),
         );
         void liveReload();
       })
@@ -425,7 +432,7 @@ export function Article({
         pendingPushVoteIdsRef.current.delete(pushId);
         setPendingPushVoteIds(new Set(pendingPushVoteIdsRef.current));
       });
-  }, [actions, article?.pushes, boardName, currentUser, liveReload, myPushVotes]);
+  }, [actions, article?.pushes, boardName, currentUser, liveReload, pushVotes]);
 
   const openReply = useCallback(() => {
     setComposerSubmitError(null);
@@ -547,9 +554,12 @@ export function Article({
   }, [article, articleIndex, boardName]);
 
   // Compute push/boo/neutral counts for stats bar
-  const pushCount = article ? article.pushes.filter(p => p.type === "push").length : 0;
-  const booCount = article ? article.pushes.filter(p => p.type === "boo").length : 0;
-  const neutralCount = article ? article.pushes.filter(p => p.type === "neutral").length : 0;
+  const pushTypes = article?.pushes.map(
+    (push) => detectArticleVote(push.content) ?? push.type,
+  ) ?? [];
+  const pushCount = pushTypes.filter((type) => type === "push").length;
+  const booCount = pushTypes.filter((type) => type === "boo").length;
+  const neutralCount = pushTypes.filter((type) => type === "neutral").length;
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--text)" }}>

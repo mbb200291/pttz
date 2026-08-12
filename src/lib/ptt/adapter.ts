@@ -1936,48 +1936,100 @@ export async function submitArticleEditFromBot(
   return { ok: false, reason: "無法確認文章是否儲存成功，請重新載入檢查" };
 }
 
-async function submitPushFromCurrentArticle(
+export interface SubmitPushTimeouts {
+  typePromptMs: number;
+  confirmMs: number;
+  pollMs: number;
+  afterTypeMs: number;
+  afterConfirmMs: number;
+  afterContinueMs: number;
+}
+
+const DEFAULT_SUBMIT_PUSH_TIMEOUTS: SubmitPushTimeouts = {
+  typePromptMs: 2000,
+  confirmMs: 3500,
+  pollMs: 80,
+  afterTypeMs: 140,
+  afterConfirmMs: 500,
+  afterContinueMs: 300,
+};
+
+const PUSH_TYPE_MENU_RE =
+  /1\..*(2\.|噓)|值得推薦|給它噓聲|只加註解|推文方式|推文種類/u;
+const PUSH_CONTENT_PROMPT_RE = /請輸入推文內容|輸入推文內容|推文內容[:：]/u;
+
+async function waitForPushEntry(
+  bot: WriteBot,
+  timeoutMs: number,
+  pollMs: number,
+): Promise<"menu" | "content" | null> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const screen = stripAnsi(readVisibleScreen(bot)).replace(/\r/g, "");
+    if (PUSH_TYPE_MENU_RE.test(screen)) return "menu";
+    if (PUSH_CONTENT_PROMPT_RE.test(screen)) return "content";
+    await sleep(pollMs);
+  }
+  return null;
+}
+
+export async function submitPushFromCurrentArticle(
   bot: WriteBot,
   content: string,
   pushType: PushType,
   returnBoardName?: string,
+  timeoutOverrides: Partial<SubmitPushTimeouts> = {},
 ): Promise<{ ok: boolean }> {
   const trimmed = content.trim();
   if (!trimmed) return { ok: false };
   if (!bot.send || !bot.getLine) {
     throw new Error("Bot does not expose article write methods");
   }
+  const timeouts = {
+    ...DEFAULT_SUBMIT_PUSH_TIMEOUTS,
+    ...timeoutOverrides,
+  };
 
   await bot.send("X");
-  await sleep(180);
+  const entry = await waitForPushEntry(
+    bot,
+    timeouts.typePromptMs,
+    timeouts.pollMs,
+  );
 
-  const afterCommand = stripAnsi(readVisibleScreen(bot));
-  if (
-    /1\..*(2\.|噓)|值得推薦|給它噓聲|只加註解|推文方式|推文種類/u.test(
-      afterCommand,
-    )
-  ) {
+  if (entry === "menu") {
     await bot.send(getPushTypeKey(pushType));
-    await sleep(140);
+    await sleep(timeouts.afterTypeMs);
+    const contentReady = await waitForPattern(
+      bot,
+      PUSH_CONTENT_PROMPT_RE,
+      timeouts.typePromptMs,
+      timeouts.pollMs,
+    );
+    if (!contentReady) {
+      await bot.send(PTT_KEY_CTRL_C);
+      return { ok: false };
+    }
+  } else if (entry !== "content" || pushType !== "neutral") {
+    await bot.send(PTT_KEY_CTRL_C);
+    return { ok: false };
   }
 
   await bot.send(`${trimmed}\r`);
+  const confirmed = await waitForPattern(
+    bot,
+    /確定|是否|送出|儲存/u,
+    timeouts.confirmMs,
+    timeouts.pollMs,
+  );
 
-  let afterContent = "";
-  const confirmStartedAt = Date.now();
-  while (Date.now() - confirmStartedAt < 3500) {
-    afterContent = stripAnsi(readVisibleScreen(bot));
-    if (/確定|是否|送出|儲存/u.test(afterContent)) break;
-    await sleep(80);
-  }
-
-  if (/確定|是否|送出|儲存/u.test(afterContent)) {
+  if (confirmed) {
     await bot.send("y\r");
-    await sleep(500);
+    await sleep(timeouts.afterConfirmMs);
     const afterConfirm = stripAnsi(readVisibleScreen(bot));
     if (/請按任意鍵繼續|按任意鍵繼續/u.test(afterConfirm)) {
       await bot.send("\r");
-      await sleep(300);
+      await sleep(timeouts.afterContinueMs);
     }
     if (returnBoardName) {
       await ensureNormalBoardView(bot, returnBoardName);

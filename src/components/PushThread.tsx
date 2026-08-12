@@ -5,7 +5,11 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AggregatedPush } from "../lib/ptt/pushAggregator";
+import {
+  detectArticleVote,
+  normalizePttId,
+  type AggregatedPush,
+} from "../lib/ptt/pushAggregator";
 import { RichContent } from "./RichContent";
 import { VotePair } from "./VotePair";
 import { Monogram } from "./Monogram";
@@ -44,8 +48,9 @@ const REFRESH_ANIMATION_MIN_MS = 350;
 const REFRESH_HIGHLIGHT_MS = 220;
 function getViewerVote(push: AggregatedPush, currentUser?: string): -1 | 0 | 1 {
   if (!currentUser) return 0;
-  if (push.pushVoters.includes(currentUser)) return 1;
-  if (push.booVoters.includes(currentUser)) return -1;
+  const viewerId = normalizePttId(currentUser);
+  if (push.pushVoters.some((author) => normalizePttId(author) === viewerId)) return 1;
+  if (push.booVoters.some((author) => normalizePttId(author) === viewerId)) return -1;
   return 0;
 }
 
@@ -380,8 +385,8 @@ function PushItem({
           count={displayVoteState.count}
           voters={{ push: push.pushVoters, boo: push.booVoters }}
           myVote={displayVoteState.value}
-          onPush={() => onVote(displayVoteState.value === 1 ? 0 : 1)}
-          onBoo={() => onVote(displayVoteState.value === -1 ? 0 : -1)}
+          onPush={() => onVote(1)}
+          onBoo={() => onVote(-1)}
           size="xs"
           disabled={pendingVoteIds?.has(push.id) ?? false}
         />
@@ -632,9 +637,14 @@ export function PushThread({
   const pulseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showRefreshing = refreshing || localRefreshing;
 
+  const visiblePushes = useMemo(
+    () => pushes.filter((push) => detectArticleVote(push.content) === null),
+    [pushes],
+  );
+
   const childrenMap = useMemo(() => {
     const nextMap = new Map<string, AggregatedPush[]>();
-    for (const push of pushes) {
+    for (const push of visiblePushes) {
       if (push.replyTo) {
         const list = nextMap.get(push.replyTo) ?? [];
         list.push(push);
@@ -643,11 +653,11 @@ export function PushThread({
       }
     }
     return nextMap;
-  }, [pushes]);
+  }, [visiblePushes]);
 
   const topLevel = useMemo(
-    () => pushes.filter((push) => push.replyTo === null),
-    [pushes],
+    () => visiblePushes.filter((push) => push.replyTo === null),
+    [visiblePushes],
   );
   const sortedTopLevel = useMemo(
     () => sortTopLevelPushes(topLevel, sort),

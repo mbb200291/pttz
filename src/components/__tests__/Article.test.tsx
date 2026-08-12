@@ -56,6 +56,22 @@ describe("Article", () => {
           body: "第一段\nhttps://youtu.be/dQw4w9WgXcQ",
           pushes: [
             {
+              id: "article-boo",
+              type: "neutral",
+              author: "voter",
+              content: "噓",
+              time: "11:59",
+              ipAddresses: [],
+              isOP: false,
+              replyTo: null,
+              score: 0,
+              floorNumber: 1,
+              anchorOrder: 0,
+              sourceFloors: [1],
+              pushVoters: [],
+              booVoters: [],
+            },
+            {
               id: "push-0",
               type: "push",
               author: "userA",
@@ -100,6 +116,7 @@ describe("Article", () => {
     expect(html).not.toContain("推噓分");
     expect(html).not.toContain("舊到新");
     expect(html).toContain("回文");
+    expect(html).not.toContain(">噓</pre>");
     expect(html).toContain("完整討論串整理中…");
   });
 

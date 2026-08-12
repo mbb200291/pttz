@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { aggregatePushes, calcArticleScore, detectVote } from "../pushAggregator";
+import {
+  aggregatePushes,
+  calcArticleScore,
+  detectArticleVote,
+  detectVote,
+  normalizePttId,
+} from "../pushAggregator";
 import type { ArticleEditRecord, OpEditedReplySegment, RawPush } from "../parser";
 
 const OP = "opUser";
@@ -457,6 +463,33 @@ describe("編輯註記", () => {
 // ─── 推/噓計分 ────────────────────────────────────────────────────────────────
 
 describe("推文評分", () => {
+  it("辨識只有單獨推噓的文章投票事件", () => {
+    expect(detectArticleVote(" 推 ")).toBe("push");
+    expect(detectArticleVote("噓")).toBe("boo");
+    expect(detectArticleVote("推 好文")).toBeNull();
+    expect(detectArticleVote("噓1樓")).toBeNull();
+  });
+
+  it("以單獨噓的內容語意修正 neutral marker 的文章分數", () => {
+    const thread = aggregatePushes([
+      push("alice", "噓", "01/01 12:00", "neutral", 10, 1),
+    ], OP);
+
+    expect(calcArticleScore(thread.pushes)).toBe(-1);
+  });
+
+  it("文章投票事件不與同作者後續普通回文合併", () => {
+    const thread = aggregatePushes([
+      push("alice", "噓", "01/01 12:00", "boo", 10, 1),
+      push("alice", "補充原因", "01/01 12:01", "neutral", 20, 2),
+    ], OP);
+
+    expect(thread.pushes.map((item) => item.content)).toEqual([
+      "噓",
+      "補充原因",
+    ]);
+  });
+
   it("文章層級：push+1, boo-1, neutral 不計", () => {
     const raw = [
       push("a", "推", "01/01 12:00", "push"),
@@ -505,6 +538,41 @@ describe("detectVote", () => {
 // ─── 投票者收集 ───────────────────────────────────────────────────────────────
 
 describe("投票者收集", () => {
+  it("以不分大小寫的 PTT ID 覆蓋舊投票方向", () => {
+    const raw = [
+      push("alice", "第一樓", "08/12 22:06", "neutral", 10, 1),
+      push("MBB200291", "推1樓", "08/12 22:07", "push", 20, 2),
+      push("mbb200291", "噓1樓", "08/12 22:08", "boo", 30, 3),
+    ];
+    const target = aggregatePushes(raw, OP).pushes.find(
+      (item) => item.author === "alice",
+    )!;
+
+    expect(normalizePttId(" MBB200291 ")).toBe("mbb200291");
+    expect(target.pushVoters).toEqual([]);
+    expect(target.booVoters).toEqual(["mbb200291"]);
+    expect(target.score).toBe(-1);
+  });
+
+  it("實站重複序列只保留同一 ID 的最後一個推", () => {
+    const raw = [
+      push("MBB200291", "測試回文", "08/12 22:06", "neutral", 10, 1),
+      push("MBB200291", "推1樓", "08/12 22:07", "push", 20, 2),
+      push("MBB200291", "推1樓", "08/12 22:07", "push", 30, 3),
+      push("MBB200291", "推1樓", "08/12 22:07", "push", 40, 4),
+      push("MBB200291", "噓1樓", "08/12 22:07", "boo", 50, 5),
+      push("MBB200291", "推1樓", "08/12 22:07", "push", 60, 6),
+      push("MBB200291", "推1樓", "08/12 22:08", "push", 70, 7),
+    ];
+    const target = aggregatePushes(raw, OP).pushes.find(
+      (item) => item.content === "測試回文",
+    )!;
+
+    expect(target.pushVoters).toEqual(["MBB200291"]);
+    expect(target.booVoters).toEqual([]);
+    expect(target.score).toBe(1);
+  });
+
   it("隱藏投票後仍以 PTT 原始樓號投到後續回文", () => {
     const raw = [
       push("alice", "第一樓", "01/01 12:00", "neutral", 10, 1),

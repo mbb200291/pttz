@@ -141,6 +141,8 @@ src/components/              ← React UI 元件（LoginModal、ArticleList、Ar
 10. 第一層文章總分計算
 11. 單則聚合推文的 score 由已去重的明確投票者清單計算；一般巢狀回覆不計分
 12. 第一層聚合回文排序支援的穩定欄位
+13. 單獨 `推`／`噓` 作為文章投票事件保留統計，但排除於討論串呈現
+14. 回文 voter ID 不分大小寫，同一帳號只採最後投票方向
 
 ### 5. UI 呈現層
 
@@ -202,6 +204,8 @@ src/components/              ← React UI 元件（LoginModal、ArticleList、Ar
 24. 作者推文補充／更正／撤回：以中立新推文保留不可變更的原始推文
 25. 回文明確投票去重與計分：`score = pushVoters.length - booVoters.length`
 26. 回文送票期間的 per-push 同步 pending guard，防止快速連點重複送出
+27. 回文投票二態切換與 server-data reconciliation，避免假的撤回與過期 optimistic state
+28. PTT 推噓寫入需確認類型選單，無法確認時不降級為箭頭推文
 
 ## 目前保留的舊程式邏輯
 
@@ -261,6 +265,7 @@ src/components/              ← React UI 元件（LoginModal、ArticleList、Ar
 15. 文章編輯狀態機 + 結構化編輯摘要 + revision UI
 16. 推文補充／更正／撤回送出流程與失敗保留
 17. 回文投票分數來源統一與快速連點防重
+18. 文章單獨推噓事件隱藏、回文最後一票與嚴格 PTT 類型選擇
 
 ### 正在維護
 
@@ -301,3 +306,6 @@ src/components/              ← React UI 元件（LoginModal、ArticleList、Ar
 13. [goal-8-reply-vote-consistency-design.md](goal-8-reply-vote-consistency-design.md)
 14. [goal-8-implementation-plan.md](goal-8-implementation-plan.md)
 15. [goal-8-implementation-notes.md](goal-8-implementation-notes.md)
+16. [goal-8-vote-state-follow-up-design.md](goal-8-vote-state-follow-up-design.md)
+17. [goal-8-vote-state-follow-up-implementation-plan.md](goal-8-vote-state-follow-up-implementation-plan.md)
+18. [goal-8-vote-state-follow-up-implementation-notes.md](goal-8-vote-state-follow-up-implementation-notes.md)

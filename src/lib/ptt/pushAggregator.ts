@@ -44,6 +44,13 @@ export interface AggregatedThread {
   articleNotes: ArticleEditRecord[];
 }
 
+export function detectArticleVote(content: string): "push" | "boo" | null {
+  const normalized = content.trim();
+  if (normalized === "推") return "push";
+  if (normalized === "噓") return "boo";
+  return null;
+}
+
 // PTT 推文內容區會受作者欄、IP 與時間欄擠壓；約 37 bytes 已會貼近 IP 欄。
 const MIN_FULL_PUSH_BYTES = 37;
 // 同作者不連續但允許合併的最大時間間隔（分鐘）
@@ -133,8 +140,8 @@ function groupPushes(rawPushes: AnchoredRawPush[]): PushGroup[] {
   for (let i = 0; i < rawPushes.length; i++) {
     const cur = rawPushes[i];
 
-    // 優先檢測純投票：純投票推文獨立成群，不聚合
-    if (isPureVote(cur.content)) {
+    // Vote events must stay independent from adjacent discussion content.
+    if (isPureVote(cur.content) || detectArticleVote(cur.content)) {
       groups.push({ pushes: [cur], anchorOrder: cur.anchorOffset ?? i });
       continue;
     }
@@ -162,8 +169,7 @@ function groupPushes(rawPushes: AnchoredRawPush[]): PushGroup[] {
     const sameGroup = groups[sameAuthorGroupIdx];
     const lastPush = sameGroup.pushes[sameGroup.pushes.length - 1];
 
-    // 若上一推是純投票，不聚合
-    if (isPureVote(lastPush.content)) {
+    if (isPureVote(lastPush.content) || detectArticleVote(lastPush.content)) {
       groups.push({ pushes: [cur], anchorOrder: cur.anchorOffset ?? i });
       continue;
     }
@@ -331,6 +337,10 @@ function extractAuthorId(author: string): string {
   return author.trim().split(/\s+/u)[0] ?? "";
 }
 
+export function normalizePttId(author: string): string {
+  return extractAuthorId(author).toLowerCase();
+}
+
 function getReplyDepth(
   push: AggregatedPush,
   pushById: Map<string, AggregatedPush>,
@@ -430,14 +440,19 @@ export function aggregatePushes(
       voterDirectionMap.set(target.id, new Map());
     }
     const authorMap = voterDirectionMap.get(target.id)!;
-    const previous = authorMap.get(rawPush.author);
+    const voterId = normalizePttId(rawPush.author);
+    const previous = authorMap.get(voterId);
     if (previous === vote.direction) continue; // 無變化
 
     // 移除舊方向
     if (previous === "push") {
-      target.pushVoters = target.pushVoters.filter((a) => a !== rawPush.author);
+      target.pushVoters = target.pushVoters.filter(
+        (author) => normalizePttId(author) !== voterId,
+      );
     } else if (previous === "boo") {
-      target.booVoters = target.booVoters.filter((a) => a !== rawPush.author);
+      target.booVoters = target.booVoters.filter(
+        (author) => normalizePttId(author) !== voterId,
+      );
     }
 
     // 加入新方向
@@ -446,7 +461,7 @@ export function aggregatePushes(
     } else {
       target.booVoters.push(rawPush.author);
     }
-    authorMap.set(rawPush.author, vote.direction);
+    authorMap.set(voterId, vote.direction);
   }
 
   for (const push of firstLayer) {
@@ -545,8 +560,9 @@ export function calcArticleScore(pushes: AggregatedPush[]): number {
   return pushes
     .filter((p) => p.replyTo === null)
     .reduce((acc, p) => {
-      if (p.type === "push") return acc + 1;
-      if (p.type === "boo") return acc - 1;
+      const direction = detectArticleVote(p.content) ?? p.type;
+      if (direction === "push") return acc + 1;
+      if (direction === "boo") return acc - 1;
       return acc;
     }, 0);
 }

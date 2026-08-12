@@ -242,6 +242,25 @@ describe("PushThread", () => {
     expect(html).toContain("沒有新回文");
   });
 
+  it("hides standalone article votes from the discussion thread", () => {
+    const html = renderToStaticMarkup(
+      <PushThread
+        score={0}
+        pushes={[
+          push({ id: "article-push", content: "推", anchorOrder: 10 }),
+          push({ id: "article-boo", content: "噓", anchorOrder: 20 }),
+          push({ id: "comment", content: "推 好文", anchorOrder: 30 }),
+        ]}
+      />,
+    );
+
+    expect(html).toContain("推 好文");
+    expect(html).toContain("1 則第一層回覆");
+    expect(html).not.toContain("2 則第一層回覆");
+    expect(html).not.toContain(">推</div>");
+    expect(html).not.toContain(">噓</div>");
+  });
+
   // ─── Action row tests ────────────────────────────────────────────────────────
 
   it("renders 回覆 button when onReply is provided", () => {
@@ -336,10 +355,31 @@ describe("PushThread", () => {
     expect(booButton.textContent).toContain("1");
 
     fireEvent.click(pushButton);
-    expect(onVote).toHaveBeenLastCalledWith("push-0", 0);
+    expect(onVote).toHaveBeenLastCalledWith("push-0", 1);
 
     fireEvent.click(booButton);
     expect(onVote).toHaveBeenLastCalledWith("push-0", -1);
+  });
+
+  it("keeps the boo direction when the selected boo button is clicked", () => {
+    const onVote = vi.fn();
+    render(
+      <PushThread
+        score={0}
+        currentUser="alice"
+        pushes={[
+          push({
+            id: "push-0",
+            content: "hello",
+            booVoters: ["alice"],
+          }),
+        ]}
+        onVote={onVote}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "噓" }));
+    expect(onVote).toHaveBeenCalledWith("push-0", -1);
   });
 
   it("shows 編輯 button when push.author === currentUser", () => {
