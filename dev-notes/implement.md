@@ -139,7 +139,7 @@ src/components/              ← React UI 元件（LoginModal、ArticleList、Ar
 8. OP 標示
 9. 文章層級編輯紀錄與作者編輯補充 reply
 10. 第一層文章總分計算
-11. 單則聚合推文的 score 計算
+11. 單則聚合推文的 score 由已去重的明確投票者清單計算；一般巢狀回覆不計分
 12. 第一層聚合回文排序支援的穩定欄位
 
 ### 5. UI 呈現層
@@ -200,6 +200,8 @@ src/components/              ← React UI 元件（LoginModal、ArticleList、Ar
 22. 以 AID 直接跳轉文章（PTT `#` 鍵，搜尋欄輸入 #XXXXXXXX）
 23. 作者文章編輯：保留簽名檔與 PTT 編輯紀錄、保存結構化摘要、失敗保留草稿
 24. 作者推文補充／更正／撤回：以中立新推文保留不可變更的原始推文
+25. 回文明確投票去重與計分：`score = pushVoters.length - booVoters.length`
+26. 回文送票期間的 per-push 同步 pending guard，防止快速連點重複送出
 
 ## 目前保留的舊程式邏輯
 
@@ -258,6 +260,7 @@ src/components/              ← React UI 元件（LoginModal、ArticleList、Ar
 14. 看板文章標題搜尋 + 推噓文數篩選 + AID 跳轉（adapter + useBoard filter + ArticleList UI）
 15. 文章編輯狀態機 + 結構化編輯摘要 + revision UI
 16. 推文補充／更正／撤回送出流程與失敗保留
+17. 回文投票分數來源統一與快速連點防重
 
 ### 正在維護
 
@@ -295,3 +298,6 @@ src/components/              ← React UI 元件（LoginModal、ArticleList、Ar
 10. [goal-7-editing-design.md](goal-7-editing-design.md)
 11. [goal-7-editing-implementation-plan.md](goal-7-editing-implementation-plan.md)
 12. [goal-7-editing-implementation-notes.md](goal-7-editing-implementation-notes.md)
+13. [goal-8-reply-vote-consistency-design.md](goal-8-reply-vote-consistency-design.md)
+14. [goal-8-implementation-plan.md](goal-8-implementation-plan.md)
+15. [goal-8-implementation-notes.md](goal-8-implementation-notes.md)

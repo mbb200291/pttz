@@ -467,15 +467,14 @@ describe("推文評分", () => {
     expect(calcArticleScore(thread.pushes)).toBe(1); // 2 push - 1 boo
   });
 
-  it("嵌套推文的 score 正確累計", () => {
+  it("一般巢狀回覆不影響父回文 score", () => {
     const raw = [
       push("alice", "第一樓"),
-      push("b", "回1樓：好", "01/01 12:01", "push"),
-      push("c", "回1樓：不好", "01/01 12:02", "boo"),
+      push("bob", "回1樓：同意", "01/01 12:01", "push"),
     ];
     const thread = aggregatePushes(raw, OP);
-    const alicePush = thread.pushes.find((r) => r.author === "alice")!;
-    expect(alicePush.score).toBe(0); // 1 push + 1 boo = 0
+    const target = thread.pushes.find((item) => item.author === "alice")!;
+    expect(target.score).toBe(0);
   });
 });
 
@@ -506,6 +505,59 @@ describe("detectVote", () => {
 // ─── 投票者收集 ───────────────────────────────────────────────────────────────
 
 describe("投票者收集", () => {
+  it("隱藏投票後仍以 PTT 原始樓號投到後續回文", () => {
+    const raw = [
+      push("alice", "第一樓", "01/01 12:00", "neutral", 10, 1),
+      push("bob", "推1樓", "01/01 12:01", "push", 20, 2),
+      push("carol", "第三樓", "01/01 12:02", "neutral", 30, 3),
+      push("dave", "推3樓", "01/01 12:03", "push", 40, 4),
+    ];
+    const thread = aggregatePushes(raw, OP);
+    const thirdFloor = thread.pushes.find((item) => item.author === "carol")!;
+
+    expect(thread.pushes.some((item) => item.content === "推1樓")).toBe(false);
+    expect(thread.pushes.some((item) => item.content === "推3樓")).toBe(false);
+    expect(thirdFloor.pushVoters).toEqual(["dave"]);
+    expect(thirdFloor.sourceFloors).toEqual([3]);
+  });
+
+  it("score 等於已去重的明確投票淨值", () => {
+    const raw = [
+      push("alice", "第一樓", "01/01 12:00", "neutral", 10, 1),
+      push("bob", "推1樓", "01/01 12:01", "push", 20, 2),
+      push("bob", "推1樓", "01/01 12:02", "push", 30, 3),
+      push("carol", "推1樓", "01/01 12:03", "push", 40, 4),
+      push("dave", "噓1樓", "01/01 12:04", "boo", 50, 5),
+    ];
+    const thread = aggregatePushes(raw, OP);
+    const target = thread.pushes.find((item) => item.author === "alice")!;
+    expect(target.pushVoters).toEqual(["bob", "carol"]);
+    expect(target.booVoters).toEqual(["dave"]);
+    expect(target.score).toBe(1);
+  });
+
+  it("同一 ID 先推後噓時 score 採最後方向", () => {
+    const raw = [
+      push("alice", "第一樓", "01/01 12:00", "neutral", 10, 1),
+      push("bob", "推1樓", "01/01 12:01", "push", 20, 2),
+      push("bob", "噓1樓", "01/01 12:02", "boo", 30, 3),
+    ];
+    const thread = aggregatePushes(raw, OP);
+    const target = thread.pushes.find((item) => item.author === "alice")!;
+    expect(target.score).toBe(-1);
+  });
+
+  it("混合明確投票與一般巢狀回覆時只計明確投票", () => {
+    const raw = [
+      push("alice", "第一樓", "01/01 12:00", "neutral", 10, 1),
+      push("bob", "推1樓", "01/01 12:01", "push", 20, 2),
+      push("carol", "回1樓：不同意", "01/01 12:02", "boo", 30, 3),
+    ];
+    const thread = aggregatePushes(raw, OP);
+    const target = thread.pushes.find((item) => item.author === "alice")!;
+    expect(target.score).toBe(1);
+  });
+
   it("「推X樓」推文使作者出現在目標的 pushVoters", () => {
     const raw = [
       push("alice", "第一樓", "01/01 12:00", "push", 10, 1),

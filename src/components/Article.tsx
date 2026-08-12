@@ -4,7 +4,7 @@
  * 完整資料回來後切換到完整版（含推文討論串）。
  */
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useArticle } from "../hooks/useArticle";
 import { PushThread } from "./PushThread";
 import { ArticleRevisions } from "./ArticleRevisions";
@@ -348,6 +348,11 @@ export function Article({
   // Per-push votes (optimistic UI): pushId → { value, count }
   const [pushVotes, setPushVotes] = useState<Map<string, { value: -1 | 0 | 1; count: VoteCount }>>(new Map());
 
+  const pendingPushVoteIdsRef = useRef(new Set<string>());
+  const [pendingPushVoteIds, setPendingPushVoteIds] = useState<Set<string>>(
+    new Set(),
+  );
+
   // Current user's vote per push (for dedup)
   const [myPushVotes, setMyPushVotes] = useState<Map<string, -1 | 0 | 1>>(new Map());
 
@@ -399,14 +404,27 @@ export function Article({
 
     const direction = next === 1 ? "push" : "boo";
     const targetFloor = push ? getPushFloor(push) : 0;
-    void actions.votePush(targetFloor, direction, boardName).then((result) => {
-      if (!result.ok) return;
-      setMyPushVotes(prev => new Map(prev).set(pushId, next));
-      setPushVotes(prev =>
-        new Map(prev).set(pushId, buildOptimisticVoteState(push, currentUser, next)),
-      );
-      void liveReload();
-    });
+    if (pendingPushVoteIdsRef.current.has(pushId)) return;
+    pendingPushVoteIdsRef.current.add(pushId);
+    setPendingPushVoteIds(new Set(pendingPushVoteIdsRef.current));
+
+    void actions
+      .votePush(targetFloor, direction, boardName)
+      .then((result) => {
+        if (!result.ok) return;
+        setMyPushVotes((prev) => new Map(prev).set(pushId, next));
+        setPushVotes((prev) =>
+          new Map(prev).set(
+            pushId,
+            buildOptimisticVoteState(push, currentUser, next),
+          ),
+        );
+        void liveReload();
+      })
+      .finally(() => {
+        pendingPushVoteIdsRef.current.delete(pushId);
+        setPendingPushVoteIds(new Set(pendingPushVoteIdsRef.current));
+      });
   }, [actions, article?.pushes, boardName, currentUser, liveReload, myPushVotes]);
 
   const openReply = useCallback(() => {
@@ -720,6 +738,7 @@ export function Article({
               pushVotes={pushVotes}
               onVote={handlePushVote}
               pushEdits={pushEdits}
+              pendingVoteIds={pendingPushVoteIds}
             />
           </>
         )}

@@ -14,6 +14,7 @@ export interface VotePairProps {
   voters?: { push: string[]; boo: string[] };
   myVote?: -1 | 0 | 1;
   size?: "xs" | "sm" | "lg";
+  disabled?: boolean;
 }
 
 // ─── SVG icons ────────────────────────────────────────────────────────────────
@@ -172,6 +173,7 @@ export function VotePair({
   voters = { push: [], boo: [] },
   myVote: _myVote = 0,
   size = "sm",
+  disabled = false,
 }: VotePairProps) {
   const pushRef = useRef<HTMLButtonElement>(null);
   const booRef = useRef<HTMLButtonElement>(null);
@@ -200,8 +202,6 @@ export function VotePair({
 
   const isPush = value === 1;
   const isBoo = value === -1;
-  const pushDisabled = false;
-  const booDisabled = false;
   const padX = size === "lg" ? 12 : size === "xs" ? 6 : 8;
   const padY = size === "lg" ? 7 : size === "xs" ? 3 : 5;
   const fontSize = size === "lg" ? 13 : size === "xs" ? 11 : 12;
@@ -222,11 +222,11 @@ export function VotePair({
         aria-pressed={isPush}
         // className kept for test assertions: /green/ match
         className={isPush ? "vote-btn push-btn active green" : "vote-btn push-btn"}
-        disabled={pushDisabled}
+        disabled={disabled}
         onClick={onPush}
         onMouseEnter={(e) => {
-          if (!isPush && !pushDisabled) e.currentTarget.style.background = "var(--bg-subtle)";
-          if (!pushDisabled) openPopover("push", e.currentTarget);
+          if (!isPush && !disabled) e.currentTarget.style.background = "var(--bg-subtle)";
+          if (!disabled) openPopover("push", e.currentTarget);
         }}
         onMouseLeave={(e) => {
           if (!isPush) e.currentTarget.style.background = "transparent";
@@ -237,12 +237,12 @@ export function VotePair({
         style={{
           display: "inline-flex", alignItems: "center", gap,
           padding: `${padY}px ${padX}px`, borderRadius: innerRadius, border: 0,
-          cursor: "pointer",
+          cursor: disabled ? "not-allowed" : "pointer",
           background: isPush ? "var(--push-bg)" : "transparent",
           color: isPush ? "var(--push-fg)" : "var(--text-muted)",
           fontFamily: "var(--font-mono)", fontWeight: 700, fontSize,
           transition: "background 100ms",
-          opacity: 1,
+          opacity: disabled ? 0.6 : 1,
         }}
       >
         <ThumbUp s={iconSize} fill={isPush ? "currentColor" : "none"} />
@@ -256,11 +256,11 @@ export function VotePair({
         aria-pressed={isBoo}
         // className kept for test assertions: /red/ match
         className={isBoo ? "vote-btn boo-btn active red" : "vote-btn boo-btn"}
-        disabled={booDisabled}
+        disabled={disabled}
         onClick={onBoo}
         onMouseEnter={(e) => {
-          if (!isBoo && !booDisabled) e.currentTarget.style.background = "var(--bg-subtle)";
-          if (!booDisabled) openPopover("boo", e.currentTarget);
+          if (!isBoo && !disabled) e.currentTarget.style.background = "var(--bg-subtle)";
+          if (!disabled) openPopover("boo", e.currentTarget);
         }}
         onMouseLeave={(e) => {
           if (!isBoo) e.currentTarget.style.background = "transparent";
@@ -271,12 +271,12 @@ export function VotePair({
         style={{
           display: "inline-flex", alignItems: "center", gap,
           padding: `${padY}px ${padX}px`, borderRadius: innerRadius, border: 0,
-          cursor: "pointer",
+          cursor: disabled ? "not-allowed" : "pointer",
           background: isBoo ? "var(--boo-bg)" : "transparent",
           color: isBoo ? "var(--boo-fg)" : "var(--text-muted)",
           fontFamily: "var(--font-mono)", fontWeight: 700, fontSize,
           transition: "background 100ms",
-          opacity: 1,
+          opacity: disabled ? 0.6 : 1,
         }}
       >
         <ThumbDown s={iconSize} fill={isBoo ? "currentColor" : "none"} />
