@@ -25,6 +25,102 @@ function buildBoardLine(params: {
 }
 
 describe("ptt adapter module", () => {
+  it("waits for a delayed push-type menu before sending a boo", async () => {
+    const mod = await import("../adapter");
+    const sent: string[] = [];
+    let screen = "瀏覽文章";
+    let snapshotsAfterCommand = 0;
+    const bot = {
+      async send(command: string) {
+        sent.push(command);
+        if (command === "2") screen = "請輸入推文內容:";
+        if (command === "噓\r") screen = "確定送出推文嗎";
+        if (command === "y\r") screen = "瀏覽文章";
+        return true;
+      },
+      getLine(index: number) {
+        if (sent.includes("X") && screen === "瀏覽文章" && index === 0) {
+          snapshotsAfterCommand += 1;
+          if (snapshotsAfterCommand >= 2) {
+            screen = "1.值得推薦 2.給它噓聲 3.只加註解";
+          }
+        }
+        return { str: index === 0 ? screen : "" };
+      },
+    };
+
+    await expect(
+      mod.submitPushFromCurrentArticle(bot, "噓", "boo", undefined, {
+        typePromptMs: 30,
+        confirmMs: 30,
+        pollMs: 1,
+        afterTypeMs: 0,
+        afterConfirmMs: 0,
+        afterContinueMs: 0,
+      }),
+    ).resolves.toEqual({ ok: true });
+    expect(sent.slice(0, 4)).toEqual(["X", "2", "噓\r", "y\r"]);
+  });
+
+  it("does not send push or boo content when the type menu cannot be confirmed", async () => {
+    const mod = await import("../adapter");
+    const sent: string[] = [];
+    const bot = {
+      async send(command: string) {
+        sent.push(command);
+        return true;
+      },
+      getLine(index: number) {
+        return { str: index === 0 ? "瀏覽文章" : "" };
+      },
+    };
+
+    await expect(
+      mod.submitPushFromCurrentArticle(bot, "噓", "boo", undefined, {
+        typePromptMs: 5,
+        confirmMs: 5,
+        pollMs: 1,
+        afterTypeMs: 0,
+        afterConfirmMs: 0,
+        afterContinueMs: 0,
+      }),
+    ).resolves.toEqual({ ok: false });
+    expect(sent).toEqual(["X", "\x03"]);
+  });
+
+  it.each([
+    ["push", "1"],
+    ["neutral", "3"],
+  ] as const)("selects the PTT %s type key from the menu", async (type, key) => {
+    const mod = await import("../adapter");
+    const sent: string[] = [];
+    let screen = "1.值得推薦 2.給它噓聲 3.只加註解";
+    const bot = {
+      async send(command: string) {
+        sent.push(command);
+        if (command === key) screen = "請輸入推文內容:";
+        if (command === "內容\r") screen = "確定送出推文嗎";
+        if (command === "y\r") screen = "瀏覽文章";
+        return true;
+      },
+      getLine(index: number) {
+        return { str: index === 0 ? screen : "" };
+      },
+    };
+
+    await expect(
+      mod.submitPushFromCurrentArticle(bot, "內容", type, undefined, {
+        typePromptMs: 20,
+        confirmMs: 20,
+        pollMs: 1,
+        afterTypeMs: 0,
+        afterConfirmMs: 0,
+        afterContinueMs: 0,
+      }),
+    ).resolves.toEqual({ ok: true });
+    expect(sent.slice(0, 4)).toEqual(["X", key, "內容\r", "y\r"]);
+  });
+
   it("exports a factory for the ptt-client-backed adapter", async () => {
     const mod = await import("../adapter");
     const adapter = mod.createPttAdapter();
