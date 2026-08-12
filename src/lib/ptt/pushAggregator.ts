@@ -140,8 +140,8 @@ function groupPushes(rawPushes: AnchoredRawPush[]): PushGroup[] {
   for (let i = 0; i < rawPushes.length; i++) {
     const cur = rawPushes[i];
 
-    // 優先檢測純投票：純投票推文獨立成群，不聚合
-    if (isPureVote(cur.content)) {
+    // Vote events must stay independent from adjacent discussion content.
+    if (isPureVote(cur.content) || detectArticleVote(cur.content)) {
       groups.push({ pushes: [cur], anchorOrder: cur.anchorOffset ?? i });
       continue;
     }
@@ -169,8 +169,7 @@ function groupPushes(rawPushes: AnchoredRawPush[]): PushGroup[] {
     const sameGroup = groups[sameAuthorGroupIdx];
     const lastPush = sameGroup.pushes[sameGroup.pushes.length - 1];
 
-    // 若上一推是純投票，不聚合
-    if (isPureVote(lastPush.content)) {
+    if (isPureVote(lastPush.content) || detectArticleVote(lastPush.content)) {
       groups.push({ pushes: [cur], anchorOrder: cur.anchorOffset ?? i });
       continue;
     }

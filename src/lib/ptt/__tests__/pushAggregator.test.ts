@@ -478,6 +478,18 @@ describe("推文評分", () => {
     expect(calcArticleScore(thread.pushes)).toBe(-1);
   });
 
+  it("文章投票事件不與同作者後續普通回文合併", () => {
+    const thread = aggregatePushes([
+      push("alice", "噓", "01/01 12:00", "boo", 10, 1),
+      push("alice", "補充原因", "01/01 12:01", "neutral", 20, 2),
+    ], OP);
+
+    expect(thread.pushes.map((item) => item.content)).toEqual([
+      "噓",
+      "補充原因",
+    ]);
+  });
+
   it("文章層級：push+1, boo-1, neutral 不計", () => {
     const raw = [
       push("a", "推", "01/01 12:00", "push"),
