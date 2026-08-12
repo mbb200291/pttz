@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ArticleData } from "../../hooks/useArticle";
 import { Article } from "../Article";
 
 const mocks = vi.hoisted(() => ({
@@ -38,7 +39,7 @@ vi.mock("../../hooks/useArticle", () => ({
   }),
 }));
 
-const article = {
+const article: ArticleData = {
   title: "[測試] 回文投票",
   author: "op",
   date: "08/11",
