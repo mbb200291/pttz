@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { aggregatePushes, calcArticleScore, detectVote } from "../pushAggregator";
+import {
+  aggregatePushes,
+  calcArticleScore,
+  detectArticleVote,
+  detectVote,
+} from "../pushAggregator";
 import type { ArticleEditRecord, OpEditedReplySegment, RawPush } from "../parser";
 
 const OP = "opUser";
@@ -457,6 +462,21 @@ describe("編輯註記", () => {
 // ─── 推/噓計分 ────────────────────────────────────────────────────────────────
 
 describe("推文評分", () => {
+  it("辨識只有單獨推噓的文章投票事件", () => {
+    expect(detectArticleVote(" 推 ")).toBe("push");
+    expect(detectArticleVote("噓")).toBe("boo");
+    expect(detectArticleVote("推 好文")).toBeNull();
+    expect(detectArticleVote("噓1樓")).toBeNull();
+  });
+
+  it("以單獨噓的內容語意修正 neutral marker 的文章分數", () => {
+    const thread = aggregatePushes([
+      push("alice", "噓", "01/01 12:00", "neutral", 10, 1),
+    ], OP);
+
+    expect(calcArticleScore(thread.pushes)).toBe(-1);
+  });
+
   it("文章層級：push+1, boo-1, neutral 不計", () => {
     const raw = [
       push("a", "推", "01/01 12:00", "push"),

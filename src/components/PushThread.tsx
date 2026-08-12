@@ -5,7 +5,10 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AggregatedPush } from "../lib/ptt/pushAggregator";
+import {
+  detectArticleVote,
+  type AggregatedPush,
+} from "../lib/ptt/pushAggregator";
 import { RichContent } from "./RichContent";
 import { VotePair } from "./VotePair";
 import { Monogram } from "./Monogram";
@@ -632,9 +635,14 @@ export function PushThread({
   const pulseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showRefreshing = refreshing || localRefreshing;
 
+  const visiblePushes = useMemo(
+    () => pushes.filter((push) => detectArticleVote(push.content) === null),
+    [pushes],
+  );
+
   const childrenMap = useMemo(() => {
     const nextMap = new Map<string, AggregatedPush[]>();
-    for (const push of pushes) {
+    for (const push of visiblePushes) {
       if (push.replyTo) {
         const list = nextMap.get(push.replyTo) ?? [];
         list.push(push);
@@ -643,11 +651,11 @@ export function PushThread({
       }
     }
     return nextMap;
-  }, [pushes]);
+  }, [visiblePushes]);
 
   const topLevel = useMemo(
-    () => pushes.filter((push) => push.replyTo === null),
-    [pushes],
+    () => visiblePushes.filter((push) => push.replyTo === null),
+    [visiblePushes],
   );
   const sortedTopLevel = useMemo(
     () => sortTopLevelPushes(topLevel, sort),

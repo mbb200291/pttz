@@ -242,6 +242,25 @@ describe("PushThread", () => {
     expect(html).toContain("沒有新回文");
   });
 
+  it("hides standalone article votes from the discussion thread", () => {
+    const html = renderToStaticMarkup(
+      <PushThread
+        score={0}
+        pushes={[
+          push({ id: "article-push", content: "推", anchorOrder: 10 }),
+          push({ id: "article-boo", content: "噓", anchorOrder: 20 }),
+          push({ id: "comment", content: "推 好文", anchorOrder: 30 }),
+        ]}
+      />,
+    );
+
+    expect(html).toContain("推 好文");
+    expect(html).toContain("1 則第一層回覆");
+    expect(html).not.toContain("2 則第一層回覆");
+    expect(html).not.toContain(">推</div>");
+    expect(html).not.toContain(">噓</div>");
+  });
+
   // ─── Action row tests ────────────────────────────────────────────────────────
 
   it("renders 回覆 button when onReply is provided", () => {

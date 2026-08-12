@@ -11,7 +11,10 @@ import { ArticleRevisions } from "./ArticleRevisions";
 import { RichContent } from "./RichContent";
 import type { ArticleData, PartialArticleData } from "../hooks/useArticle";
 import type { ArticleEditRecord, ArticleSummary } from "../lib/ptt/parser";
-import type { AggregatedPush } from "../lib/ptt/pushAggregator";
+import {
+  detectArticleVote,
+  type AggregatedPush,
+} from "../lib/ptt/pushAggregator";
 import { getLastArticleOpenTrace } from "../lib/ptt/adapter";
 import { VotePair } from "./VotePair";
 import type { VoteCount, PushEditData } from "./PushThread";
@@ -179,7 +182,10 @@ function LightweightPushList({
 }: {
   pushes: NonNullable<PartialArticleData["pushes"]>;
 }) {
-  if (pushes.length === 0) return null;
+  const visiblePushes = pushes.filter(
+    (push) => detectArticleVote(push.content) === null,
+  );
+  if (visiblePushes.length === 0) return null;
 
   return (
     <section className="mt-10 border-t border-gray-700 pt-6">
@@ -187,10 +193,10 @@ function LightweightPushList({
         <span className="text-sm font-semibold tracking-wide text-gray-300">
           回文
         </span>
-        <span className="text-xs text-gray-500">已載入 {pushes.length} 則</span>
+        <span className="text-xs text-gray-500">已載入 {visiblePushes.length} 則</span>
       </div>
       <div className="space-y-2">
-        {pushes.map((push) => (
+        {visiblePushes.map((push) => (
           <div
             key={push.id}
             className="rounded-xl border border-gray-800 bg-gray-900/70 px-3 py-2"
@@ -547,9 +553,12 @@ export function Article({
   }, [article, articleIndex, boardName]);
 
   // Compute push/boo/neutral counts for stats bar
-  const pushCount = article ? article.pushes.filter(p => p.type === "push").length : 0;
-  const booCount = article ? article.pushes.filter(p => p.type === "boo").length : 0;
-  const neutralCount = article ? article.pushes.filter(p => p.type === "neutral").length : 0;
+  const pushTypes = article?.pushes.map(
+    (push) => detectArticleVote(push.content) ?? push.type,
+  ) ?? [];
+  const pushCount = pushTypes.filter((type) => type === "push").length;
+  const booCount = pushTypes.filter((type) => type === "boo").length;
+  const neutralCount = pushTypes.filter((type) => type === "neutral").length;
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--text)" }}>

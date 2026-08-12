@@ -44,6 +44,13 @@ export interface AggregatedThread {
   articleNotes: ArticleEditRecord[];
 }
 
+export function detectArticleVote(content: string): "push" | "boo" | null {
+  const normalized = content.trim();
+  if (normalized === "推") return "push";
+  if (normalized === "噓") return "boo";
+  return null;
+}
+
 // PTT 推文內容區會受作者欄、IP 與時間欄擠壓；約 37 bytes 已會貼近 IP 欄。
 const MIN_FULL_PUSH_BYTES = 37;
 // 同作者不連續但允許合併的最大時間間隔（分鐘）
@@ -545,8 +552,9 @@ export function calcArticleScore(pushes: AggregatedPush[]): number {
   return pushes
     .filter((p) => p.replyTo === null)
     .reduce((acc, p) => {
-      if (p.type === "push") return acc + 1;
-      if (p.type === "boo") return acc - 1;
+      const direction = detectArticleVote(p.content) ?? p.type;
+      if (direction === "push") return acc + 1;
+      if (direction === "boo") return acc - 1;
       return acc;
     }, 0);
 }
