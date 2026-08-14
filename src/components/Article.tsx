@@ -359,9 +359,57 @@ export function Article({
   const [composer, setComposer] = useState<{ mode: ComposerMode; initial: ComposerInitial } | null>(null);
   const [composerSubmitting, setComposerSubmitting] = useState(false);
   const [composerSubmitError, setComposerSubmitError] = useState<string | null>(null);
+  const [deletingArticle, setDeletingArticle] = useState(false);
+  const [deleteArticleError, setDeleteArticleError] = useState<string | null>(null);
+  const deletingArticleRef = useRef(false);
 
   const actions = usePttActions();
   const { isLoggedIn } = actions;
+  const canDeleteArticle = Boolean(
+    isLoggedIn &&
+    article &&
+    currentUser &&
+    normalizePttId(article.author) === normalizePttId(currentUser) &&
+    (articleIndex > 0 || articleAid),
+  );
+
+  const handleDeleteArticle = useCallback(async () => {
+    if (!article || !canDeleteArticle || deletingArticleRef.current) return;
+    setDeleteArticleError(null);
+    if (!window.confirm("確定要刪除這篇文章嗎？刪除後無法復原。")) return;
+
+    deletingArticleRef.current = true;
+    setDeletingArticle(true);
+    try {
+      const result = await actions.deleteArticle({
+        boardName,
+        articleIndex,
+        ...(articleAid ? { articleAid } : {}),
+        expectedAuthor: article.author,
+        expectedTitle: article.title,
+      });
+      if (!result.ok) {
+        setDeleteArticleError(result.reason ?? "文章刪除失敗");
+        return;
+      }
+      onBack();
+    } catch (error) {
+      setDeleteArticleError(
+        error instanceof Error ? error.message : "文章刪除失敗",
+      );
+    } finally {
+      deletingArticleRef.current = false;
+      setDeletingArticle(false);
+    }
+  }, [
+    actions,
+    article,
+    articleAid,
+    articleIndex,
+    boardName,
+    canDeleteArticle,
+    onBack,
+  ]);
 
   useEffect(() => {
     if (!article || !currentUser) return;
@@ -609,6 +657,27 @@ export function Article({
           </div>
           {/* Right side */}
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {canDeleteArticle && (
+              <button
+                type="button"
+                aria-label="刪除文章"
+                onClick={() => void handleDeleteArticle()}
+                disabled={deletingArticle}
+                style={{
+                  background: "transparent",
+                  color: "var(--boo-fg)",
+                  border: "1px solid var(--boo-fg)",
+                  padding: "7px 13px",
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: deletingArticle ? "not-allowed" : "pointer",
+                  opacity: deletingArticle ? 0.65 : 1,
+                }}
+              >
+                {deletingArticle ? "刪除中…" : "刪除"}
+              </button>
+            )}
             {article && currentUser && article.author === currentUser && onEditArticle && (
               <button
                 type="button"
@@ -653,6 +722,23 @@ export function Article({
       </div>
 
       <div style={{ maxWidth: 820, margin: "0 auto", padding: "32px 24px 80px" }}>
+        {deleteArticleError && (
+          <div
+            role="alert"
+            style={{
+              marginBottom: 16,
+              padding: "10px 12px",
+              borderRadius: 8,
+              border: "1px solid var(--boo-fg)",
+              color: "var(--boo-fg)",
+              background: "var(--boo-bg)",
+              fontSize: 13,
+            }}
+          >
+            {deleteArticleError}
+          </div>
+        )}
+
         {/* 初次 loading，但有 partialArticle 可先顯示 */}
         {loading && partialArticle && (
           <PartialArticleView partial={partialArticle} />
