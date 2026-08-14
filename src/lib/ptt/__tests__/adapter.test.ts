@@ -3128,6 +3128,54 @@ describe("ptt adapter module", () => {
     expect(sent.indexOf("d")).toBeLessThan(sent.indexOf("y\r"));
   });
 
+  it("does not treat an off-screen index as deleted when the article still opens", async () => {
+    const mod = await import("../adapter");
+    const sent: string[] = [];
+    const articleRows = [
+      "作者 alice 看板 Test",
+      "標題 [測試] 原標題",
+      "時間 Thu Jul 16 10:00:00 2026",
+      "───────────────────────────────────────",
+      "正文",
+    ];
+    const boardRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 124, date: "07/16", author: "bob", title: "[測試] 其他文章" }),
+    ];
+    let screenRows = boardRows;
+    let deletionConfirmed = false;
+    const bot = {
+      enterBoardByName: async () => true,
+      getLines: async () => articleRows,
+      getLine: (index: number) => ({ str: screenRows[index] ?? "" }),
+      send: async (command: string) => {
+        sent.push(command);
+        if (command === "123\r\r") screenRows = articleRows;
+        if (command === "q") screenRows = boardRows;
+        if (command === "d") screenRows = ["確定要刪除這篇文章嗎? [y/N]"];
+        if (command === "y\r") {
+          deletionConfirmed = true;
+          screenRows = boardRows;
+        }
+        return true;
+      },
+    };
+
+    const result = await mod.submitArticleDeleteFromBot(bot, {
+      boardName: "Test",
+      articleIndex: 123,
+      expectedAuthor: "alice",
+      expectedTitle: "[測試] 原標題",
+    });
+
+    expect(deletionConfirmed).toBe(true);
+    expect(result).toEqual({
+      ok: false,
+      reason: "無法確認文章是否刪除成功，請重新整理看板檢查",
+    });
+    expect(sent.filter((command) => command === "123\r\r")).toHaveLength(2);
+  });
+
   it("locates an article by AID before deleting it", async () => {
     const mod = await import("../adapter");
     const sent: string[] = [];

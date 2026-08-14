@@ -1891,14 +1891,37 @@ export async function submitArticleDeleteFromBot(
         const row = parsePartialBoardScreen(screen).find(
           (item) => item.index === request.articleIndex,
         );
-        const stillMatches = row &&
-          normalizeArticleIdentity(row.author).toLowerCase() ===
-            normalizeArticleIdentity(request.expectedAuthor).toLowerCase() &&
-          normalizeArticleIdentity(row.title) ===
-            normalizeArticleIdentity(request.expectedTitle);
-        return stillMatches
-          ? { ok: false, reason: "無法確認文章是否刪除成功，請重新整理看板檢查" }
-          : { ok: true };
+        if (row) {
+          const stillMatches =
+            normalizeArticleIdentity(row.author).toLowerCase() ===
+              normalizeArticleIdentity(request.expectedAuthor).toLowerCase() &&
+            normalizeArticleIdentity(row.title) ===
+              normalizeArticleIdentity(request.expectedTitle);
+          return stillMatches
+            ? { ok: false, reason: "無法確認文章是否刪除成功，請重新整理看板檢查" }
+            : { ok: true };
+        }
+
+        await bot.send(`${request.articleIndex}\r\r`);
+        const indexCheckStartedAt = Date.now();
+        while (Date.now() - indexCheckStartedAt < 1500) {
+          const indexScreen = readVisibleScreen(bot);
+          if (isMissingArticleScreen(indexScreen)) return { ok: true };
+          const partial = parsePartialScreen(indexScreen);
+          if (partial) {
+            const stillMatches =
+              normalizeArticleIdentity(partial.author).toLowerCase() ===
+                normalizeArticleIdentity(request.expectedAuthor).toLowerCase() &&
+              normalizeArticleIdentity(partial.title) ===
+                normalizeArticleIdentity(request.expectedTitle);
+            await bot.send("q");
+            return stillMatches
+              ? { ok: false, reason: "無法確認文章是否刪除成功，請重新整理看板檢查" }
+              : { ok: true };
+          }
+          await sleep(50);
+        }
+        return { ok: false, reason: "無法確認文章是否刪除成功，請重新整理看板檢查" };
       }
 
       await bot.send(`#${aid}\r`);
