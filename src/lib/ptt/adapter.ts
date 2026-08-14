@@ -240,7 +240,7 @@ export interface PttAdapter {
     body: string,
   ) => Promise<{ ok: boolean; reason?: string }>;
   editArticle: (request: EditArticleRequest) => Promise<ActionResult>;
-  deleteArticle?: (request: DeleteArticleRequest) => Promise<ActionResult>;
+  deleteArticle: (request: DeleteArticleRequest) => Promise<ActionResult>;
   disconnect: () => Promise<void>;
   isLoggedIn: () => boolean;
   getStatus: () => ConnectionStatus;
@@ -844,6 +844,13 @@ class PttClientAdapter implements PttAdapter {
     return this.runSerial(async () => {
       await this.waitUntilLoggedIn();
       return submitArticleEditFromBot(this.bot, request);
+    });
+  }
+
+  async deleteArticle(request: DeleteArticleRequest): Promise<ActionResult> {
+    return this.runSerial(async () => {
+      await this.waitUntilLoggedIn();
+      return submitArticleDeleteFromBot(this.bot, request);
     });
   }
 
@@ -1796,6 +1803,129 @@ export function isArticleEditSuccessScreen(
 
 function normalizeArticleIdentity(value: string): string {
   return value.replace(/[\s\u3000]+/gu, " ").trim();
+}
+
+export function isArticleDeletePrompt(screen: string): boolean {
+  const plain = stripAnsi(screen).replace(/\r/g, "");
+  return /(?:確定|是否).{0,16}刪除|刪除.{0,16}(?:\[[yY]\/[nN]\]|\([yY]\/[nN]\))/u.test(
+    plain,
+  );
+}
+
+function isArticleDeleteRejectedScreen(screen: string): boolean {
+  const plain = stripAnsi(screen).replace(/\r/g, "");
+  return /(?:沒有|無|權限不足|不可|不能|禁止).{0,12}刪除|刪除.{0,12}(?:失敗|禁止)/u.test(
+    plain,
+  );
+}
+
+function isMissingArticleScreen(screen: string): boolean {
+  return /(?:無此|沒有這篇|找不到).{0,12}(?:文章|代碼|AID)|(?:文章|AID).{0,12}不存在/iu.test(
+    stripAnsi(screen).replace(/\r/g, ""),
+  );
+}
+
+export async function submitArticleDeleteFromBot(
+  bot: WriteBot,
+  request: DeleteArticleRequest,
+): Promise<ActionResult> {
+  if (!bot.send || !bot.getLine || !bot.getLines) {
+    return { ok: false, reason: "PTT client 不支援文章刪除" };
+  }
+
+  const aid = request.articleAid?.trim().replace(/^#/u, "") ?? "";
+  if (request.articleIndex <= 0 && !aid) {
+    return { ok: false, reason: "缺少可定位的文章 index 或 AID" };
+  }
+
+  let article: AdapterArticleData | null;
+  try {
+    article = request.articleIndex > 0
+      ? await fetchArticleFromBotManually(bot, request.boardName, request.articleIndex)
+      : await fetchArticleByAidFromBotManually(bot, request.boardName, aid);
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error instanceof Error ? error.message : "無法載入待刪除文章",
+    };
+  }
+
+  if (!article) return { ok: false, reason: "找不到要刪除的文章" };
+  if (
+    normalizeArticleIdentity(article.author).toLowerCase() !==
+      normalizeArticleIdentity(request.expectedAuthor).toLowerCase() ||
+    normalizeArticleIdentity(article.title) !==
+      normalizeArticleIdentity(request.expectedTitle)
+  ) {
+    return { ok: false, reason: "文章身分已變更，請重新載入" };
+  }
+
+  await bot.send("d");
+  const promptStartedAt = Date.now();
+  while (Date.now() - promptStartedAt < 1500) {
+    const screen = readVisibleScreen(bot);
+    if (isArticleDeletePrompt(screen)) break;
+    if (isArticleDeleteRejectedScreen(screen)) {
+      return { ok: false, reason: "PTT 拒絕刪除這篇文章" };
+    }
+    await sleep(50);
+  }
+
+  if (!isArticleDeletePrompt(readVisibleScreen(bot))) {
+    return { ok: false, reason: "PTT 未顯示文章刪除確認" };
+  }
+
+  await bot.send("y\r");
+  const deletedAt = Date.now();
+  while (Date.now() - deletedAt < 2500) {
+    const screen = readVisibleScreen(bot);
+    if (isArticleDeleteRejectedScreen(screen)) {
+      return { ok: false, reason: "PTT 拒絕刪除這篇文章" };
+    }
+    if (
+      extractCurrentBoardName(screen)?.toLowerCase() ===
+        request.boardName.toLowerCase() &&
+      isBoardListScreen(screen)
+    ) {
+      if (request.articleIndex > 0) {
+        const row = parsePartialBoardScreen(screen).find(
+          (item) => item.index === request.articleIndex,
+        );
+        const stillMatches = row &&
+          normalizeArticleIdentity(row.author).toLowerCase() ===
+            normalizeArticleIdentity(request.expectedAuthor).toLowerCase() &&
+          normalizeArticleIdentity(row.title) ===
+            normalizeArticleIdentity(request.expectedTitle);
+        return stillMatches
+          ? { ok: false, reason: "無法確認文章是否刪除成功，請重新整理看板檢查" }
+          : { ok: true };
+      }
+
+      await bot.send(`#${aid}\r`);
+      const aidCheckStartedAt = Date.now();
+      while (Date.now() - aidCheckStartedAt < 1500) {
+        const aidScreen = readVisibleScreen(bot);
+        if (isMissingArticleScreen(aidScreen)) return { ok: true };
+        const partial = parsePartialScreen(aidScreen);
+        if (partial) {
+          const stillMatches =
+            normalizeArticleIdentity(partial.author).toLowerCase() ===
+              normalizeArticleIdentity(request.expectedAuthor).toLowerCase() &&
+            normalizeArticleIdentity(partial.title) ===
+              normalizeArticleIdentity(request.expectedTitle);
+          await bot.send("q");
+          return stillMatches
+            ? { ok: false, reason: "無法確認文章是否刪除成功，請重新整理看板檢查" }
+            : { ok: true };
+        }
+        await sleep(50);
+      }
+      return { ok: false, reason: "無法確認文章是否刪除成功，請重新整理看板檢查" };
+    }
+    await sleep(50);
+  }
+
+  return { ok: false, reason: "無法確認文章是否刪除成功，請重新整理看板檢查" };
 }
 
 async function cancelArticleEdit(bot: WriteBot): Promise<void> {
