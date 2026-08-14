@@ -159,6 +159,14 @@ export interface EditArticleRequest {
   editSummary: string;
 }
 
+export interface DeleteArticleRequest {
+  boardName: string;
+  articleIndex: number;
+  articleAid?: string;
+  expectedAuthor: string;
+  expectedTitle: string;
+}
+
 export interface PttAdapter {
   send: (data: string) => Promise<boolean>;
   login: (
@@ -232,6 +240,7 @@ export interface PttAdapter {
     body: string,
   ) => Promise<{ ok: boolean; reason?: string }>;
   editArticle: (request: EditArticleRequest) => Promise<ActionResult>;
+  deleteArticle?: (request: DeleteArticleRequest) => Promise<ActionResult>;
   disconnect: () => Promise<void>;
   isLoggedIn: () => boolean;
   getStatus: () => ConnectionStatus;

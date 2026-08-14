@@ -2,6 +2,7 @@ import type {
   AdapterArticleData,
   ActionResult,
   ConnectionStatus,
+  DeleteArticleRequest,
   HotBoardSummary,
   EditArticleRequest,
   LoginResult,
@@ -469,6 +470,38 @@ class FakePttAdapter implements PttAdapter {
       .join("\n");
     writeStore(store);
     this.emitScreen("[Fake PTT] article edited");
+    return { ok: true };
+  }
+
+  async deleteArticle(request: DeleteArticleRequest): Promise<ActionResult> {
+    if (!this.currentUser) {
+      return { ok: false, reason: "尚未登入 fake PTT" };
+    }
+
+    const store = readStore();
+    const board = store.boards[normalizeBoardName(request.boardName)];
+    const articlePosition = board?.articles.findIndex(
+      (article) => article.index === request.articleIndex,
+    ) ?? -1;
+    if (!board || articlePosition < 0) {
+      return { ok: false, reason: "找不到要刪除的文章" };
+    }
+
+    const article = board.articles[articlePosition];
+    if (article.author.toLowerCase() !== this.currentUser.toLowerCase()) {
+      return { ok: false, reason: "只有文章作者可以刪除文章" };
+    }
+    if (
+      article.author.toLowerCase() !== request.expectedAuthor.toLowerCase() ||
+      article.title !== request.expectedTitle
+    ) {
+      return { ok: false, reason: "文章身分已變更，請重新載入" };
+    }
+
+    board.articles.splice(articlePosition, 1);
+    writeStore(store);
+    this.currentArticle = null;
+    this.emitScreen("[Fake PTT] article deleted");
     return { ok: true };
   }
 

@@ -7,7 +7,11 @@
  */
 
 import { usePttSocketStore } from "./usePttSocket";
-import type { ActionResult, EditArticleRequest } from "../lib/ptt/adapter";
+import type {
+  ActionResult,
+  DeleteArticleRequest,
+  EditArticleRequest,
+} from "../lib/ptt/adapter";
 import { formatEditPush as buildEditPush } from "../lib/ptt/pushEditing";
 export { formatEditPush } from "../lib/ptt/pushEditing";
 
@@ -97,6 +101,7 @@ export interface PttActionsResult {
   editArticle(
     request: EditArticleRequest,
   ): Promise<ActionResult>;
+  deleteArticle(request: DeleteArticleRequest): Promise<ActionResult>;
   editPush(
     mode: "補充" | "更正" | "撤回",
     startFloor: number,
@@ -147,6 +152,9 @@ export function usePttActions(): PttActionsResult {
     },
     async editArticle(request: EditArticleRequest) {
       return client?.editArticle(request) ?? unavailable();
+    },
+    async deleteArticle(request: DeleteArticleRequest) {
+      return client?.deleteArticle?.(request) ?? unavailable();
     },
     async editPush(
       mode: "補充" | "更正" | "撤回",
