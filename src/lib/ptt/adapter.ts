@@ -2191,13 +2191,43 @@ export async function submitArticleReplyToBoardFromBot(
   }
 
   await bot.send("y");
-  const editorReady = await waitForPattern(
-    bot,
-    /(?:文章編輯|編輯文章)[\s\S]*(?:Ctrl-X|插入模式|取代模式)/u,
-    1500,
-    50,
-  );
-  if (!editorReady || !isPostEditorScreen(readVisibleScreen(bot))) {
+  const replyStartedAt = Date.now();
+  let editorReady = false;
+  let selectedBoard = false;
+  let acceptedTitle = false;
+  while (Date.now() - replyStartedAt < 2500) {
+    const screen = readVisibleScreen(bot);
+    const plain = stripAnsi(screen).replace(/\r/g, "");
+    if (isPostEditorScreen(plain)) {
+      editorReady = true;
+      break;
+    }
+    if (
+      !selectedBoard &&
+      /(?:回應|回覆).{0,8}(?:至|到).{0,20}\(F\).{0,8}看板/iu.test(plain)
+    ) {
+      await bot.send("f\r");
+      selectedBoard = true;
+      await sleep(80);
+      continue;
+    }
+    if (
+      !acceptedTitle &&
+      /(?:採用|使用).{0,8}原標題|原標題.{0,12}\[Y\/n\]/iu.test(plain)
+    ) {
+      await bot.send("\r");
+      acceptedTitle = true;
+      await sleep(80);
+      continue;
+    }
+    if (isPostGuidelineScreen(plain)) {
+      await bot.send("\r");
+      await sleep(80);
+      continue;
+    }
+    await sleep(50);
+  }
+  if (!editorReady) {
     await cancelArticleEdit(bot);
     return { ok: false, reason: "無法進入回應編輯器（可能沒有回應權限）" };
   }
@@ -2210,32 +2240,50 @@ export async function submitArticleReplyToBoardFromBot(
   }
 
   await bot.send(PTT_KEY_CTRL_X);
-  const savePrompt = await waitForPattern(
-    bot,
-    /(?:確定|是否|要).*(?:儲存|存檔)|(?:儲存|存檔).*\[Y\/n\]/iu,
-    2000,
-    50,
-  );
-  if (!savePrompt) {
-    await cancelArticleEdit(bot);
-    return { ok: false, reason: "PTT 未顯示回應儲存確認" };
-  }
-
-  await bot.send("y\r");
   const savedAt = Date.now();
-  while (Date.now() - savedAt < 2500) {
+  let answeredSave = false;
+  let answeredRule = false;
+  let answeredSignature = false;
+  while (Date.now() - savedAt < 8000) {
     const screen = readVisibleScreen(bot);
+    const plain = stripAnsi(screen).replace(/\r/g, "");
     if (
-      isPostSuccessScreen(screen) ||
+      isPostSuccessScreen(plain) ||
       (extractCurrentBoardName(screen)?.toLowerCase() ===
         request.boardName.toLowerCase() && isBoardListScreen(screen))
     ) {
       return { ok: true };
     }
+    if (!answeredSignature && /簽名檔|signature/iu.test(plain)) {
+      await bot.send("0\r");
+      answeredSignature = true;
+      await sleep(80);
+      continue;
+    }
+    if (!answeredRule && answeredSave && /符合分類|分類規定/u.test(plain)) {
+      await bot.send("y\r");
+      answeredRule = true;
+      await sleep(80);
+      continue;
+    }
+    if (
+      !answeredSave &&
+      /(?:確定|是否|要).*(?:儲存|存檔)|(?:儲存|存檔).*\[Y\/n\]/iu.test(plain)
+    ) {
+      await bot.send("y\r");
+      answeredSave = true;
+      await sleep(80);
+      continue;
+    }
     await sleep(50);
   }
 
-  return { ok: false, reason: "無法確認回應是否送出，請重新整理看板檢查" };
+  return {
+    ok: false,
+    reason: answeredSave
+      ? "無法確認回應是否送出，請重新整理看板檢查"
+      : "PTT 未顯示回應儲存確認",
+  };
 }
 
 export interface SubmitPushTimeouts {
