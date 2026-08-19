@@ -199,4 +199,52 @@ describe("fake PTT adapter", () => {
 
     expect(result).toEqual({ ok: false, reason: "文章身分已變更，請重新載入" });
   });
+
+  it("deletes an article owned by the current fake user", async () => {
+    const adapter = createFakePttAdapter();
+    await adapter.login("opUser", "pw");
+
+    await expect(adapter.deleteArticle!({
+      boardName: "test",
+      articleIndex: 1001,
+      expectedAuthor: "opUser",
+      expectedTitle: "[測試] Fake PTT 多帳號互動測試",
+    })).resolves.toEqual({ ok: true });
+
+    await expect(adapter.getArticle("test", 1001)).resolves.toBeNull();
+  });
+
+  it("rejects article deletion from a different fake user", async () => {
+    const adapter = createFakePttAdapter();
+    await adapter.login("mallory", "pw");
+
+    await expect(adapter.deleteArticle!({
+      boardName: "test",
+      articleIndex: 1001,
+      expectedAuthor: "opUser",
+      expectedTitle: "[測試] Fake PTT 多帳號互動測試",
+    })).resolves.toEqual({
+      ok: false,
+      reason: "只有文章作者可以刪除文章",
+    });
+
+    await expect(adapter.getArticle("test", 1001)).resolves.not.toBeNull();
+  });
+
+  it("rejects article deletion when the expected identity is stale", async () => {
+    const adapter = createFakePttAdapter();
+    await adapter.login("opUser", "pw");
+
+    await expect(adapter.deleteArticle!({
+      boardName: "test",
+      articleIndex: 1001,
+      expectedAuthor: "opUser",
+      expectedTitle: "錯誤標題",
+    })).resolves.toEqual({
+      ok: false,
+      reason: "文章身分已變更，請重新載入",
+    });
+
+    await expect(adapter.getArticle("test", 1001)).resolves.not.toBeNull();
+  });
 });

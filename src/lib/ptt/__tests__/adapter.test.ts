@@ -2838,6 +2838,8 @@ describe("ptt adapter module", () => {
     expect(mod.isArticleEditorScreen("文章編輯  離開[Ctrl-X]  插入模式")).toBe(true);
     expect(mod.isArticleEditorScreen("文章發表綱領")).toBe(false);
     expect(mod.isArticleEditSavePrompt("確定要儲存檔案嗎? [Y/n]")).toBe(true);
+    expect(mod.isArticleDeletePrompt("確定要刪除嗎(Y/N)?")).toBe(true);
+    expect(mod.isArticleDeletePrompt("[d]刪除 [z]精華區")).toBe(false);
     expect(
       mod.isArticleEditSuccessScreen(
         "文章已更新\n看板《Test》",
@@ -2996,5 +2998,229 @@ describe("ptt adapter module", () => {
     expect(result).toEqual({ ok: false, reason: "文章行數超過安全編輯上限" });
     expect(sent).not.toContain("E");
     expect(sent.some((command) => command.includes("\x19"))).toBe(false);
+  });
+
+  it("does not delete an article when its identity is stale", async () => {
+    const mod = await import("../adapter");
+    const sent: string[] = [];
+    const articleRows = [
+      "作者 alice 看板 Test",
+      "標題 [測試] 已變更標題",
+      "時間 Thu Jul 16 10:00:00 2026",
+      "───────────────────────────────────────",
+      "正文",
+    ];
+    let screenRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 123, date: "07/16", author: "alice", title: "[測試] 原標題" }),
+    ];
+    const bot = {
+      enterBoardByName: async () => true,
+      getLines: async () => articleRows,
+      getLine: (index: number) => ({ str: screenRows[index] ?? "" }),
+      send: async (command: string) => {
+        sent.push(command);
+        if (command === "123\r\r") screenRows = articleRows;
+        if (command === "q") screenRows = ["看板《Test》"];
+        return true;
+      },
+    };
+
+    const result = await mod.submitArticleDeleteFromBot(bot, {
+      boardName: "Test",
+      articleIndex: 123,
+      expectedAuthor: "alice",
+      expectedTitle: "[測試] 原標題",
+    });
+
+    expect(result).toEqual({ ok: false, reason: "文章身分已變更，請重新載入" });
+    expect(sent).not.toContain("d");
+    expect(sent).not.toContain("y\r");
+  });
+
+  it("does not confirm deletion without a PTT delete prompt", async () => {
+    const mod = await import("../adapter");
+    const sent: string[] = [];
+    const articleRows = [
+      "作者 alice 看板 Test",
+      "標題 [測試] 原標題",
+      "時間 Thu Jul 16 10:00:00 2026",
+      "───────────────────────────────────────",
+      "正文",
+    ];
+    let screenRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 123, date: "07/16", author: "alice", title: "[測試] 原標題" }),
+    ];
+    const bot = {
+      enterBoardByName: async () => true,
+      getLines: async () => articleRows,
+      getLine: (index: number) => ({ str: screenRows[index] ?? "" }),
+      send: async (command: string) => {
+        sent.push(command);
+        if (command === "123\r\r") screenRows = articleRows;
+        if (command === "q") screenRows = ["看板《Test》"];
+        if (command === "d") screenRows = ["您沒有權限刪除這篇文章"];
+        return true;
+      },
+    };
+
+    const result = await mod.submitArticleDeleteFromBot(bot, {
+      boardName: "Test",
+      articleIndex: 123,
+      expectedAuthor: "alice",
+      expectedTitle: "[測試] 原標題",
+    });
+
+    expect(result).toEqual({ ok: false, reason: "PTT 拒絕刪除這篇文章" });
+    expect(sent).toContain("d");
+    expect(sent).not.toContain("y\r");
+  });
+
+  it("deletes a verified article through the PTT terminal", async () => {
+    const mod = await import("../adapter");
+    const sent: string[] = [];
+    const articleRows = [
+      "作者 alice 看板 Test",
+      "標題 [測試] 原標題",
+      "時間 Thu Jul 16 10:00:00 2026",
+      "───────────────────────────────────────",
+      "正文",
+    ];
+    const boardRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 123, date: "07/16", author: "alice", title: "[測試] 原標題" }),
+    ];
+    let screenRows = boardRows;
+    const bot = {
+      enterBoardByName: async () => true,
+      getLines: async () => articleRows,
+      getLine: (index: number) => ({ str: screenRows[index] ?? "" }),
+      send: async (command: string) => {
+        sent.push(command);
+        if (command === "123\r\r") screenRows = articleRows;
+        if (command === "q") screenRows = boardRows;
+        if (command === "d") screenRows = ["確定要刪除這篇文章嗎? [y/N]"];
+        if (command === "y\r") {
+          screenRows = [
+            "看板《Test》",
+            buildBoardLine({
+              index: 123,
+              date: "07/16",
+              author: "-",
+              title: "(本文已被刪除) [alice]",
+            }),
+          ];
+        }
+        return true;
+      },
+    };
+
+    const result = await mod.submitArticleDeleteFromBot(bot, {
+      boardName: "Test",
+      articleIndex: 123,
+      expectedAuthor: "alice",
+      expectedTitle: "[測試] 原標題",
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(sent.filter((command) => command === "d")).toHaveLength(1);
+    expect(sent.indexOf("d")).toBeLessThan(sent.indexOf("y\r"));
+  });
+
+  it("does not treat an off-screen index as deleted when the article still opens", async () => {
+    const mod = await import("../adapter");
+    const sent: string[] = [];
+    const articleRows = [
+      "作者 alice 看板 Test",
+      "標題 [測試] 原標題",
+      "時間 Thu Jul 16 10:00:00 2026",
+      "───────────────────────────────────────",
+      "正文",
+    ];
+    const boardRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 124, date: "07/16", author: "bob", title: "[測試] 其他文章" }),
+    ];
+    let screenRows = boardRows;
+    let deletionConfirmed = false;
+    const bot = {
+      enterBoardByName: async () => true,
+      getLines: async () => articleRows,
+      getLine: (index: number) => ({ str: screenRows[index] ?? "" }),
+      send: async (command: string) => {
+        sent.push(command);
+        if (command === "123\r\r") screenRows = articleRows;
+        if (command === "q") screenRows = boardRows;
+        if (command === "d") screenRows = ["確定要刪除這篇文章嗎? [y/N]"];
+        if (command === "y\r") {
+          deletionConfirmed = true;
+          screenRows = boardRows;
+        }
+        return true;
+      },
+    };
+
+    const result = await mod.submitArticleDeleteFromBot(bot, {
+      boardName: "Test",
+      articleIndex: 123,
+      expectedAuthor: "alice",
+      expectedTitle: "[測試] 原標題",
+    });
+
+    expect(deletionConfirmed).toBe(true);
+    expect(result).toEqual({
+      ok: false,
+      reason: "無法確認文章是否刪除成功，請重新整理看板檢查",
+    });
+    expect(sent.filter((command) => command === "123\r\r")).toHaveLength(2);
+  });
+
+  it("locates an article by AID before deleting it", async () => {
+    const mod = await import("../adapter");
+    const sent: string[] = [];
+    const articleRows = [
+      "作者 alice 看板 Test",
+      "標題 [測試] AID 原標題",
+      "時間 Thu Jul 16 10:00:00 2026",
+      "───────────────────────────────────────",
+      "正文",
+    ];
+    const boardRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 124, date: "07/16", author: "bob", title: "[測試] 其他文章" }),
+      "[←]離開 [d]刪除",
+    ];
+    let screenRows = boardRows;
+    let aidOpenCount = 0;
+    const bot = {
+      enterBoardByName: async () => true,
+      getLines: async () => articleRows,
+      getLine: (index: number) => ({ str: screenRows[index] ?? "" }),
+      send: async (command: string) => {
+        sent.push(command);
+        if (command === "#1AbCdEf\r") {
+          aidOpenCount += 1;
+          screenRows = aidOpenCount === 1 ? articleRows : ["無此文章代碼(AID)", ...boardRows];
+        }
+        if (command === "q") screenRows = boardRows;
+        if (command === "d") screenRows = ["確定要刪除這篇文章嗎? [y/N]"];
+        if (command === "y\r") screenRows = boardRows;
+        return true;
+      },
+    };
+
+    const result = await mod.submitArticleDeleteFromBot(bot, {
+      boardName: "Test",
+      articleIndex: 0,
+      articleAid: "#1AbCdEf",
+      expectedAuthor: "alice",
+      expectedTitle: "[測試] AID 原標題",
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(sent.filter((command) => command === "#1AbCdEf\r")).toHaveLength(2);
+    expect(sent).toContain("d");
+    expect(sent).toContain("y\r");
   });
 });

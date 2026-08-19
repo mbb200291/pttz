@@ -206,6 +206,7 @@ src/components/              ← React UI 元件（LoginModal、ArticleList、Ar
 26. 回文送票期間的 per-push 同步 pending guard，防止快速連點重複送出
 27. 回文投票二態切換與 server-data reconciliation，避免假的撤回與過期 optimistic state
 28. PTT 推噓寫入需確認類型選單，無法確認時不降級為箭頭推文
+29. 作者文章刪除：二次確認後由 adapter serial queue 透過 ptt-client bot 送出刪文指令，身分與成功狀態無法確認時安全失敗
 
 ## 目前保留的舊程式邏輯
 
@@ -241,7 +242,7 @@ src/components/              ← React UI 元件（LoginModal、ArticleList、Ar
 2. `ptt-client` 與瀏覽器整合仍偏脆弱，需要 adapter 層保護
 3. UI 已可用，但仍屬第一版，不是完整產品化狀態
 4. `ptt-client.getArticle()` 是否在所有熱門文章都能完整取回全部推文，仍需持續用 debug dump 驗證
-5. 正式文章編輯狀態機已有自動測試，但尚未使用真實帳號對 PTT 寫入驗證
+5. 正式文章編輯與刪除狀態機已有自動測試，但尚未使用真實帳號對 PTT 寫入驗證
 6. 推文補充／更正／撤回會新增聲明推文，不會改寫或刪除 PTT 原始推文
 
 ## 開發狀態
@@ -266,6 +267,7 @@ src/components/              ← React UI 元件（LoginModal、ArticleList、Ar
 16. 推文補充／更正／撤回送出流程與失敗保留
 17. 回文投票分數來源統一與快速連點防重
 18. 文章單獨推噓事件隱藏、回文最後一票與嚴格 PTT 類型選擇
+19. 作者文章二次確認刪除、身分防護與 Fake Adapter 持久移除
 
 ### 正在維護
 
@@ -309,3 +311,6 @@ src/components/              ← React UI 元件（LoginModal、ArticleList、Ar
 16. [goal-8-vote-state-follow-up-design.md](goal-8-vote-state-follow-up-design.md)
 17. [goal-8-vote-state-follow-up-implementation-plan.md](goal-8-vote-state-follow-up-implementation-plan.md)
 18. [goal-8-vote-state-follow-up-implementation-notes.md](goal-8-vote-state-follow-up-implementation-notes.md)
+19. [goal-9-article-deletion-design.md](goal-9-article-deletion-design.md)
+20. [goal-9-article-deletion-implementation-plan.md](goal-9-article-deletion-implementation-plan.md)
+21. [goal-9-article-deletion-implementation-notes.md](goal-9-article-deletion-implementation-notes.md)
