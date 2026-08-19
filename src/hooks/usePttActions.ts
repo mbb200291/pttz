@@ -11,6 +11,7 @@ import type {
   ActionResult,
   DeleteArticleRequest,
   EditArticleRequest,
+  ReplyArticleToBoardRequest,
 } from "../lib/ptt/adapter";
 import { formatEditPush as buildEditPush } from "../lib/ptt/pushEditing";
 export { formatEditPush } from "../lib/ptt/pushEditing";
@@ -102,6 +103,7 @@ export interface PttActionsResult {
     request: EditArticleRequest,
   ): Promise<ActionResult>;
   deleteArticle(request: DeleteArticleRequest): Promise<ActionResult>;
+  replyArticleToBoard(request: ReplyArticleToBoardRequest): Promise<ActionResult>;
   editPush(
     mode: "補充" | "更正" | "撤回",
     startFloor: number,
@@ -155,6 +157,9 @@ export function usePttActions(): PttActionsResult {
     },
     async deleteArticle(request: DeleteArticleRequest) {
       return client?.deleteArticle?.(request) ?? unavailable();
+    },
+    async replyArticleToBoard(request: ReplyArticleToBoardRequest) {
+      return client?.replyArticleToBoard?.(request) ?? unavailable();
     },
     async editPush(
       mode: "補充" | "更正" | "撤回",

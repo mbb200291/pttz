@@ -200,6 +200,57 @@ describe("fake PTT adapter", () => {
     expect(result).toEqual({ ok: false, reason: "文章身分已變更，請重新載入" });
   });
 
+  it("creates a single-Re board article through the reply action", async () => {
+    const adapter = createFakePttAdapter();
+    await adapter.login("alice", "pw");
+
+    await expect(adapter.replyArticleToBoard({
+      boardName: "test",
+      articleIndex: 1001,
+      expectedAuthor: "opUser",
+      expectedTitle: "[測試] Fake PTT 多帳號互動測試",
+      body: "回應正文",
+    })).resolves.toEqual({ ok: true });
+
+    const store = JSON.parse(localStorage.getItem(FAKE_PTT_STORE_KEY) ?? "null");
+    const created = store.boards.test.articles.at(-1);
+    expect(created).toMatchObject({
+      title: "Re: [測試] Fake PTT 多帳號互動測試",
+      author: "alice",
+      body: "回應正文",
+      rawPushes: [],
+    });
+
+    await expect(adapter.replyArticleToBoard({
+      boardName: "test",
+      articleIndex: created.index,
+      expectedAuthor: "alice",
+      expectedTitle: created.title,
+      body: "第二次回應",
+    })).resolves.toEqual({ ok: true });
+
+    const updatedStore = JSON.parse(localStorage.getItem(FAKE_PTT_STORE_KEY) ?? "null");
+    expect(updatedStore.boards.test.articles.at(-1).title).toBe(
+      "Re: [測試] Fake PTT 多帳號互動測試",
+    );
+  });
+
+  it("rejects a board reply when the source identity is stale", async () => {
+    const adapter = createFakePttAdapter();
+    await adapter.login("alice", "pw");
+
+    await expect(adapter.replyArticleToBoard({
+      boardName: "test",
+      articleIndex: 1001,
+      expectedAuthor: "opUser",
+      expectedTitle: "錯誤標題",
+      body: "不應寫入",
+    })).resolves.toEqual({
+      ok: false,
+      reason: "文章身分已變更，請重新載入",
+    });
+  });
+
   it("deletes an article owned by the current fake user", async () => {
     const adapter = createFakePttAdapter();
     await adapter.login("opUser", "pw");
