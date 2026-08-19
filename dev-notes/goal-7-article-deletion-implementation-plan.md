@@ -1,4 +1,4 @@
-# Goal 9 Article Deletion Implementation Plan
+# Goal 7 子項 Article Deletion Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -350,7 +350,7 @@ git commit -m "feat: add article delete control"
 ### Task 4: 文件與完整驗證
 
 **Files:**
-- Create: `dev-notes/goal-9-article-deletion-implementation-notes.md`
+- Create: `dev-notes/goal-7-article-deletion-implementation-notes.md`
 - Modify: `dev-notes/implement.md`
 
 - [ ] **Step 1: 建立 implementation notes**
@@ -386,7 +386,7 @@ Expected: 全部測試通過。
 - [ ] **Step 5: 提交文件**
 
 ```bash
-git add dev-notes/goal-9-article-deletion-implementation-notes.md dev-notes/implement.md
+git add dev-notes/goal-7-article-deletion-implementation-notes.md dev-notes/implement.md
 git commit -m "docs: record article deletion implementation"
 ```
 
@@ -399,4 +399,4 @@ git status --short --branch
 git log --oneline dev..HEAD
 ```
 
-Expected: 功能 worktree 乾淨；只包含 Goal 9 設計、計畫、實作與文件 commits。
+Expected: 功能 worktree 乾淨；只包含 Goal 7 文章刪除子項的設計、計畫、實作與文件 commits。

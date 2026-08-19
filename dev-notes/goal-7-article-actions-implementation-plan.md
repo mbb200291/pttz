@@ -1,4 +1,4 @@
-# Goal 10 作者推噓防護與文章動作列 Implementation Plan
+# Goal 7 子項：作者推噓防護與文章動作列 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -27,7 +27,7 @@
 - Modify: `src/components/__tests__/ArticlePushVoting.test.tsx` — 覆蓋作者文章推噓防護。
 - Create: `src/components/__tests__/ArticleActions.test.tsx` — 覆蓋三按鈕與上下兩種回覆入口。
 - Modify: `dev-notes/implement.md` — 記錄文章動作列與原生看板回應架構。
-- Create: `dev-notes/goal-10-implementation-notes.md` — 記錄實作結果與驗證。
+- Create: `dev-notes/goal-7-article-actions-implementation-notes.md` — 記錄實作結果與驗證。
 
 ### Task 1: 建立回應資料契約與 action delegation
 
@@ -439,7 +439,7 @@ git commit -m "feat: connect article board reply navigation"
 ### Task 7: 文件與完整驗證
 
 **Files:**
-- Create: `dev-notes/goal-10-implementation-notes.md`
+- Create: `dev-notes/goal-7-article-actions-implementation-notes.md`
 - Modify: `dev-notes/implement.md`
 
 - [ ] **Step 1: 撰寫 implementation notes**
@@ -471,7 +471,7 @@ Expected: 無輸出。
 - [ ] **Step 4: 提交文件**
 
 ```bash
-git add dev-notes/goal-10-implementation-notes.md dev-notes/implement.md
+git add dev-notes/goal-7-article-actions-implementation-notes.md dev-notes/implement.md
 git commit -m "docs: record goal 10 implementation"
 ```
 

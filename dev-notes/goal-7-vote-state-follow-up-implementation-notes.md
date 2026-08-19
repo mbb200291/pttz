@@ -1,4 +1,4 @@
-# Goal 8 Follow-up：投票狀態與文章投票隱藏 Implementation Notes
+# Goal 7 子項 Follow-up：投票狀態與文章投票隱藏 Implementation Notes
 
 ## 結果
 
@@ -19,7 +19,7 @@
 
 `normalizePttId()` 取 PTT ID 並轉為小寫。聚合器 voter map、舊方向移除及 UI 的 current user 判斷都使用相同規則。
 
-回文投票在 Goal 9 前只使用未投票、已推、已噓三個解析狀態，不允許按已選方向產生本地 0。真正撤回仍需送出持久化指令，不能只改 React state。
+回文投票在 Goal 7 投票撤回子項完成前只使用未投票、已推、已噓三個解析狀態，不允許按已選方向產生本地 0。真正撤回仍需送出持久化指令，不能只改 React state。
 
 Optimistic override 在新的 article data 顯示相同方向時移除，避免後續 voter 人數更新被舊的本地 count 遮蔽。
 

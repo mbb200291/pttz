@@ -1,4 +1,4 @@
-# Goal 8：回文投票一致性 Implementation Notes
+# Goal 7 子項：回文投票一致性 Implementation Notes
 
 ## 結果
 
@@ -21,5 +21,5 @@
 
 ## 未納入範圍
 
-- 文章與回文的投票撤回由 Goal 9 處理。
-- 回文 Append、Replace、Withdraw 解析由 Goal 10 處理。
+- 文章與回文的投票撤回由 Goal 7 投票撤回子項處理。
+- 回文 Append、Replace、Withdraw 解析由 Goal 7 回文編輯子項處理。

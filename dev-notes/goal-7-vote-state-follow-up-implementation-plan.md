@@ -1,4 +1,4 @@
-# Goal 8 Follow-up：投票狀態與文章投票隱藏 Implementation Plan
+# Goal 7 子項 Follow-up：投票狀態與文章投票隱藏 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -94,7 +94,7 @@ export function detectArticleVote(content: string): "push" | "boo" | null {
 ### Task 5：文件與完整驗證
 
 **Files:**
-- Create: `dev-notes/goal-8-vote-state-follow-up-implementation-notes.md`
+- Create: `dev-notes/goal-7-vote-state-follow-up-implementation-notes.md`
 - Modify: `dev-notes/implement.md`
 
 - [ ] 記錄文章投票事件、ID 正規化、二態狀態機與 strict PTT 類型選擇的實作細節及真站寫入未執行的限制。
