@@ -170,6 +170,32 @@ describe("usePttActions adapter integration", () => {
     expect(deleteArticle).toHaveBeenCalledWith(request);
   });
 
+  it("forwards the complete board reply request to the adapter", async () => {
+    const replyArticleToBoard = vi.fn().mockResolvedValue({ ok: true });
+    usePttSocketStore.setState({
+      client: {
+        isLoggedIn: vi.fn().mockReturnValue(true),
+        replyArticleToBoard,
+      } as unknown as PttAdapter,
+      pttState: "ready",
+    });
+
+    const { usePttActions } = await import("../usePttActions");
+    const { result } = renderHook(() => usePttActions());
+    const request = {
+      boardName: "Test",
+      articleIndex: 123,
+      expectedAuthor: "alice",
+      expectedTitle: "[測試] 原標題",
+      body: "回應正文",
+    };
+
+    await expect(result.current.replyArticleToBoard(request)).resolves.toEqual({
+      ok: true,
+    });
+    expect(replyArticleToBoard).toHaveBeenCalledWith(request);
+  });
+
   it("sends a formatted push edit as a neutral article reply", async () => {
     const replyToArticle = vi.fn().mockResolvedValue({ ok: true });
     usePttSocketStore.setState({

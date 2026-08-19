@@ -14,7 +14,7 @@ import {
 } from "../lib/ptt/boardCategories";
 import type { ArticleRevision } from "../lib/ptt/parser";
 
-export type ComposeMode = "post" | "edit-article";
+export type ComposeMode = "post" | "edit-article" | "reply-article";
 
 export interface ComposePayload {
   board: string;
@@ -118,10 +118,9 @@ export function ComposeScreen({
     };
   }, [title, body]);
 
-  const canSubmit =
-    mode === "post"
-      ? title.trim() !== "" && body.trim() !== ""
-      : title.trim() !== "" && body.trim() !== "" && editSummary.trim() !== "";
+  const canSubmit = title.trim() !== "" && body.trim() !== "" && (
+    mode !== "edit-article" || editSummary.trim() !== ""
+  );
 
   const handleSubmit = useCallback(() => {
     if (!canSubmit || submitting) return;
@@ -259,7 +258,9 @@ export function ComposeScreen({
 
   const charCount = body.length;
   const readingTime = Math.max(1, Math.ceil(charCount / 300));
-  const titlePreview = category ? `[${category}] ${title}` : title;
+  const titlePreview = mode !== "reply-article" && category
+    ? `[${category}] ${title}`
+    : title;
 
   const toolbarBtnStyle: React.CSSProperties = {
     width: 32,
@@ -351,7 +352,7 @@ export function ComposeScreen({
                 letterSpacing: "-0.01em",
               }}
             >
-              {mode === "post" ? "撰寫" : "修改"}
+              {mode === "post" ? "撰寫" : mode === "reply-article" ? "回應" : "修改"}
             </span>
             {board && (
               <span
@@ -415,7 +416,11 @@ export function ComposeScreen({
                 fontFamily: "var(--font)",
               }}
             >
-              {mode === "post" ? "發文" : submitting ? "更新中…" : "更新"}
+              {mode === "post"
+                ? "發文"
+                : mode === "reply-article"
+                  ? submitting ? "回應中…" : "回應"
+                  : submitting ? "更新中…" : "更新"}
               <span
                 aria-hidden="true"
                 style={{
@@ -502,7 +507,7 @@ export function ComposeScreen({
               <input
                 value={board}
                 onChange={(e) => setBoard(e.target.value)}
-                readOnly={mode === "edit-article"}
+                readOnly={mode !== "post"}
                 placeholder="名稱"
                 style={{
                   background: "transparent",
@@ -519,8 +524,9 @@ export function ComposeScreen({
               />
             </label>
 
-            {/* Category label */}
-            <span
+            {mode !== "reply-article" && <>
+              {/* Category label */}
+              <span
               style={{
                 fontSize: 11,
                 color: "var(--text-dim)",
@@ -530,10 +536,10 @@ export function ComposeScreen({
               }}
             >
               分類
-            </span>
+              </span>
 
             {/* Category chips */}
-            {categories.length > 0 ? (
+              {categories.length > 0 ? (
               categories.map((cat) => {
                 const active = category === cat;
                 return (
@@ -560,7 +566,7 @@ export function ComposeScreen({
                   </button>
                 );
               })
-            ) : (
+              ) : (
               <input
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
@@ -579,14 +585,15 @@ export function ComposeScreen({
                   outline: "none",
                 }}
               />
-            )}
+              )}
+            </>}
           </div>
 
           {/* Title input */}
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            readOnly={mode === "edit-article"}
+            readOnly={mode !== "post"}
             placeholder="標題"
             onFocus={() => setTitleFocused(true)}
             onBlur={() => setTitleFocused(false)}
@@ -957,7 +964,9 @@ export function ComposeScreen({
               {[
                 { label: "作者", value: currentUser ?? "—" },
                 { label: "看板", value: board || "—" },
-                { label: "分類", value: category || "—" },
+                ...(mode === "reply-article"
+                  ? []
+                  : [{ label: "分類", value: category || "—" }]),
                 {
                   label: "標題預覽",
                   value: titlePreview || "—",

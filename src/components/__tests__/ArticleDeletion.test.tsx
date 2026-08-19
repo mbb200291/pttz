@@ -59,7 +59,7 @@ beforeEach(() => {
 });
 
 describe("Article deletion", () => {
-  it("shows the delete control only for the author with a usable locator", () => {
+  it("keeps the delete control visible but disables it without permission or a locator", () => {
     const { rerender } = render(
       <Article
         boardName="Test"
@@ -69,7 +69,7 @@ describe("Article deletion", () => {
         mockArticle={article}
       />,
     );
-    expect(screen.getByRole("button", { name: "刪除文章" })).toBeTruthy();
+    expect((screen.getByRole("button", { name: "刪除文章" }) as HTMLButtonElement).disabled).toBe(false);
 
     rerender(
       <Article
@@ -80,7 +80,7 @@ describe("Article deletion", () => {
         mockArticle={article}
       />,
     );
-    expect(screen.queryByRole("button", { name: "刪除文章" })).toBeNull();
+    expect((screen.getByRole("button", { name: "刪除文章" }) as HTMLButtonElement).disabled).toBe(true);
 
     rerender(
       <Article
@@ -91,7 +91,7 @@ describe("Article deletion", () => {
         mockArticle={article}
       />,
     );
-    expect(screen.queryByRole("button", { name: "刪除文章" })).toBeNull();
+    expect((screen.getByRole("button", { name: "刪除文章" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("does not send a delete when confirmation is cancelled", async () => {

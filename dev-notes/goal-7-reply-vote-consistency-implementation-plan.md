@@ -1,4 +1,4 @@
-# Goal 8：回文投票一致性 Implementation Plan
+# Goal 7 子項：回文投票一致性 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -19,7 +19,7 @@
 - 修改 `src/components/__tests__/PushThread.test.tsx`：驗證指定回文的兩個按鈕停用。
 - 修改 `src/components/Article.tsx`：加入同步 per-push in-flight guard。
 - 新增 `src/components/__tests__/ArticlePushVoting.test.tsx`：驗證快速連點、跨回文並行、成功與失敗解鎖。
-- 新增 `dev-notes/goal-8-implementation-notes.md`：記錄實作結果與樓號驗證。
+- 新增 `dev-notes/goal-7-reply-vote-consistency-implementation-notes.md`：記錄實作結果與樓號驗證。
 - 修改 `dev-notes/implement.md`：完成後補上高階架構說明。
 
 ### Task 1：將回文 score 改為明確投票淨值
@@ -461,7 +461,7 @@ git commit -m "fix: prevent duplicate reply vote submissions"
 ### Task 4：記錄樓號驗證並完成整體檢查
 
 **Files:**
-- Create: `dev-notes/goal-8-implementation-notes.md`
+- Create: `dev-notes/goal-7-reply-vote-consistency-implementation-notes.md`
 - Modify: `dev-notes/implement.md`
 
 - [ ] **Step 1：驗證隱藏投票推文後的目標樓號**
@@ -492,7 +492,7 @@ Expected: PASS；`sourceFloors[0]` 與投票解析皆使用相同的 PTT 原始�
 記錄以下內容：
 
 ```markdown
-# Goal 8：回文投票一致性 Implementation Notes
+# Goal 7 子項：回文投票一致性 Implementation Notes
 
 ## 結果
 
@@ -505,7 +505,7 @@ Expected: PASS；`sourceFloors[0]` 與投票解析皆使用相同的 PTT 原始�
 
 - React state 負責畫面，ref 內的 Set 負責同一 render 期間的同步防重。
 - 一般 `回x樓：` 不再參與父回文 score。
-- 未納入投票撤回；由 Goal 9 處理。
+- 未納入投票撤回；由 Goal 7 投票撤回子項處理。
 ```
 
 - [ ] **Step 4：更新高階實作文件**
@@ -533,7 +533,7 @@ Expected: 23 個以上測試檔案全部通過；lint 無 error；build 成功�
 - [ ] **Step 6：提交文件與樓號回歸測試**
 
 ```bash
-git add src/lib/ptt/__tests__/pushAggregator.test.ts dev-notes/goal-8-implementation-notes.md dev-notes/implement.md
+git add src/lib/ptt/__tests__/pushAggregator.test.ts dev-notes/goal-7-reply-vote-consistency-implementation-notes.md dev-notes/implement.md
 git commit -m "docs: record reply vote consistency implementation"
 ```
 

@@ -19,6 +19,7 @@ import { getSafeViewForPttState, type AppView, type BoardFilter } from "./lib/pt
 import { resolveBoardCategoryOptions } from "./lib/ptt/boardCategories";
 import { usePttActions } from "./hooks/usePttActions";
 import { splitArticleEditableContent } from "./lib/ptt/parser";
+import { formatBoardReplyTitle } from "./lib/ptt/adapter";
 
 type PreviewMode = "home" | "board" | "article" | "login";
 
@@ -211,6 +212,8 @@ export default function App() {
   const [boardFilter, setBoardFilter] = useState<BoardFilter | null>(null);
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [editSubmitError, setEditSubmitError] = useState<string | null>(null);
+  const [replySubmitting, setReplySubmitting] = useState(false);
+  const [replySubmitError, setReplySubmitError] = useState<string | null>(null);
 
   const effectivePttState: PttState = isPreview ? "ready" : pttState;
   const effectiveWsStatus = isPreview ? "connected" : wsStatus;
@@ -356,6 +359,17 @@ export default function App() {
               filter: view.filter,
             });
           }}
+          onReplyToBoard={(article) => {
+            setReplySubmitError(null);
+            setView({
+              type: "compose-reply",
+              board: view.board,
+              articleIndex: view.index,
+              article,
+              summary: view.summary,
+              filter: view.filter,
+            });
+          }}
           mockArticle={isPreview ? MOCK_ARTICLE : undefined}
         />
       )}
@@ -367,6 +381,16 @@ export default function App() {
           articleAid={view.aid}
           currentUser={currentUser}
           onBack={() => setView({ type: "board", name: view.board })}
+          onReplyToBoard={(article) => {
+            setReplySubmitError(null);
+            setView({
+              type: "compose-reply",
+              board: view.board,
+              articleIndex: 0,
+              articleAid: view.aid,
+              article,
+            });
+          }}
         />
       )}
 
@@ -447,6 +471,60 @@ export default function App() {
                 );
               })
               .finally(() => setEditSubmitting(false));
+          }}
+        />
+      )}
+
+      {view.type === "compose-reply" && (
+        <ComposeScreen
+          mode="reply-article"
+          initial={{
+            board: view.board,
+            title: formatBoardReplyTitle(view.article.title),
+            body: "",
+          }}
+          currentUser={currentUser}
+          submitting={replySubmitting}
+          submitError={replySubmitError}
+          onCancel={() => {
+            if (view.articleAid) {
+              setView({
+                type: "article-by-aid",
+                board: view.board,
+                aid: view.articleAid,
+              });
+              return;
+            }
+            setView({
+              type: "article",
+              board: view.board,
+              index: view.articleIndex,
+              summary: view.summary,
+              filter: view.filter,
+            });
+          }}
+          onSubmit={(payload) => {
+            if (replySubmitting) return;
+            setReplySubmitting(true);
+            setReplySubmitError(null);
+            void actions.replyArticleToBoard({
+              boardName: view.board,
+              articleIndex: view.articleIndex,
+              ...(view.articleAid ? { articleAid: view.articleAid } : {}),
+              expectedAuthor: view.article.author,
+              expectedTitle: view.article.title,
+              body: payload.body,
+            }).then((result) => {
+              if (!result.ok) {
+                setReplySubmitError(result.reason ?? "文章回應失敗");
+                return;
+              }
+              setView({ type: "board", name: view.board, filter: view.filter });
+            }).catch((error) => {
+              setReplySubmitError(
+                error instanceof Error ? error.message : "文章回應失敗",
+              );
+            }).finally(() => setReplySubmitting(false));
           }}
         />
       )}

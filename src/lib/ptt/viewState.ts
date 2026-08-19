@@ -20,6 +20,15 @@ export type AppView =
       article: ArticleData;
       summary?: ArticleSummary;
       filter?: BoardFilter | null;
+    }
+  | {
+      type: "compose-reply";
+      board: string;
+      articleIndex: number;
+      articleAid?: string;
+      article: ArticleData;
+      summary?: ArticleSummary;
+      filter?: BoardFilter | null;
     };
 
 export function getSafeViewForPttState(view: AppView, pttState: PttState): AppView {

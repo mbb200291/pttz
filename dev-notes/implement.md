@@ -268,6 +268,7 @@ src/components/              ← React UI 元件（LoginModal、ArticleList、Ar
 17. 回文投票分數來源統一與快速連點防重
 18. 文章單獨推噓事件隱藏、回文最後一票與嚴格 PTT 類型選擇
 19. 作者文章二次確認刪除、身分防護與 Fake Adapter 持久移除
+20. 作者文章推噓前端防護、固定文章動作列與 PTT 原生看板回應
 
 ### 正在維護
 
@@ -305,12 +306,15 @@ src/components/              ← React UI 元件（LoginModal、ArticleList、Ar
 10. [goal-7-editing-design.md](goal-7-editing-design.md)
 11. [goal-7-editing-implementation-plan.md](goal-7-editing-implementation-plan.md)
 12. [goal-7-editing-implementation-notes.md](goal-7-editing-implementation-notes.md)
-13. [goal-8-reply-vote-consistency-design.md](goal-8-reply-vote-consistency-design.md)
-14. [goal-8-implementation-plan.md](goal-8-implementation-plan.md)
-15. [goal-8-implementation-notes.md](goal-8-implementation-notes.md)
-16. [goal-8-vote-state-follow-up-design.md](goal-8-vote-state-follow-up-design.md)
-17. [goal-8-vote-state-follow-up-implementation-plan.md](goal-8-vote-state-follow-up-implementation-plan.md)
-18. [goal-8-vote-state-follow-up-implementation-notes.md](goal-8-vote-state-follow-up-implementation-notes.md)
-19. [goal-9-article-deletion-design.md](goal-9-article-deletion-design.md)
-20. [goal-9-article-deletion-implementation-plan.md](goal-9-article-deletion-implementation-plan.md)
-21. [goal-9-article-deletion-implementation-notes.md](goal-9-article-deletion-implementation-notes.md)
+13. [goal-7-reply-vote-consistency-design.md](goal-7-reply-vote-consistency-design.md)
+14. [goal-7-reply-vote-consistency-implementation-plan.md](goal-7-reply-vote-consistency-implementation-plan.md)
+15. [goal-7-reply-vote-consistency-implementation-notes.md](goal-7-reply-vote-consistency-implementation-notes.md)
+16. [goal-7-vote-state-follow-up-design.md](goal-7-vote-state-follow-up-design.md)
+17. [goal-7-vote-state-follow-up-implementation-plan.md](goal-7-vote-state-follow-up-implementation-plan.md)
+18. [goal-7-vote-state-follow-up-implementation-notes.md](goal-7-vote-state-follow-up-implementation-notes.md)
+19. [goal-7-article-deletion-design.md](goal-7-article-deletion-design.md)
+20. [goal-7-article-deletion-implementation-plan.md](goal-7-article-deletion-implementation-plan.md)
+21. [goal-7-article-deletion-implementation-notes.md](goal-7-article-deletion-implementation-notes.md)
+22. [goal-7-article-actions-design.md](goal-7-article-actions-design.md)
+23. [goal-7-article-actions-implementation-plan.md](goal-7-article-actions-implementation-plan.md)
+24. [goal-7-article-actions-implementation-notes.md](goal-7-article-actions-implementation-notes.md)

@@ -167,6 +167,19 @@ export interface DeleteArticleRequest {
   expectedTitle: string;
 }
 
+export interface ReplyArticleToBoardRequest {
+  boardName: string;
+  articleIndex: number;
+  articleAid?: string;
+  expectedAuthor: string;
+  expectedTitle: string;
+  body: string;
+}
+
+export function formatBoardReplyTitle(title: string): string {
+  return `Re: ${title.replace(/^(?:Re:\s*)+/giu, "").trim()}`;
+}
+
 export interface PttAdapter {
   send: (data: string) => Promise<boolean>;
   login: (
@@ -241,6 +254,9 @@ export interface PttAdapter {
   ) => Promise<{ ok: boolean; reason?: string }>;
   editArticle: (request: EditArticleRequest) => Promise<ActionResult>;
   deleteArticle: (request: DeleteArticleRequest) => Promise<ActionResult>;
+  replyArticleToBoard: (
+    request: ReplyArticleToBoardRequest,
+  ) => Promise<ActionResult>;
   disconnect: () => Promise<void>;
   isLoggedIn: () => boolean;
   getStatus: () => ConnectionStatus;
@@ -851,6 +867,15 @@ class PttClientAdapter implements PttAdapter {
     return this.runSerial(async () => {
       await this.waitUntilLoggedIn();
       return submitArticleDeleteFromBot(this.bot, request);
+    });
+  }
+
+  async replyArticleToBoard(
+    request: ReplyArticleToBoardRequest,
+  ): Promise<ActionResult> {
+    return this.runSerial(async () => {
+      await this.waitUntilLoggedIn();
+      return submitArticleReplyToBoardFromBot(this.bot, request);
     });
   }
 
@@ -2096,6 +2121,169 @@ export async function submitArticleEditFromBot(
   }
 
   return { ok: false, reason: "無法確認文章是否儲存成功，請重新載入檢查" };
+}
+
+export async function submitArticleReplyToBoardFromBot(
+  bot: WriteBot,
+  request: ReplyArticleToBoardRequest,
+): Promise<ActionResult> {
+  if (!bot.send || !bot.getLine || !bot.getLines) {
+    return { ok: false, reason: "PTT client 不支援回應文章" };
+  }
+
+  const body = sanitizePostBody(request.body).trimEnd();
+  if (!body.trim()) return { ok: false, reason: "回應正文不可為空" };
+
+  const aid = request.articleAid?.trim().replace(/^#/u, "") ?? "";
+  if (request.articleIndex <= 0 && !aid) {
+    return { ok: false, reason: "缺少可定位的文章 index 或 AID" };
+  }
+
+  let article: AdapterArticleData | null;
+  try {
+    article = request.articleIndex > 0
+      ? await fetchArticleFromBotManually(bot, request.boardName, request.articleIndex)
+      : await fetchArticleByAidFromBotManually(bot, request.boardName, aid);
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error instanceof Error ? error.message : "無法載入要回應的文章",
+    };
+  }
+
+  if (!article) return { ok: false, reason: "找不到要回應的文章" };
+  if (
+    normalizeArticleIdentity(article.author).toLowerCase() !==
+      normalizeArticleIdentity(request.expectedAuthor).toLowerCase() ||
+    normalizeArticleIdentity(article.title) !==
+      normalizeArticleIdentity(request.expectedTitle)
+  ) {
+    return { ok: false, reason: "文章身分已變更，請重新載入" };
+  }
+
+  const entered = await ensureNormalBoardView(bot, request.boardName);
+  if (!entered) {
+    return { ok: false, reason: `無法進入看板 ${request.boardName}` };
+  }
+
+  await bot.send(request.articleIndex > 0
+    ? `${request.articleIndex}\r\r`
+    : `#${aid}\r`);
+  const openedAt = Date.now();
+  let opened = false;
+  while (Date.now() - openedAt < 1500) {
+    const partial = parsePartialScreen(readVisibleScreen(bot));
+    if (
+      partial &&
+      normalizeArticleIdentity(partial.author).toLowerCase() ===
+        normalizeArticleIdentity(request.expectedAuthor).toLowerCase() &&
+      normalizeArticleIdentity(partial.title) ===
+        normalizeArticleIdentity(request.expectedTitle)
+    ) {
+      opened = true;
+      break;
+    }
+    await sleep(50);
+  }
+  if (!opened) {
+    await bot.send("q");
+    return { ok: false, reason: "無法重新確認要回應的文章" };
+  }
+
+  await bot.send("y");
+  const replyStartedAt = Date.now();
+  let editorReady = false;
+  let selectedBoard = false;
+  let acceptedTitle = false;
+  while (Date.now() - replyStartedAt < 2500) {
+    const screen = readVisibleScreen(bot);
+    const plain = stripAnsi(screen).replace(/\r/g, "");
+    if (isPostEditorScreen(plain)) {
+      editorReady = true;
+      break;
+    }
+    if (
+      !selectedBoard &&
+      /(?:回應|回覆).{0,8}(?:至|到).{0,20}\(F\).{0,8}看板/iu.test(plain)
+    ) {
+      await bot.send("f\r");
+      selectedBoard = true;
+      await sleep(80);
+      continue;
+    }
+    if (
+      !acceptedTitle &&
+      /(?:採用|使用).{0,8}原標題|原標題.{0,12}\[Y\/n\]/iu.test(plain)
+    ) {
+      await bot.send("\r");
+      acceptedTitle = true;
+      await sleep(80);
+      continue;
+    }
+    if (isPostGuidelineScreen(plain)) {
+      await bot.send("\r");
+      await sleep(80);
+      continue;
+    }
+    await sleep(50);
+  }
+  if (!editorReady) {
+    await cancelArticleEdit(bot);
+    return { ok: false, reason: "無法進入回應編輯器（可能沒有回應權限）" };
+  }
+
+  await bot.send(PTT_KEY_EDITOR_TOP);
+  await bot.send(PTT_KEY_CTRL_Y.repeat(MAX_ARTICLE_EDIT_LINES));
+  for (const line of body.split("\n")) {
+    await bot.send(`${line}\r`);
+    await sleep(20);
+  }
+
+  await bot.send(PTT_KEY_CTRL_X);
+  const savedAt = Date.now();
+  let answeredSave = false;
+  let answeredRule = false;
+  let answeredSignature = false;
+  while (Date.now() - savedAt < 8000) {
+    const screen = readVisibleScreen(bot);
+    const plain = stripAnsi(screen).replace(/\r/g, "");
+    if (
+      isPostSuccessScreen(plain) ||
+      (extractCurrentBoardName(screen)?.toLowerCase() ===
+        request.boardName.toLowerCase() && isBoardListScreen(screen))
+    ) {
+      return { ok: true };
+    }
+    if (!answeredSignature && /簽名檔|signature/iu.test(plain)) {
+      await bot.send("0\r");
+      answeredSignature = true;
+      await sleep(80);
+      continue;
+    }
+    if (!answeredRule && answeredSave && /符合分類|分類規定/u.test(plain)) {
+      await bot.send("y\r");
+      answeredRule = true;
+      await sleep(80);
+      continue;
+    }
+    if (
+      !answeredSave &&
+      /(?:確定|是否|要).*(?:儲存|存檔)|(?:儲存|存檔).*\[Y\/n\]/iu.test(plain)
+    ) {
+      await bot.send("y\r");
+      answeredSave = true;
+      await sleep(80);
+      continue;
+    }
+    await sleep(50);
+  }
+
+  return {
+    ok: false,
+    reason: answeredSave
+      ? "無法確認回應是否送出，請重新整理看板檢查"
+      : "PTT 未顯示回應儲存確認",
+  };
 }
 
 export interface SubmitPushTimeouts {

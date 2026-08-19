@@ -3223,4 +3223,95 @@ describe("ptt adapter module", () => {
     expect(sent).toContain("d");
     expect(sent).toContain("y\r");
   });
+
+  it("replies to a verified article through the native PTT board flow", async () => {
+    const mod = await import("../adapter");
+    const sent: string[] = [];
+    const articleRows = [
+      "作者 alice 看板 Test",
+      "標題 [測試] 原標題",
+      "時間 Thu Jul 16 10:00:00 2026",
+      "───────────────────────────────────────",
+      "原文正文",
+    ];
+    const boardRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 123, date: "07/16", author: "alice", title: "[測試] 原標題" }),
+    ];
+    let screenRows = boardRows;
+    const bot = {
+      enterBoardByName: async () => true,
+      getLines: async () => articleRows,
+      getLine: (index: number) => ({ str: screenRows[index] ?? "" }),
+      send: async (command: string) => {
+        sent.push(command);
+        if (command === "123\r\r") screenRows = articleRows;
+        else if (command === "q") screenRows = boardRows;
+        else if (command === "y") {
+          screenRows = ["回應至 (F)看板 (M)作者信箱 (B)兩者皆是 (Q)取消 [F]"];
+        } else if (command === "f\r") {
+          screenRows = ["採用原標題[Y/n]?"];
+        } else if (command === "\r") {
+          screenRows = ["文章編輯  離開[Ctrl-X]  插入模式"];
+        }
+        else if (command === "\x18") screenRows = ["確定要儲存檔案嗎? [Y/n]"];
+        else if (command === "y\r") screenRows = ["選擇簽名檔 (0-9) [0]"];
+        else if (command === "0\r") screenRows = boardRows;
+        return true;
+      },
+    };
+
+    const result = await mod.submitArticleReplyToBoardFromBot(bot, {
+      boardName: "Test",
+      articleIndex: 123,
+      expectedAuthor: "alice",
+      expectedTitle: "[測試] 原標題",
+      body: "回應第一行\n回應第二行",
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(sent).toContain("y");
+    expect(sent).toContain("f\r");
+    expect(sent).toContain("\r");
+    expect(sent).toContain("\x1b,");
+    expect(sent).toContain("\x19".repeat(2000));
+    expect(sent).toContain("回應第一行\r");
+    expect(sent).toContain("回應第二行\r");
+    expect(sent).toContain("\x18");
+    expect(sent).toContain("y\r");
+    expect(sent).toContain("0\r");
+  });
+
+  it("does not enter native reply when the source identity is stale", async () => {
+    const mod = await import("../adapter");
+    const sent: string[] = [];
+    const articleRows = [
+      "作者 alice 看板 Test",
+      "標題 [測試] 已變更標題",
+      "時間 Thu Jul 16 10:00:00 2026",
+      "───────────────────────────────────────",
+      "正文",
+    ];
+    const bot = {
+      enterBoardByName: async () => true,
+      getLines: async () => articleRows,
+      getLine: (index: number) => ({ str: articleRows[index] ?? "" }),
+      send: async (command: string) => {
+        sent.push(command);
+        return true;
+      },
+    };
+
+    const result = await mod.submitArticleReplyToBoardFromBot(bot, {
+      boardName: "Test",
+      articleIndex: 123,
+      expectedAuthor: "alice",
+      expectedTitle: "[測試] 原標題",
+      body: "不應送出",
+    });
+
+    expect(result).toEqual({ ok: false, reason: "文章身分已變更，請重新載入" });
+    expect(sent).not.toContain("y");
+    expect(sent).not.toContain("不應送出\r");
+  });
 });

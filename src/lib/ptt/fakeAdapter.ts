@@ -5,11 +5,13 @@ import type {
   DeleteArticleRequest,
   HotBoardSummary,
   EditArticleRequest,
+  ReplyArticleToBoardRequest,
   LoginResult,
   PartialArticleData,
   PttAdapter,
   PushType,
 } from "./adapter";
+import { formatBoardReplyTitle } from "./adapter";
 import {
   formatPttzzzEditSummary,
   splitArticleBody,
@@ -428,6 +430,52 @@ class FakePttAdapter implements PttAdapter {
       });
     });
     this.emitScreen("[Fake PTT] post created");
+    return { ok: true };
+  }
+
+  async replyArticleToBoard(
+    request: ReplyArticleToBoardRequest,
+  ): Promise<ActionResult> {
+    if (!this.currentUser) {
+      return { ok: false, reason: "尚未登入 fake PTT" };
+    }
+
+    const store = readStore();
+    const source = getArticleRecord(
+      store,
+      request.boardName,
+      request.articleIndex,
+    );
+    if (!source) {
+      return { ok: false, reason: "找不到要回應的文章" };
+    }
+    if (
+      source.author.toLowerCase() !== request.expectedAuthor.toLowerCase() ||
+      source.title !== request.expectedTitle
+    ) {
+      return { ok: false, reason: "文章身分已變更，請重新載入" };
+    }
+
+    const body = request.body.trimEnd();
+    if (!body.trim()) {
+      return { ok: false, reason: "回應正文不可為空" };
+    }
+
+    const board = store.boards[normalizeBoardName(request.boardName)];
+    const nextIndex = Math.max(0, ...board.articles.map((article) => article.index)) + 1;
+    board.articles.push({
+      index: nextIndex,
+      mark: "",
+      board: normalizeBoardName(request.boardName),
+      category: "",
+      title: formatBoardReplyTitle(source.title),
+      author: this.currentUser,
+      date: currentDateString(),
+      body,
+      rawPushes: [],
+    });
+    writeStore(store);
+    this.emitScreen("[Fake PTT] board reply created");
     return { ok: true };
   }
 

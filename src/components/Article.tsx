@@ -47,6 +47,7 @@ interface ArticleProps {
   mockLoading?: boolean;
   currentUser?: string;
   onEditArticle?: (article: ArticleData) => void;
+  onReplyToBoard?: (article: ArticleData) => void;
 }
 
 function ArticleEditRecords({ records }: { records: ArticleEditRecord[] }) {
@@ -323,6 +324,7 @@ export function Article({
   mockLoading,
   currentUser,
   onEditArticle,
+  onReplyToBoard,
 }: ArticleProps) {
   const {
     article: liveArticle,
@@ -365,12 +367,19 @@ export function Article({
 
   const actions = usePttActions();
   const { isLoggedIn } = actions;
+  const isArticleAuthor = Boolean(
+    article && currentUser &&
+    normalizePttId(article.author) === normalizePttId(currentUser),
+  );
+  const hasArticleLocator = articleIndex > 0 || Boolean(articleAid);
   const canDeleteArticle = Boolean(
-    isLoggedIn &&
-    article &&
-    currentUser &&
-    normalizePttId(article.author) === normalizePttId(currentUser) &&
-    (articleIndex > 0 || articleAid),
+    isLoggedIn && isArticleAuthor && hasArticleLocator,
+  );
+  const canEditArticle = Boolean(
+    isLoggedIn && isArticleAuthor && articleIndex > 0 && onEditArticle,
+  );
+  const canReplyToBoard = Boolean(
+    isLoggedIn && hasArticleLocator && onReplyToBoard,
   );
 
   const handleDeleteArticle = useCallback(async () => {
@@ -428,6 +437,7 @@ export function Article({
   }, [article, currentUser]);
 
   const handleArticleVote = useCallback((direction: "push" | "boo") => {
+    if (!isLoggedIn || isArticleAuthor) return;
     if (!canVote(articleVote.value, direction)) return;
     const next: -1 | 0 | 1 = direction === "push" ? 1 : -1;
     void actions.replyToArticle(
@@ -445,7 +455,7 @@ export function Article({
       }));
       void liveReload();
     });
-  }, [actions, articleVote.value, boardName, liveReload]);
+  }, [actions, articleVote.value, boardName, isArticleAuthor, isLoggedIn, liveReload]);
 
   const handlePushVote = useCallback((pushId: string, next: -1 | 0 | 1) => {
     const push = article?.pushes.find((item) => item.id === pushId);
@@ -657,12 +667,12 @@ export function Article({
           </div>
           {/* Right side */}
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {canDeleteArticle && (
+            {article && (
               <button
                 type="button"
                 aria-label="刪除文章"
                 onClick={() => void handleDeleteArticle()}
-                disabled={deletingArticle}
+                disabled={!canDeleteArticle || deletingArticle}
                 style={{
                   background: "transparent",
                   color: "var(--boo-fg)",
@@ -671,17 +681,19 @@ export function Article({
                   borderRadius: 8,
                   fontSize: 13,
                   fontWeight: 600,
-                  cursor: deletingArticle ? "not-allowed" : "pointer",
-                  opacity: deletingArticle ? 0.65 : 1,
+                  cursor: canDeleteArticle && !deletingArticle ? "pointer" : "not-allowed",
+                  opacity: canDeleteArticle && !deletingArticle ? 1 : 0.45,
                 }}
               >
                 {deletingArticle ? "刪除中…" : "刪除"}
               </button>
             )}
-            {article && currentUser && article.author === currentUser && onEditArticle && (
+            {article && (
               <button
                 type="button"
-                onClick={() => onEditArticle(article)}
+                aria-label="編輯文章"
+                onClick={() => canEditArticle && onEditArticle?.(article)}
+                disabled={!canEditArticle}
                 style={{
                   background: "transparent",
                   color: "var(--text-muted)",
@@ -690,16 +702,19 @@ export function Article({
                   borderRadius: 8,
                   fontSize: 13,
                   fontWeight: 600,
-                  cursor: "pointer",
+                  cursor: canEditArticle ? "pointer" : "not-allowed",
+                  opacity: canEditArticle ? 1 : 0.45,
                 }}
               >
-                修改
+                編輯
               </button>
             )}
-            {isLoggedIn && (
+            {article && (
               <button
                 type="button"
-                onClick={openReply}
+                aria-label="回應至看板"
+                onClick={() => canReplyToBoard && onReplyToBoard?.(article)}
+                disabled={!canReplyToBoard}
                 style={{
                   background: "var(--accent)",
                   color: "var(--accent-on, #fff)",
@@ -708,13 +723,14 @@ export function Article({
                   borderRadius: 8,
                   fontSize: 13,
                   fontWeight: 600,
-                  cursor: "pointer",
+                  cursor: canReplyToBoard ? "pointer" : "not-allowed",
+                  opacity: canReplyToBoard ? 1 : 0.45,
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 6,
                 }}
               >
-                回文
+                回應
               </button>
             )}
           </div>
@@ -814,8 +830,14 @@ export function Article({
                 myVote={articleVote.value}
                 onPush={() => handleArticleVote("push")}
                 onBoo={() => handleArticleVote("boo")}
+                disabled={!isLoggedIn || isArticleAuthor}
                 size="lg"
               />
+              {isArticleAuthor && (
+                <span style={{ color: "var(--text-dim)", fontSize: 12 }}>
+                  作者不能推噓自己的文章，可使用回覆加註。
+                </span>
+              )}
               {isLoggedIn && (
                 <button type="button" onClick={openReply}
                   className="px-4 py-2 rounded-xl border border-gray-700 text-sm text-gray-300 hover:text-white hover:border-gray-500 transition-colors">

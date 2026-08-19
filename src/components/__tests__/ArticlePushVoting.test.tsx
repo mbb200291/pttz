@@ -6,6 +6,7 @@ import { Article } from "../Article";
 
 const mocks = vi.hoisted(() => ({
   votePush: vi.fn(),
+  replyToArticle: vi.fn(),
   reload: vi.fn(),
 }));
 
@@ -17,7 +18,7 @@ vi.mock("../../hooks/usePttActions", async (importOriginal) => {
     usePttActions: () => ({
       isLoggedIn: true,
       votePush: mocks.votePush,
-      replyToArticle: vi.fn(),
+      replyToArticle: mocks.replyToArticle,
       replyToPush: vi.fn(),
       voteArticle: vi.fn(),
       postArticle: vi.fn(),
@@ -103,10 +104,34 @@ afterEach(cleanup);
 
 beforeEach(() => {
   mocks.votePush.mockReset();
+  mocks.replyToArticle.mockReset();
   mocks.reload.mockReset().mockResolvedValue(undefined);
 });
 
 describe("Article push voting", () => {
+  it("disables article push and boo for the article author regardless of ID case", () => {
+    renderArticle(article, "OP");
+
+    const pushButton = screen.getAllByRole("button", { name: "推" })[0] as HTMLButtonElement;
+    const booButton = screen.getAllByRole("button", { name: "噓" })[0] as HTMLButtonElement;
+    expect(pushButton.disabled).toBe(true);
+    expect(booButton.disabled).toBe(true);
+    expect(screen.getByText("作者不能推噓自己的文章，可使用回覆加註。")).toBeTruthy();
+
+    act(() => {
+      pushButton.click();
+      booButton.click();
+    });
+    expect(mocks.replyToArticle).not.toHaveBeenCalled();
+  });
+
+  it("keeps article voting available for another logged-in user", () => {
+    renderArticle(article, "viewer");
+
+    expect((screen.getAllByRole("button", { name: "推" })[0] as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getAllByRole("button", { name: "噓" })[0] as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByText("作者不能推噓自己的文章，可使用回覆加註。")).toBeNull();
+  });
   it("does not resend the selected direction", () => {
     renderArticle(
       {
