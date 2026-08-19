@@ -20,6 +20,13 @@ const defaultEditProps = {
   onSubmit: vi.fn(),
 };
 
+const defaultReplyProps = {
+  mode: "reply-article" as const,
+  initial: { board: "Test", title: "Re: 原文", body: "" },
+  onCancel: vi.fn(),
+  onSubmit: vi.fn(),
+};
+
 describe("ComposeScreen", () => {
   it("renders 發文 submit button in post mode", () => {
     render(<ComposeScreen {...defaultPostProps} />);
@@ -199,5 +206,47 @@ describe("ComposeScreen", () => {
 
     await userEvent.keyboard("{Escape}");
     expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it("locks article identity and hides categories in board reply mode", () => {
+    render(<ComposeScreen {...defaultReplyProps} />);
+
+    expect(screen.getAllByText("回應")).toHaveLength(2);
+    expect((screen.getByDisplayValue("Test") as HTMLInputElement).readOnly).toBe(true);
+    expect((screen.getByDisplayValue("Re: 原文") as HTMLInputElement).readOnly).toBe(true);
+    expect(screen.queryByText("分類")).toBeNull();
+    expect((screen.getByRole("button", { name: "回應" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("submits the visible body from board reply mode", async () => {
+    const onSubmit = vi.fn();
+    render(<ComposeScreen {...defaultReplyProps} onSubmit={onSubmit} />);
+
+    await userEvent.type(
+      screen.getByPlaceholderText("在這裡輸入文章內容…"),
+      "回應正文",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "回應" }));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      board: "Test",
+      title: "Re: 原文",
+      body: "回應正文",
+      category: "",
+    }));
+  });
+
+  it("disables board reply submission while it is in flight", () => {
+    render(
+      <ComposeScreen
+        {...defaultReplyProps}
+        initial={{ ...defaultReplyProps.initial, body: "回應正文" }}
+        submitting
+      />,
+    );
+
+    expect(
+      (screen.getByRole("button", { name: /回應中/ }) as HTMLButtonElement).disabled,
+    ).toBe(true);
   });
 });
