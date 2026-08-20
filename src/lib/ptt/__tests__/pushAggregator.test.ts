@@ -304,6 +304,19 @@ describe("嵌套回覆識別", () => {
     expect(bobPush.content).toBe("回2樓 這是自己這樓");
   });
 
+  it("不能回覆尚未出現的未來樓層", () => {
+    const raw = [
+      push("bob", "回2樓 未來內容", "01/01 12:00", "neutral", 10, 1),
+      push("alice", "第二樓", "01/01 12:01", "neutral", 20, 2),
+    ];
+    const bobPush = aggregatePushes(raw, OP).pushes.find(
+      (item) => item.author === "bob",
+    )!;
+
+    expect(bobPush.replyTo).toBeNull();
+    expect(bobPush.content).toBe("回2樓 未來內容");
+  });
+
   it("未包含「回x樓」則 replyTo 為 null", () => {
     const raw = [push("alice", "普通推文")];
     const thread = aggregatePushes(raw, OP);
@@ -852,6 +865,27 @@ describe("HTML vote model alignment", () => {
     expect(reply).toMatchObject({ replyTo: target.id, content: "我同意這個觀點。" });
   });
 
+  it("keeps both composite bodies when the same author changes vote direction", () => {
+    const thread = aggregatePushes(
+      [
+        push("carol", "第十二樓。", "08/12 22:40", "neutral", 10, 12),
+        push("alice", "推12樓 我同意第一點", "08/12 22:41", "neutral", 20, 13),
+        push("alice", "噓12樓 但不同意第二點", "08/12 22:44", "neutral", 30, 14),
+      ],
+      OP,
+    );
+
+    const target = thread.pushes.find((item) => item.author === "carol")!;
+    const reply = thread.pushes.find((item) => item.author === "alice")!;
+    expect(target.score).toBe(-1);
+    expect(target.booVoters).toEqual(["alice"]);
+    expect(reply).toMatchObject({
+      replyTo: target.id,
+      sourceFloors: [13, 14],
+      content: "我同意第一點\n但不同意第二點",
+    });
+  });
+
   it("withdraws a whole composite event including its body and vote", () => {
     const thread = aggregatePushes(
       [
@@ -904,6 +938,38 @@ describe("HTML vote model alignment", () => {
     expect(thread.pushes).toHaveLength(1);
     expect(thread.pushes[0].sourceFloors).toEqual([1, 2]);
     expect(thread.pushes[0].content).toBe("第一段已改成句號。\n第二段完成。");
+  });
+
+  it("treats Append payload as opaque body text", () => {
+    const thread = aggregatePushes(
+      [
+        push("carol", "第十二樓。", "08/12 22:40", "neutral", 10, 12),
+        push("alice", "回12樓：原本內容。", "08/12 22:41", "neutral", 20, 13),
+        push("alice", "補充我在13樓發言：推99樓 只是補充文字", "08/12 22:42", "neutral", 30, 14),
+      ],
+      OP,
+    );
+    const target = thread.pushes.find((item) => item.author === "carol")!;
+    const reply = thread.pushes.find((item) => item.author === "alice")!;
+
+    expect(reply.replyTo).toBe(target.id);
+    expect(reply.content).toBe("原本內容。\n推99樓 只是補充文字");
+    expect(target.score).toBe(0);
+  });
+
+  it("withdraws a floor range only for the command author", () => {
+    const thread = aggregatePushes(
+      [
+        push("alice", "第一段||", "08/12 22:40", "neutral", 10, 11),
+        push("bob", "別人的內容。", "08/12 22:41", "neutral", 20, 12),
+        push("alice", "第二段。", "08/12 22:42", "neutral", 30, 13),
+        push("alice", "撤回我在11~13樓的發言", "08/12 22:43", "neutral", 40, 14),
+      ],
+      OP,
+    );
+
+    expect(thread.pushes.map((item) => item.author)).toEqual(["bob"]);
+    expect(thread.pushes[0].sourceFloors).toEqual([12]);
   });
 
   it("aggregates each nested level and resolves any source floor to its card", () => {

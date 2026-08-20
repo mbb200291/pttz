@@ -207,6 +207,7 @@ src/components/              ← React UI 元件（LoginModal、ArticleList、Ar
 27. 回文投票二態切換與 server-data reconciliation，避免假的撤回與過期 optimistic state
 28. PTT 推噓寫入需確認類型選單，無法確認時不降級為箭頭推文
 29. 作者文章刪除：二次確認後由 adapter serial queue 透過 ptt-client bot 送出刪文指令，身分與成功狀態無法確認時安全失敗
+30. Goal 3／7 投票模型對齊：raw PTT 類別與內容 intent 分軌、複合回覆、原始樓號聚合、文章／回文投票 reducer、撤回與 opaque 編輯歷史
 
 ## 目前保留的舊程式邏輯
 
@@ -244,6 +245,8 @@ src/components/              ← React UI 元件（LoginModal、ArticleList、Ar
 4. `ptt-client.getArticle()` 是否在所有熱門文章都能完整取回全部推文，仍需持續用 debug dump 驗證
 5. 正式文章編輯與刪除狀態機已有自動測試，但尚未使用真實帳號對 PTT 寫入驗證
 6. 推文補充／更正／撤回會新增聲明推文，不會改寫或刪除 PTT 原始推文
+7. 回文聚合仍依五分鐘、終止符與 PTT 單行寬度做 heuristic；跨年時間差尚未特別處理
+8. 多樓層聚合卡的編輯歷史目前保留原始與最終聚合版本；單樓層保留每次版本
 
 ## 開發狀態
 
@@ -318,3 +321,5 @@ src/components/              ← React UI 元件（LoginModal、ArticleList、Ar
 22. [goal-7-article-actions-design.md](goal-7-article-actions-design.md)
 23. [goal-7-article-actions-implementation-plan.md](goal-7-article-actions-implementation-plan.md)
 24. [goal-7-article-actions-implementation-notes.md](goal-7-article-actions-implementation-notes.md)
+25. [goal-3-7-vote-model-alignment-implementation-plan.md](goal-3-7-vote-model-alignment-implementation-plan.md)
+26. [goal-3-7-vote-model-alignment-implementation-notes.md](goal-3-7-vote-model-alignment-implementation-notes.md)

@@ -623,7 +623,7 @@ export function aggregatePushes(
   opReplySegments: OpEditedReplySegment[] = [],
   articleEditRecords: ArticleEditRecord[] = [],
 ): AggregatedThread {
-  const articleAuthorId = extractAuthorId(articleAuthor);
+  const articleAuthorId = normalizePttId(articleAuthor);
   const parsedPushes: ParsedRawPush[] = rawPushes.map((push, index) => {
     const intent = parsePushIntent(push.content);
     return {
@@ -662,7 +662,7 @@ export function aggregatePushes(
       content: mergedContent,
       time: lastTime,
       ipAddresses,
-      isOP: rep.author === articleAuthorId,
+      isOP: normalizePttId(rep.author) === articleAuthorId,
       replyTo: null,
       score: 0,
       floorNumber: i, // 暫定，後面篩掉嵌套後重排
@@ -753,7 +753,13 @@ export function aggregatePushes(
       const target = firstLayer.find((candidate) =>
         candidate.sourceFloors.includes(targetFloor),
       );
-      if (target && target.id !== p.id && target.anchorOrder < p.anchorOrder) {
+      const firstSourceFloor = Math.min(...p.sourceFloors);
+      if (
+        target &&
+        target.id !== p.id &&
+        targetFloor < firstSourceFloor &&
+        target.anchorOrder < p.anchorOrder
+      ) {
         const clampedTarget = clampReplyTargetDepth(target, pushById);
         p.replyTo = clampedTarget.id;
         p.floorNumber = clampedTarget.floorNumber;

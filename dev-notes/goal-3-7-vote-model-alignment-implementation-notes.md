@@ -30,4 +30,39 @@
 
 ## 實作紀錄
 
-後續每個 TDD task 完成後補充測試、資料模型變更與相容性處理。
+### Parser／reducer
+
+- 聚合前先解析 `plain`、`reply`、`reply-vote`、`article-vote`、投票撤回與編輯 intent。
+- `推／噓x樓 body` 同時建立巢狀回覆與回文投票；body 不再遞迴解析。
+- 編輯指令只改有效 body；原始結構目標、投票方向、可見性與聚合依據保持不變。
+- 發言 Withdraw 會移除該原始事件的 body 與投票；回文投票 Withdrawal 只清除匹配方向的票並保留 body。
+- 文章原生分數與 raw PTT 類別統計從所有原始推文計算；回文票與文章應用層票分別用 reducer 還原。
+- 聚合 key 納入結構目標，保留首次 `anchorOrder` 與所有原始 `sourceFloors`；第四層以上回覆提升至第三層顯示。
+
+### Adapter／UI
+
+- 真實與 fake adapter 的回文投票固定以 `neutral` 送出；撤回格式為 `撤回我對x樓的推／噓`。
+- 文章投票再次操作時，以相反的 PTT 推噓類別送出純 `推／噓` 來抵銷原生分數。
+- Article 使用解析器回傳的文章投票者、raw 類別統計與原生分數，不再從可見卡片反推。
+- PushThread 顯示 `1–2F`、`1、3F` 等原始來源樓號，並使用解析後的 server-side 編輯歷史。
+- UI 不再禁止第四層回覆；仍送出被點擊卡片的原始樓號，由 parser 套用三層顯示上限。
+
+### HTML cases 覆蓋
+
+- CASE 01–12：一般留言、巢狀回覆、純文章投票、純回文投票、去重、最後方向及兩條分數軌道。
+- CASE 13–15：opaque Replace、文章／回文投票撤回、最大巢狀深度。
+- CASE 16–20：終止符與 `||`、複合投票回覆、delimiter、目標限定續行、控制事件隔離。
+- CASE 21–25：改票保留 body、兩種撤回、三層聚合、交錯作者／原始樓號映射與首次出現排序。
+- 另補 Append opaque payload、range Withdraw 作者限制、編輯後標點不得回溯改變聚合。
+
+### 驗證
+
+- TDD red phase 曾確認複合回覆、delimiter、交錯聚合及不同結構目標在舊實作中失敗。
+- Fake PTT 瀏覽器流程確認：回文投票與撤回只新增 `→`，文章原生分數不變；文章投票以反向原生推噓抵銷；控制事件不顯示；desktop／390px mobile 均無水平 overflow，console 無 error。
+- 未對真實 PTT 執行任何寫入。
+
+## 保留限制
+
+1. 五分鐘與終止符聚合仍是 heuristic；跨年時間差沿用既有近似算法。
+2. 多原始樓層的聚合卡若被多次分別編輯，history 目前保留準確的原始／最終聚合版本；單一樓層則保留每次版本。
+3. 正式 PTT 的 neutral 回文投票及反向文章投票尚未做真帳號 smoke test，僅有 adapter 契約、fake 流程與自動測試。
