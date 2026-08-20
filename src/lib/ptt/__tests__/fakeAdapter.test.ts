@@ -85,6 +85,20 @@ describe("fake PTT adapter", () => {
 
     expect(firstPush?.pushVoters).toContain("pushVoter");
     expect(firstPush?.booVoters).toContain("booVoter");
+    expect(article?.score).toBe(1); // only the seeded visible PTT push; reply votes use →
+  });
+
+  it("withdraws a reply vote without changing the native article score", async () => {
+    const adapter = createFakePttAdapter();
+    await adapter.login("withdrawVoter", "pw");
+    const before = await adapter.getArticle("test", 1001);
+    await adapter.votePush(1, "push", "test");
+    await adapter.withdrawPushVote(1, "push", "test");
+
+    const article = await adapter.getArticle("test", 1001);
+    const firstPush = article?.pushes.find((push) => push.sourceFloors.includes(1));
+    expect(firstPush?.pushVoters).not.toContain("withdrawVoter");
+    expect(article?.score).toBe(before?.score);
   });
 
   it("persists article body edits and structured revisions for the author", async () => {

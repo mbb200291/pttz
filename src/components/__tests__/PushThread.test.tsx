@@ -242,6 +242,21 @@ describe("PushThread", () => {
     expect(html).toContain("沒有新回文");
   });
 
+  it("shows original source floors for contiguous and interleaved aggregates", () => {
+    const html = renderToStaticMarkup(
+      <PushThread
+        score={0}
+        pushes={[
+          push({ id: "range", sourceFloors: [1, 2], floorNumber: 1 }),
+          push({ id: "interleaved", sourceFloors: [4, 7], floorNumber: 4 }),
+        ]}
+      />,
+    );
+
+    expect(html).toContain("1–2F");
+    expect(html).toContain("4、7F");
+  });
+
   it("hides standalone article votes from the discussion thread", () => {
     const html = renderToStaticMarkup(
       <PushThread

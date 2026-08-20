@@ -71,6 +71,32 @@ beforeEach(() => {
 });
 
 describe("Article push editing", () => {
+  it("renders parsed server edit history without local-only state", async () => {
+    render(
+      <Article
+        boardName="Test"
+        articleIndex={99}
+        onBack={() => {}}
+        currentUser="viewer"
+        mockArticle={{
+          ...article,
+          pushes: [{
+            ...article.pushes[0],
+            content: "更新後推文",
+            editHistory: [
+              { time: "12:00", content: "原推文" },
+              { time: "12:05", content: "更新後推文" },
+            ],
+          }],
+        }}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "編輯歷史" }));
+    expect(screen.getByText("原推文")).toBeTruthy();
+    expect(screen.getAllByText("更新後推文").length).toBeGreaterThan(0);
+  });
+
   it("keeps the composer and draft open when sending fails", async () => {
     mocks.editPush.mockResolvedValue({ ok: false, reason: "PTT 拒絕寫入" });
     render(

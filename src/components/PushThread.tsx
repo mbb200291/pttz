@@ -153,8 +153,19 @@ function PushBadge({ type }: { type: AggregatedPush["type"] }) {
 
 // ─── FloorChip ────────────────────────────────────────────────────────────────
 
-function FloorChip({ floor }: { floor: number }) {
-  if (!floor) return null;
+function formatSourceFloors(sourceFloors: number[], fallbackFloor: number): string {
+  const floors = [...new Set(sourceFloors.length > 0 ? sourceFloors : [fallbackFloor])]
+    .filter(Boolean)
+    .sort((a, b) => a - b);
+  if (floors.length === 0) return "";
+  const consecutive = floors.every((floor, index) => index === 0 || floor === floors[index - 1] + 1);
+  if (floors.length > 1 && consecutive) return `${floors[0]}–${floors[floors.length - 1]}F`;
+  return `${floors.join("、")}F`;
+}
+
+function FloorChip({ sourceFloors, fallbackFloor }: { sourceFloors: number[]; fallbackFloor: number }) {
+  const label = formatSourceFloors(sourceFloors, fallbackFloor);
+  if (!label) return null;
   return (
     <span style={{
       fontFamily: "var(--font-mono)",
@@ -165,7 +176,7 @@ function FloorChip({ floor }: { floor: number }) {
       background: "var(--surface)",
       border: "1px solid var(--border)",
     }}>
-      {floor}F
+      {label}
     </span>
   );
 }
@@ -369,7 +380,12 @@ function PushItem({
   const scoreLabel = push.score > 0 ? `推 +${scoreAbs}` : `噓 -${scoreAbs}`;
   const scoreFg = push.score > 0 ? "var(--push-fg)" : "var(--boo-fg)";
   const scoreBg = push.score > 0 ? "var(--push-bg)" : "var(--boo-bg)";
-  const canEdit = Boolean(onEdit && currentUser && push.author === currentUser && !isEditNode);
+  const canEdit = Boolean(
+    onEdit &&
+    currentUser &&
+    normalizePttId(push.author) === normalizePttId(currentUser) &&
+    !isEditNode,
+  );
 
   const actionCluster = !isEditNode && (
     <div style={{
@@ -512,8 +528,11 @@ function PushItem({
               </span>
             )}
 
-            {push.floorNumber > 0 && (
-              <FloorChip floor={push.floorNumber} />
+            {(push.floorNumber > 0 || push.sourceFloors.length > 0) && (
+              <FloorChip
+                sourceFloors={push.sourceFloors}
+                fallbackFloor={push.floorNumber}
+              />
             )}
           </div>
 
@@ -637,8 +656,12 @@ export function PushThread({
   const pulseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showRefreshing = refreshing || localRefreshing;
 
+  // Compatibility guard for pre-model caches; edited opaque bodies such as
+  // "推" stay visible because their edit history proves they are content.
   const visiblePushes = useMemo(
-    () => pushes.filter((push) => detectArticleVote(push.content) === null),
+    () => pushes.filter((push) => (
+      push.editHistory?.length || detectArticleVote(push.content) === null
+    )),
     [pushes],
   );
 

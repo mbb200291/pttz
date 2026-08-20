@@ -60,6 +60,13 @@ export function formatPushVote(floor: number, kind: "push" | "boo"): string {
   return formatArticleVote(floor, kind);
 }
 
+export function formatPushVoteWithdrawal(
+  floor: number,
+  kind: "push" | "boo",
+): string {
+  return `撤回我對${floor}樓的${kind === "push" ? "推" : "噓"}`;
+}
+
 /**
  * Returns whether a vote in the given direction is allowed given the user's current vote.
  * Blocks re-voting in the same direction (dedup rule).
@@ -89,6 +96,11 @@ export interface PttActionsResult {
     boardName?: string,
   ): Promise<{ ok: boolean }>;
   votePush(
+    floor: number,
+    kind: "push" | "boo",
+    boardName?: string,
+  ): Promise<{ ok: boolean }>;
+  withdrawPushVote(
     floor: number,
     kind: "push" | "boo",
     boardName?: string,
@@ -143,6 +155,9 @@ export function usePttActions(): PttActionsResult {
     },
     async votePush(floor: number, kind: "push" | "boo", boardName?: string) {
       return client?.votePush(floor, kind, boardName) ?? unavailable();
+    },
+    async withdrawPushVote(floor: number, kind: "push" | "boo", boardName?: string) {
+      return client?.withdrawPushVote(floor, kind, boardName) ?? unavailable();
     },
     async postArticle(
       board: string,

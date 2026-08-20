@@ -42,6 +42,7 @@ interface ParsedPushIntent {
 type ParsedRawPush = AnchoredRawPush & {
   intent: ParsedPushIntent;
   originalContent: string;
+  structuralContent: string;
   withdrawn: boolean;
   editHistory: PushEditHistoryRecord[];
 };
@@ -121,14 +122,14 @@ function stripContinuationMarker(content: string): string {
 }
 
 function isFullPushLine(push: ParsedRawPush): boolean {
-  const visibleContent = stripContinuationMarker(push.intent.visibleContent);
+  const visibleContent = stripContinuationMarker(push.structuralContent);
   return push.isFullWidthLine ?? isFull(visibleContent);
 }
 
 function canContinueFromPush(push: ParsedRawPush): boolean {
-  if (hasContinuationMarker(push.intent.visibleContent)) return true;
+  if (hasContinuationMarker(push.structuralContent)) return true;
 
-  const visibleContent = stripContinuationMarker(push.intent.visibleContent);
+  const visibleContent = stripContinuationMarker(push.structuralContent);
   return !END_TERMINATOR_RE.test(visibleContent);
 }
 
@@ -153,6 +154,26 @@ function mergeOriginalPushContents(pushes: ParsedRawPush[]): string {
       intent: { ...push.intent, visibleContent: push.originalContent },
     })),
   );
+}
+
+function buildGroupEditHistory(group: PushGroup): PushEditHistoryRecord[] | undefined {
+  const editedPushes = group.pushes.filter((push) => push.editHistory.length > 0);
+  if (editedPushes.length === 0) return undefined;
+  if (group.pushes.length === 1) return group.pushes[0].editHistory;
+
+  const originalContent = mergePushContents(
+    group.pushes.map((push) => ({
+      ...push,
+      intent: { ...push.intent, visibleContent: push.structuralContent },
+    })),
+  );
+  const editRecords = editedPushes.flatMap((push) => push.editHistory.slice(1));
+  const latestEdit = editRecords[editRecords.length - 1];
+  const lastPush = group.pushes[group.pushes.length - 1];
+  return [
+    { time: group.pushes[0].time, content: originalContent },
+    { time: latestEdit?.time ?? lastPush?.time ?? "", content: mergePushContents(group.pushes) },
+  ];
 }
 
 /** 解析 "MM/DD HH:mm" → 當年的分鐘數（用於計算時間差） */
@@ -603,14 +624,18 @@ export function aggregatePushes(
   articleEditRecords: ArticleEditRecord[] = [],
 ): AggregatedThread {
   const articleAuthorId = extractAuthorId(articleAuthor);
-  const parsedPushes: ParsedRawPush[] = rawPushes.map((push, index) => ({
-    ...push,
-    rawFloor: push.rawFloor ?? index + 1,
-    intent: parsePushIntent(push.content),
-    originalContent: push.content,
-    withdrawn: false,
-    editHistory: [],
-  }));
+  const parsedPushes: ParsedRawPush[] = rawPushes.map((push, index) => {
+    const intent = parsePushIntent(push.content);
+    return {
+      ...push,
+      rawFloor: push.rawFloor ?? index + 1,
+      intent,
+      originalContent: push.content,
+      structuralContent: intent.visibleContent,
+      withdrawn: false,
+      editHistory: [],
+    };
+  });
   applyPushEdits(parsedPushes);
 
   // Step 1：分群
@@ -645,7 +670,7 @@ export function aggregatePushes(
       sourceFloors: g.pushes.map((push, index) => push.rawFloor ?? i + index + 1),
       pushVoters: [],
       booVoters: [],
-      editHistory: g.pushes.flatMap((push) => push.editHistory),
+      editHistory: buildGroupEditHistory(g),
     });
   }
 

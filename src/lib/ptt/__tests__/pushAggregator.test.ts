@@ -891,6 +891,21 @@ describe("HTML vote model alignment", () => {
     ]);
   });
 
+  it("does not let edited punctuation retroactively change aggregation", () => {
+    const thread = aggregatePushes(
+      [
+        push("alice", "第一段尚未結束", "08/12 22:40", "neutral", 10, 1),
+        push("alice", "第二段完成。", "08/12 22:41", "neutral", 20, 2),
+        push("alice", "更正我在1樓發言：第一段已改成句號。", "08/12 22:42", "neutral", 30, 3),
+      ],
+      OP,
+    );
+
+    expect(thread.pushes).toHaveLength(1);
+    expect(thread.pushes[0].sourceFloors).toEqual([1, 2]);
+    expect(thread.pushes[0].content).toBe("第一段已改成句號。\n第二段完成。");
+  });
+
   it("aggregates each nested level and resolves any source floor to its card", () => {
     const thread = aggregatePushes(
       [

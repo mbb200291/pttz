@@ -4,7 +4,7 @@
  * 完整資料回來後切換到完整版（含推文討論串）。
  */
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useArticle } from "../hooks/useArticle";
 import { PushThread } from "./PushThread";
 import { ArticleRevisions } from "./ArticleRevisions";
@@ -21,7 +21,7 @@ import { VotePair } from "./VotePair";
 import type { VoteCount, PushEditData } from "./PushThread";
 import { Composer } from "./Composer";
 import type { ComposerMode, ComposerInitial } from "./Composer";
-import { canVote, usePttActions } from "../hooks/usePttActions";
+import { usePttActions } from "../hooks/usePttActions";
 import { getPushEditFloorRange } from "../lib/ptt/pushEditing";
 import { Monogram } from "./Monogram";
 import { ScoreOrb } from "./ScoreOrb";
@@ -184,9 +184,9 @@ function LightweightPushList({
 }: {
   pushes: NonNullable<PartialArticleData["pushes"]>;
 }) {
-  const visiblePushes = pushes.filter(
-    (push) => detectArticleVote(push.content) === null,
-  );
+  const visiblePushes = pushes.filter((push) => (
+    push.editHistory?.length || detectArticleVote(push.content) === null
+  ));
   if (visiblePushes.length === 0) return null;
 
   return (
@@ -221,31 +221,19 @@ function getPushFloor(push: AggregatedPush): number {
   return push.sourceFloors[0] ?? push.floorNumber;
 }
 
-const MAX_NESTED_REPLY_DEPTH = 2;
-
-function getPushDepth(push: AggregatedPush, pushes: AggregatedPush[]): number {
-  const byId = new Map(pushes.map((item) => [item.id, item]));
-  let depth = 0;
-  let current = push;
-  const visited = new Set<string>();
-
-  while (current.replyTo) {
-    if (visited.has(current.id)) break;
-    visited.add(current.id);
-    const parent = byId.get(current.replyTo);
-    if (!parent) break;
-    depth += 1;
-    current = parent;
-  }
-
-  return depth;
-}
-
 function getViewerPushVote(push: AggregatedPush, currentUser?: string): -1 | 0 | 1 {
   if (!currentUser) return 0;
   const viewerId = normalizePttId(currentUser);
   if (push.pushVoters.some((author) => normalizePttId(author) === viewerId)) return 1;
   if (push.booVoters.some((author) => normalizePttId(author) === viewerId)) return -1;
+  return 0;
+}
+
+function getViewerArticleVote(article: ArticleData, currentUser?: string): -1 | 0 | 1 {
+  if (!currentUser) return 0;
+  const viewerId = normalizePttId(currentUser);
+  if (article.articlePushVoters?.some((author) => normalizePttId(author) === viewerId)) return 1;
+  if (article.articleBooVoters?.some((author) => normalizePttId(author) === viewerId)) return -1;
   return 0;
 }
 
@@ -354,8 +342,20 @@ export function Article({
     new Set(),
   );
 
-  // Local push edit records
-  const [pushEdits, _setPushEdits] = useState<Map<string, PushEditData>>(new Map());
+  const [articleVotePending, setArticleVotePending] = useState(false);
+  const articleVotePendingRef = useRef(false);
+
+  const pushEdits = useMemo(() => {
+    const edits = new Map<string, PushEditData>();
+    for (const push of article?.pushes ?? []) {
+      if (!push.editHistory || push.editHistory.length === 0) continue;
+      edits.set(push.id, {
+        content: push.content,
+        history: push.editHistory,
+      });
+    }
+    return edits;
+  }, [article?.pushes]);
 
   // Composer state: null = closed
   const [composer, setComposer] = useState<{ mode: ComposerMode; initial: ComposerInitial } | null>(null);
@@ -421,6 +421,17 @@ export function Article({
   ]);
 
   useEffect(() => {
+    if (!article) return;
+    setArticleVote({
+      value: getViewerArticleVote(article, currentUser),
+      count: {
+        push: article.articlePushVoters?.length ?? 0,
+        boo: article.articleBooVoters?.length ?? 0,
+      },
+    });
+  }, [article, currentUser]);
+
+  useEffect(() => {
     if (!article || !currentUser) return;
     setPushVotes((previous) => {
       const next = new Map(previous);
@@ -437,23 +448,26 @@ export function Article({
   }, [article, currentUser]);
 
   const handleArticleVote = useCallback((direction: "push" | "boo") => {
-    if (!isLoggedIn || isArticleAuthor) return;
-    if (!canVote(articleVote.value, direction)) return;
-    const next: -1 | 0 | 1 = direction === "push" ? 1 : -1;
+    if (!isLoggedIn || isArticleAuthor || articleVotePendingRef.current) return;
+    const clicked: -1 | 1 = direction === "push" ? 1 : -1;
+    const isCancellation = articleVote.value !== 0;
+    const next: -1 | 0 | 1 = isCancellation ? 0 : clicked;
+    const outgoingDirection = isCancellation
+      ? articleVote.value === 1 ? "boo" : "push"
+      : direction;
+    articleVotePendingRef.current = true;
+    setArticleVotePending(true);
     void actions.replyToArticle(
-      direction === "push" ? "推" : "噓",
-      direction,
+      outgoingDirection === "push" ? "推" : "噓",
+      outgoingDirection,
       boardName,
     ).then((result) => {
       if (!result.ok) return;
-      setArticleVote(prev => ({
-        value: next,
-        count: {
-          push: prev.count.push + (direction === "push" ? 1 : 0),
-          boo: prev.count.boo + (direction === "boo" ? 1 : 0),
-        },
-      }));
+      setArticleVote((previous) => transitionVoteState(previous, next));
       void liveReload();
+    }).finally(() => {
+      articleVotePendingRef.current = false;
+      setArticleVotePending(false);
     });
   }, [actions, articleVote.value, boardName, isArticleAuthor, isLoggedIn, liveReload]);
 
@@ -469,20 +483,24 @@ export function Article({
     };
     const currentVote = currentState.value;
 
-    if (next === 0 || next === currentVote) return;
+    if (next === 0) return;
 
     const direction = next === 1 ? "push" : "boo";
+    const isWithdrawal = next === currentVote;
+    const resultingVote: -1 | 0 | 1 = isWithdrawal ? 0 : next;
     const targetFloor = push ? getPushFloor(push) : 0;
     if (pendingPushVoteIdsRef.current.has(pushId)) return;
     pendingPushVoteIdsRef.current.add(pushId);
     setPendingPushVoteIds(new Set(pendingPushVoteIdsRef.current));
 
-    void actions
-      .votePush(targetFloor, direction, boardName)
+    const request = isWithdrawal
+      ? actions.withdrawPushVote(targetFloor, direction, boardName)
+      : actions.votePush(targetFloor, direction, boardName);
+    void request
       .then((result) => {
         if (!result.ok) return;
         setPushVotes((prev) =>
-          new Map(prev).set(pushId, transitionVoteState(currentState, next)),
+          new Map(prev).set(pushId, transitionVoteState(currentState, resultingVote)),
         );
         void liveReload();
       })
@@ -498,10 +516,6 @@ export function Article({
   }, []);
 
   const openReplyPush = useCallback((push: AggregatedPush) => {
-    if (article && getPushDepth(push, article.pushes) >= MAX_NESTED_REPLY_DEPTH) {
-      alert("嵌套回文最多支援三層，無法再回覆這一層。");
-      return;
-    }
     setComposerSubmitError(null);
     setComposer({
       mode: "reply-push",
@@ -509,7 +523,7 @@ export function Article({
         targetFloor: getPushFloor(push),
       },
     });
-  }, [article]);
+  }, []);
 
   const openEditPush = useCallback((push: AggregatedPush) => {
     const { startFloor, endFloor } = getPushEditFloorRange(push);
@@ -612,12 +626,10 @@ export function Article({
   }, [article, articleIndex, boardName]);
 
   // Compute push/boo/neutral counts for stats bar
-  const pushTypes = article?.pushes.map(
-    (push) => detectArticleVote(push.content) ?? push.type,
-  ) ?? [];
-  const pushCount = pushTypes.filter((type) => type === "push").length;
-  const booCount = pushTypes.filter((type) => type === "boo").length;
-  const neutralCount = pushTypes.filter((type) => type === "neutral").length;
+  const fallbackPushTypes = article?.pushes.map((push) => push.type) ?? [];
+  const pushCount = article?.nativePushCount ?? fallbackPushTypes.filter((type) => type === "push").length;
+  const booCount = article?.nativeBooCount ?? fallbackPushTypes.filter((type) => type === "boo").length;
+  const neutralCount = article?.nativeNeutralCount ?? fallbackPushTypes.filter((type) => type === "neutral").length;
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--text)" }}>
@@ -826,11 +838,14 @@ export function Article({
               <VotePair
                 value={articleVote.value}
                 count={articleVote.count}
-                voters={{ push: [], boo: [] }}
+                voters={{
+                  push: article.articlePushVoters ?? [],
+                  boo: article.articleBooVoters ?? [],
+                }}
                 myVote={articleVote.value}
                 onPush={() => handleArticleVote("push")}
                 onBoo={() => handleArticleVote("boo")}
-                disabled={!isLoggedIn || isArticleAuthor}
+                disabled={!isLoggedIn || isArticleAuthor || articleVotePending}
                 size="lg"
               />
               {isArticleAuthor && (

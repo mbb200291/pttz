@@ -6,6 +6,7 @@ import { Article } from "../Article";
 
 const mocks = vi.hoisted(() => ({
   votePush: vi.fn(),
+  withdrawPushVote: vi.fn(),
   replyToArticle: vi.fn(),
   reload: vi.fn(),
 }));
@@ -18,6 +19,7 @@ vi.mock("../../hooks/usePttActions", async (importOriginal) => {
     usePttActions: () => ({
       isLoggedIn: true,
       votePush: mocks.votePush,
+      withdrawPushVote: mocks.withdrawPushVote,
       replyToArticle: mocks.replyToArticle,
       replyToPush: vi.fn(),
       voteArticle: vi.fn(),
@@ -104,6 +106,7 @@ afterEach(cleanup);
 
 beforeEach(() => {
   mocks.votePush.mockReset();
+  mocks.withdrawPushVote.mockReset();
   mocks.replyToArticle.mockReset();
   mocks.reload.mockReset().mockResolvedValue(undefined);
 });
@@ -132,7 +135,8 @@ describe("Article push voting", () => {
     expect((screen.getAllByRole("button", { name: "噓" })[0] as HTMLButtonElement).disabled).toBe(false);
     expect(screen.queryByText("作者不能推噓自己的文章，可使用回覆加註。")).toBeNull();
   });
-  it("does not resend the selected direction", () => {
+  it("clicking the selected reply direction sends a withdrawal", async () => {
+    mocks.withdrawPushVote.mockResolvedValue({ ok: true });
     renderArticle(
       {
         ...article,
@@ -149,11 +153,36 @@ describe("Article push voting", () => {
     act(() => screen.getAllByRole("button", { name: "推" })[1].click());
 
     expect(mocks.votePush).not.toHaveBeenCalled();
-    expect(
-      screen.getAllByRole("button", { name: "推" })[1].getAttribute(
-        "aria-pressed",
-      ),
-    ).toBe("true");
+    await waitFor(() =>
+      expect(mocks.withdrawPushVote).toHaveBeenCalledWith(1, "push", "Test"),
+    );
+    expect(screen.getAllByRole("button", { name: "推" })[1].getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("hydrates article vote buttons from parsed application state", () => {
+    renderArticle({
+      ...article,
+      articlePushVoters: ["viewer", "bob"],
+      articleBooVoters: ["carol"],
+    });
+
+    const pushButton = screen.getAllByRole("button", { name: "推" })[0];
+    const booButton = screen.getAllByRole("button", { name: "噓" })[0];
+    expect(pushButton.getAttribute("aria-pressed")).toBe("true");
+    expect(pushButton.textContent).toContain("2");
+    expect(booButton.textContent).toContain("1");
+  });
+
+  it("withdraws an article push by sending an inverse pure boo", async () => {
+    mocks.replyToArticle.mockResolvedValue({ ok: true });
+    renderArticle({ ...article, articlePushVoters: ["viewer"] });
+
+    act(() => screen.getAllByRole("button", { name: "推" })[0].click());
+
+    await waitFor(() =>
+      expect(mocks.replyToArticle).toHaveBeenCalledWith("噓", "boo", "Test"),
+    );
+    expect(screen.getAllByRole("button", { name: "推" })[0].getAttribute("aria-pressed")).toBe("false");
   });
 
   it("moves the current user from push to boo after switching direction", async () => {

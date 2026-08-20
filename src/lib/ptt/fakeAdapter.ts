@@ -93,7 +93,7 @@ function createDefaultStore(): FakePttStore {
             rawPushes: [
               createRawPush("push", "alice", "第一則回覆，歡迎測試", 1),
               createRawPush("neutral", "bob", "回1樓：我用 bob 回覆 alice", 2),
-              createRawPush("push", "charlie", "推1樓", 3),
+              createRawPush("neutral", "charlie", "推1樓", 3),
             ],
           },
         ],
@@ -398,11 +398,19 @@ class FakePttAdapter implements PttAdapter {
   }
 
   async voteArticle(floor: number, kind: "push" | "boo", boardName?: string): Promise<{ ok: boolean }> {
-    return this.appendPush(boardName, `${kind === "push" ? "推" : "噓"}${floor}樓`, kind);
+    return this.appendPush(boardName, `${kind === "push" ? "推" : "噓"}${floor}樓`, "neutral");
   }
 
   async votePush(floor: number, kind: "push" | "boo", boardName?: string): Promise<{ ok: boolean }> {
     return this.voteArticle(floor, kind, boardName);
+  }
+
+  async withdrawPushVote(floor: number, kind: "push" | "boo", boardName?: string): Promise<{ ok: boolean }> {
+    return this.appendPush(
+      boardName,
+      `撤回我對${floor}樓的${kind === "push" ? "推" : "噓"}`,
+      "neutral",
+    );
   }
 
   async postArticle(

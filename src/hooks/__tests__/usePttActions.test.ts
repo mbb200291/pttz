@@ -68,6 +68,12 @@ describe("usePttActions format helpers", () => {
     const mod = await import("../usePttActions");
     expect(mod.formatPushVote(3, "boo")).toBe("噓3樓");
   });
+
+  it("formatPushVoteWithdrawal formats the matching withdrawal", async () => {
+    const mod = await import("../usePttActions");
+    expect(mod.formatPushVoteWithdrawal(3, "push")).toBe("撤回我對3樓的推");
+    expect(mod.formatPushVoteWithdrawal(5, "boo")).toBe("撤回我對5樓的噓");
+  });
 });
 
 describe("canVote", () => {
@@ -217,5 +223,21 @@ describe("usePttActions adapter integration", () => {
       "neutral",
       "Test",
     );
+  });
+
+  it("delegates reply vote withdrawal to the adapter", async () => {
+    const withdrawPushVote = vi.fn().mockResolvedValue({ ok: true });
+    usePttSocketStore.setState({
+      client: {
+        isLoggedIn: vi.fn().mockReturnValue(true),
+        withdrawPushVote,
+      } as unknown as PttAdapter,
+      pttState: "ready",
+    });
+
+    const { usePttActions } = await import("../usePttActions");
+    const { result } = renderHook(() => usePttActions());
+    await expect(result.current.withdrawPushVote(12, "push", "Test")).resolves.toEqual({ ok: true });
+    expect(withdrawPushVote).toHaveBeenCalledWith(12, "push", "Test");
   });
 });

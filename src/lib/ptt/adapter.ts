@@ -255,6 +255,11 @@ export interface PttAdapter {
     kind: "push" | "boo",
     boardName?: string,
   ) => Promise<{ ok: boolean }>;
+  withdrawPushVote: (
+    floor: number,
+    kind: "push" | "boo",
+    boardName?: string,
+  ) => Promise<{ ok: boolean }>;
   postArticle: (
     board: string,
     category: string,
@@ -840,7 +845,7 @@ class PttClientAdapter implements PttAdapter {
     kind: "push" | "boo",
     boardName?: string,
   ): Promise<{ ok: boolean }> {
-    return this.replyToArticle(formatVoteForFloor(floor, kind), kind, boardName);
+    return this.replyToArticle(formatVoteForFloor(floor, kind), "neutral", boardName);
   }
 
   async votePush(
@@ -848,7 +853,16 @@ class PttClientAdapter implements PttAdapter {
     kind: "push" | "boo",
     boardName?: string,
   ): Promise<{ ok: boolean }> {
-    return this.replyToArticle(formatVoteForFloor(floor, kind), kind, boardName);
+    return this.replyToArticle(formatVoteForFloor(floor, kind), "neutral", boardName);
+  }
+
+  async withdrawPushVote(
+    floor: number,
+    kind: "push" | "boo",
+    boardName?: string,
+  ): Promise<{ ok: boolean }> {
+    const direction = kind === "push" ? "推" : "噓";
+    return this.replyToArticle(`撤回我對${floor}樓的${direction}`, "neutral", boardName);
   }
 
   async postArticle(
