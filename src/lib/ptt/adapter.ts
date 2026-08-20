@@ -3,7 +3,6 @@ import sleep from "sleep-promise";
 import type PttConfig from "ptt-client/dist/config";
 import {
   aggregatePushes,
-  calcArticleScore,
   type AggregatedPush,
 } from "./pushAggregator";
 import {
@@ -72,6 +71,11 @@ export interface AdapterArticleData {
   revisions?: ArticleRevision[];
   revisionSourceBody?: string;
   score: number;
+  nativePushCount: number;
+  nativeBooCount: number;
+  nativeNeutralCount: number;
+  articlePushVoters: string[];
+  articleBooVoters: string[];
   debug?: ArticleDebugDump;
 }
 
@@ -85,6 +89,11 @@ export interface PartialArticleData {
   articleNotes?: ArticleEditRecord[];
   revisions?: ArticleRevision[];
   score?: number;
+  nativePushCount?: number;
+  nativeBooCount?: number;
+  nativeNeutralCount?: number;
+  articlePushVoters?: string[];
+  articleBooVoters?: string[];
 }
 
 export interface ArticleFirstScreenSnapshot {
@@ -2931,7 +2940,12 @@ function buildArticleThread(rawFull: string, author: string) {
   return {
     pushes: thread.pushes,
     articleNotes: thread.articleNotes,
-    score: calcArticleScore(thread.pushes),
+    score: thread.nativeArticleScore,
+    nativePushCount: thread.nativePushCount,
+    nativeBooCount: thread.nativeBooCount,
+    nativeNeutralCount: thread.nativeNeutralCount,
+    articlePushVoters: thread.articlePushVoters,
+    articleBooVoters: thread.articleBooVoters,
   };
 }
 
@@ -2963,6 +2977,11 @@ function buildPartialArticleFromRawLines(
     articleNotes: thread?.articleNotes ?? [],
     revisions,
     score: thread?.score ?? 0,
+    nativePushCount: thread?.nativePushCount ?? 0,
+    nativeBooCount: thread?.nativeBooCount ?? 0,
+    nativeNeutralCount: thread?.nativeNeutralCount ?? 0,
+    articlePushVoters: thread?.articlePushVoters ?? [],
+    articleBooVoters: thread?.articleBooVoters ?? [],
   };
 }
 
@@ -3375,6 +3394,11 @@ export async function fetchArticleFromBot(
         revisions,
         revisionSourceBody: parsedSource.content,
         score: thread.score,
+        nativePushCount: thread.nativePushCount,
+        nativeBooCount: thread.nativeBooCount,
+        nativeNeutralCount: thread.nativeNeutralCount,
+        articlePushVoters: thread.articlePushVoters,
+        articleBooVoters: thread.articleBooVoters,
         debug,
       };
     } finally {
@@ -3625,6 +3649,11 @@ async function fetchArticleFromBotManuallyWithOpen(
     revisions,
     revisionSourceBody: parsedSource.content,
     score: thread.score,
+    nativePushCount: thread.nativePushCount,
+    nativeBooCount: thread.nativeBooCount,
+    nativeNeutralCount: thread.nativeNeutralCount,
+    articlePushVoters: thread.articlePushVoters,
+    articleBooVoters: thread.articleBooVoters,
     debug,
   };
 }

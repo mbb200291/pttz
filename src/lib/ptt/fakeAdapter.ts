@@ -19,7 +19,7 @@ import {
   type ArticleSummary,
   type RawPush,
 } from "./parser";
-import { aggregatePushes, calcArticleScore } from "./pushAggregator";
+import { aggregatePushes } from "./pushAggregator";
 
 export const FAKE_PTT_STORE_KEY = "pttzzz_fake_ptt_store_v1";
 const FAKE_USER_KEY = "pttzzz_fake_ptt_user";
@@ -201,7 +201,7 @@ function getArticleRecord(
 
 function pushCountLabel(article: FakeArticleRecord): string {
   const thread = aggregatePushes(article.rawPushes, article.author);
-  const score = calcArticleScore(thread.pushes);
+  const score = thread.nativeArticleScore;
   if (score >= 100) return "爆";
   if (score <= -10) return `X${Math.min(9, Math.abs(score) / 10)}`;
   return score > 0 ? String(score) : "";
@@ -220,7 +220,6 @@ function toSummary(article: FakeArticleRecord): ArticleSummary {
 
 function toArticleData(article: FakeArticleRecord): AdapterArticleData {
   const thread = aggregatePushes(article.rawPushes, article.author);
-  const score = calcArticleScore(thread.pushes);
   const parsedBody = splitArticleBody(article.body);
   return {
     title: article.title,
@@ -231,7 +230,12 @@ function toArticleData(article: FakeArticleRecord): AdapterArticleData {
     pushes: thread.pushes,
     articleNotes: thread.articleNotes,
     revisions: parsedBody.revisions,
-    score,
+    score: thread.nativeArticleScore,
+    nativePushCount: thread.nativePushCount,
+    nativeBooCount: thread.nativeBooCount,
+    nativeNeutralCount: thread.nativeNeutralCount,
+    articlePushVoters: thread.articlePushVoters,
+    articleBooVoters: thread.articleBooVoters,
   };
 }
 

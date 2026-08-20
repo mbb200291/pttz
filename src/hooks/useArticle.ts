@@ -46,6 +46,11 @@ export interface ArticleData {
   articleNotes: ArticleEditRecord[];
   revisions?: ArticleRevision[];
   score: number;
+  nativePushCount?: number;
+  nativeBooCount?: number;
+  nativeNeutralCount?: number;
+  articlePushVoters?: string[];
+  articleBooVoters?: string[];
   debug?: ArticleDebugDump;
 }
 
@@ -194,6 +199,11 @@ export function useArticle(
             articleNotes: cached.articleNotes ?? [],
             revisions: cached.revisions ?? [],
             score: cached.score ?? 0,
+            nativePushCount: cached.nativePushCount,
+            nativeBooCount: cached.nativeBooCount,
+            nativeNeutralCount: cached.nativeNeutralCount,
+            articlePushVoters: cached.articlePushVoters,
+            articleBooVoters: cached.articleBooVoters,
           });
           setCachedArticle(null);
           setLoading(false);
@@ -247,6 +257,11 @@ export function useArticle(
             articleNotes: next.articleNotes,
             revisions: next.revisions ?? [],
             score: next.score,
+            nativePushCount: next.nativePushCount,
+            nativeBooCount: next.nativeBooCount,
+            nativeNeutralCount: next.nativeNeutralCount,
+            articlePushVoters: next.articlePushVoters,
+            articleBooVoters: next.articleBooVoters,
           });
         }
       } catch (err: unknown) {

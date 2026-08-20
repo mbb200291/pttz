@@ -242,7 +242,7 @@ describe("嵌套回覆識別", () => {
     expect(alicePush.sourceFloors).toEqual([1, 2]);
   });
 
-  it("回覆標記前已有內容時仍掛到目標樓層", () => {
+  it("回覆標記只在行首生效", () => {
     const raw = [
       push("root", "第一層", "06/03 22:00", "push", 10, 1),
       push("alice", "回1樓：AAAA", "06/03 22:01", "push", 20, 2),
@@ -251,12 +251,10 @@ describe("嵌套回覆識別", () => {
     ];
 
     const thread = aggregatePushes(raw, OP);
-    const bobPush = thread.pushes.find((r) => r.author === "bob")!;
     const maryPush = thread.pushes.find((r) => r.author === "mary")!;
 
-    expect(maryPush.replyTo).toBe(bobPush.id);
-    expect(maryPush.floorNumber).toBe(bobPush.floorNumber);
-    expect(maryPush.content).toBe("BBB CCCC");
+    expect(maryPush.replyTo).toBeNull();
+    expect(maryPush.content).toBe("BBB 回3樓：CCCC");
   });
 
   it.each([
@@ -423,7 +421,7 @@ describe("編輯註記", () => {
     });
   });
 
-  it("tracks the latest source offset for merged same-author groups", () => {
+  it("keeps first appearance for ordering while edits attach after the latest source", () => {
     const raw = [
       push("alice", "a".repeat(44), "01/01 12:00", "push", 100),
       push("bob", "插入一句", "01/01 12:01", "push", 150),
@@ -433,7 +431,7 @@ describe("編輯註記", () => {
     const thread = aggregatePushes(raw, OP, [opEditedReply(250, "合併後補充")]);
 
     expect(thread.pushes.find((r) => r.author === "alice")?.anchorOrder).toBe(
-      200,
+      100,
     );
     const aliceNode = thread.pushes.find((r) => r.author === "alice")!;
     const bobNode = thread.pushes.find((r) => r.author === "bob")!;
@@ -470,12 +468,14 @@ describe("推文評分", () => {
     expect(detectArticleVote("噓1樓")).toBeNull();
   });
 
-  it("以單獨噓的內容語意修正 neutral marker 的文章分數", () => {
-    const thread = aggregatePushes([
+  it("文章原生分數只看 PTT 類別，不看內容", () => {
+    const raw = [
       push("alice", "噓", "01/01 12:00", "neutral", 10, 1),
-    ], OP);
+    ];
+    const thread = aggregatePushes(raw, OP);
 
-    expect(calcArticleScore(thread.pushes)).toBe(-1);
+    expect(thread.nativeArticleScore).toBe(0);
+    expect(calcArticleScore(raw)).toBe(0);
   });
 
   it("文章投票事件不與同作者後續普通回文合併", () => {
@@ -484,10 +484,7 @@ describe("推文評分", () => {
       push("alice", "補充原因", "01/01 12:01", "neutral", 20, 2),
     ], OP);
 
-    expect(thread.pushes.map((item) => item.content)).toEqual([
-      "噓",
-      "補充原因",
-    ]);
+    expect(thread.pushes.map((item) => item.content)).toEqual(["補充原因"]);
   });
 
   it("文章層級：push+1, boo-1, neutral 不計", () => {
@@ -497,7 +494,8 @@ describe("推文評分", () => {
       push("c", "噓", "01/01 12:02", "boo"),
     ];
     const thread = aggregatePushes(raw, OP);
-    expect(calcArticleScore(thread.pushes)).toBe(1); // 2 push - 1 boo
+    expect(calcArticleScore(raw)).toBe(1); // 2 push - 1 boo
+    expect(thread.nativeArticleScore).toBe(1);
   });
 
   it("一般巢狀回覆不影響父回文 score", () => {
@@ -680,5 +678,256 @@ describe("投票者收集", () => {
     const alicePush = thread.pushes.find((r) => r.author === "alice")!;
     expect(alicePush.pushVoters).toEqual([]);
     expect(alicePush.booVoters).toEqual([]);
+  });
+});
+
+describe("HTML vote model alignment", () => {
+  it("treats vote patterns with bodies as visible nested replies and votes", () => {
+    const thread = aggregatePushes(
+      [
+        push("carol", "第十二樓", "08/12 22:06", "neutral", 10, 12),
+        push("alice", "推12樓 我同意", "08/12 22:07", "neutral", 20, 13),
+        push("bob", "噓12樓：我反對", "08/12 22:08", "neutral", 30, 14),
+      ],
+      OP,
+    );
+
+    const target = thread.pushes.find((item) => item.author === "carol")!;
+    const alice = thread.pushes.find((item) => item.author === "alice")!;
+    const bob = thread.pushes.find((item) => item.author === "bob")!;
+
+    expect(alice).toMatchObject({ replyTo: target.id, content: "我同意" });
+    expect(bob).toMatchObject({ replyTo: target.id, content: "我反對" });
+    expect(target.pushVoters).toEqual(["alice"]);
+    expect(target.booVoters).toEqual(["bob"]);
+    expect(target.score).toBe(0);
+  });
+
+  it("requires a delimiter after the target floor", () => {
+    expect(detectVote("推12樓主整理得很好")).toBeNull();
+
+    const thread = aggregatePushes(
+      [
+        push("carol", "第十二樓", "08/12 22:06", "neutral", 10, 12),
+        push("alice", "推12樓主整理得很好", "08/12 22:07", "neutral", 20, 13),
+      ],
+      OP,
+    );
+    const alice = thread.pushes.find((item) => item.author === "alice")!;
+
+    expect(alice.replyTo).toBeNull();
+    expect(alice.content).toBe("推12樓主整理得很好");
+  });
+
+  it("does not merge a pure control event with the following comment", () => {
+    const thread = aggregatePushes(
+      [
+        push("carol", "第十二樓", "08/12 22:06", "neutral", 10, 12),
+        push("alice", "推12樓", "08/12 22:07", "neutral", 20, 13),
+        push("alice", "我另外補充一件事", "08/12 22:08", "neutral", 30, 14),
+      ],
+      OP,
+    );
+
+    expect(thread.pushes.some((item) => item.content === "推12樓")).toBe(false);
+    expect(thread.pushes.find((item) => item.author === "alice")).toMatchObject({
+      replyTo: null,
+      content: "我另外補充一件事",
+      sourceFloors: [14],
+    });
+  });
+
+  it("aggregates interleaved continuations by author and structural target", () => {
+    const thread = aggregatePushes(
+      [
+        push("alice", "主題第一段還沒結束", "08/12 22:50", "neutral", 10, 1),
+        push("bob", "回1樓：我先回應 Alice", "08/12 22:51", "neutral", 20, 2),
+        push("alice", "主題第二段補完。", "08/12 22:52", "neutral", 30, 3),
+        push("carol", "回2樓：我先回 Bob", "08/12 22:53", "neutral", 40, 4),
+        push("bob", "延續我對 Alice 的回覆。", "08/12 22:54", "neutral", 50, 5),
+        push("dave", "回3樓：我補充 Alice。", "08/12 22:55", "neutral", 60, 6),
+        push("carol", "接著把回覆說完。", "08/12 22:56", "neutral", 70, 7),
+        push("erin", "回5樓：我從另一角度回 Bob。", "08/12 22:57", "neutral", 80, 8),
+      ],
+      OP,
+    );
+
+    const byAuthor = new Map(thread.pushes.map((item) => [item.author, item]));
+    const alice = byAuthor.get("alice")!;
+    const bob = byAuthor.get("bob")!;
+    const carol = byAuthor.get("carol")!;
+    const dave = byAuthor.get("dave")!;
+    const erin = byAuthor.get("erin")!;
+
+    expect(thread.pushes).toHaveLength(5);
+    expect(alice.sourceFloors).toEqual([1, 3]);
+    expect(bob).toMatchObject({ replyTo: alice.id, sourceFloors: [2, 5] });
+    expect(carol).toMatchObject({ replyTo: bob.id, sourceFloors: [4, 7] });
+    expect(dave.replyTo).toBe(alice.id);
+    expect(erin.replyTo).toBe(bob.id);
+    expect(alice.anchorOrder).toBe(10);
+    expect(bob.anchorOrder).toBe(20);
+    expect(carol.anchorOrder).toBe(40);
+  });
+
+  it("keeps explicit replies to different targets in separate groups", () => {
+    const thread = aggregatePushes(
+      [
+        push("root-a", "A。", "08/12 22:50", "neutral", 10, 1),
+        push("root-b", "B。", "08/12 22:51", "neutral", 20, 2),
+        push("alice", "回1樓：先回 A", "08/12 22:52", "neutral", 30, 3),
+        push("alice", "回2樓：再回 B", "08/12 22:53", "neutral", 40, 4),
+      ],
+      OP,
+    );
+
+    const replies = thread.pushes.filter((item) => item.author === "alice");
+    expect(replies).toHaveLength(2);
+    expect(replies.map((item) => item.sourceFloors)).toEqual([[3], [4]]);
+    expect(replies[0].replyTo).not.toBe(replies[1].replyTo);
+  });
+
+  it("keeps native article score independent from reply vote semantics", () => {
+    const thread = aggregatePushes(
+      [
+        push("carol", "第十二樓", "08/12 22:06", "neutral", 10, 12),
+        push("alice", "推12樓", "08/12 22:07", "push", 20, 13),
+        push("bob", "推12樓", "08/12 22:08", "boo", 30, 14),
+        push("dave", "回12樓：一般回覆", "08/12 22:09", "push", 40, 15),
+      ],
+      OP,
+    );
+
+    const target = thread.pushes.find((item) => item.author === "carol")!;
+    expect(thread.nativeArticleScore).toBe(1);
+    expect(thread.nativePushCount).toBe(2);
+    expect(thread.nativeBooCount).toBe(1);
+    expect(target.pushVoters).toEqual(["alice", "bob"]);
+    expect(target.score).toBe(2);
+  });
+
+  it("reduces pure article votes per author and hides their raw events", () => {
+    const thread = aggregatePushes(
+      [
+        push("alice", "推", "08/12 22:07", "push", 10, 1),
+        push("alice", "推", "08/12 22:08", "push", 20, 2),
+        push("bob", "噓", "08/12 22:09", "boo", 30, 3),
+      ],
+      OP,
+    );
+
+    expect(thread.pushes).toHaveLength(0);
+    expect(thread.nativeArticleScore).toBe(1);
+    expect(thread.articlePushVoters).toEqual(["alice"]);
+    expect(thread.articleBooVoters).toEqual(["bob"]);
+  });
+
+  it("uses an inverse pure article vote to cancel application state", () => {
+    const thread = aggregatePushes(
+      [
+        push("alice", "推", "08/12 22:07", "push", 10, 1),
+        push("alice", "噓", "08/12 22:08", "boo", 20, 2),
+      ],
+      OP,
+    );
+
+    expect(thread.nativeArticleScore).toBe(0);
+    expect(thread.articlePushVoters).toEqual([]);
+    expect(thread.articleBooVoters).toEqual([]);
+  });
+
+  it("withdraws only the matching reply vote and keeps composite body", () => {
+    const thread = aggregatePushes(
+      [
+        push("carol", "第十二樓。", "08/12 22:40", "neutral", 10, 12),
+        push("alice", "推12樓 我同意這個觀點。", "08/12 22:41", "neutral", 20, 13),
+        push("alice", "撤回我對12樓的推", "08/12 22:42", "neutral", 30, 14),
+      ],
+      OP,
+    );
+
+    const target = thread.pushes.find((item) => item.author === "carol")!;
+    const reply = thread.pushes.find((item) => item.author === "alice")!;
+    expect(target.score).toBe(0);
+    expect(reply).toMatchObject({ replyTo: target.id, content: "我同意這個觀點。" });
+  });
+
+  it("withdraws a whole composite event including its body and vote", () => {
+    const thread = aggregatePushes(
+      [
+        push("carol", "第十二樓。", "08/12 22:40", "neutral", 10, 12),
+        push("alice", "推12樓 我同意這個觀點。", "08/12 22:41", "neutral", 20, 13),
+        push("alice", "撤回我在13樓的發言", "08/12 22:42", "neutral", 30, 14),
+      ],
+      OP,
+    );
+
+    const target = thread.pushes.find((item) => item.author === "carol")!;
+    expect(target.score).toBe(0);
+    expect(thread.pushes.some((item) => item.author === "alice")).toBe(false);
+  });
+
+  it("applies Replace to body as opaque text without changing structure or vote", () => {
+    const thread = aggregatePushes(
+      [
+        push("carol", "第十二樓。", "08/12 22:06", "neutral", 10, 12),
+        push("alice", "推12樓 我不同意", "08/12 22:07", "boo", 20, 13),
+        push("alice", "更正我在13樓發言：回99樓：我改過的文字", "08/12 22:08", "neutral", 30, 14),
+      ],
+      OP,
+    );
+
+    const target = thread.pushes.find((item) => item.author === "carol")!;
+    const reply = thread.pushes.find((item) => item.author === "alice")!;
+    expect(thread.nativeArticleScore).toBe(-1);
+    expect(target.score).toBe(1);
+    expect(reply).toMatchObject({
+      replyTo: target.id,
+      content: "回99樓：我改過的文字",
+    });
+    expect(reply.editHistory).toEqual([
+      expect.objectContaining({ content: "我不同意" }),
+      expect.objectContaining({ content: "回99樓：我改過的文字" }),
+    ]);
+  });
+
+  it("aggregates each nested level and resolves any source floor to its card", () => {
+    const thread = aggregatePushes(
+      [
+        push("alice", "第一層內容還沒說完", "08/12 22:50", "neutral", 10, 1),
+        push("alice", "第一層接續完成。", "08/12 22:51", "neutral", 20, 2),
+        push("bob", "回1樓：第二層先說前半段", "08/12 22:52", "neutral", 30, 3),
+        push("bob", "第二層再補完。", "08/12 22:53", "neutral", 40, 4),
+        push("carol", "回4樓：第三層先回一部分", "08/12 22:54", "neutral", 50, 5),
+        push("carol", "第三層接著回完。", "08/12 22:55", "neutral", 60, 6),
+      ],
+      OP,
+    );
+
+    const alice = thread.pushes.find((item) => item.author === "alice")!;
+    const bob = thread.pushes.find((item) => item.author === "bob")!;
+    const carol = thread.pushes.find((item) => item.author === "carol")!;
+    expect(thread.pushes).toHaveLength(3);
+    expect(alice.sourceFloors).toEqual([1, 2]);
+    expect(bob).toMatchObject({ replyTo: alice.id, sourceFloors: [3, 4] });
+    expect(carol).toMatchObject({ replyTo: bob.id, sourceFloors: [5, 6] });
+  });
+
+  it("promotes fourth-level replies to the third display level", () => {
+    const thread = aggregatePushes(
+      [
+        push("alice", "第一層。", "08/12 22:20", "neutral", 10, 1),
+        push("bob", "回1樓：第二層。", "08/12 22:21", "neutral", 20, 2),
+        push("carol", "回2樓：第三層。", "08/12 22:22", "neutral", 30, 3),
+        push("dave", "回3樓：第四層輸入。", "08/12 22:23", "neutral", 40, 4),
+      ],
+      OP,
+    );
+    const bob = thread.pushes.find((item) => item.author === "bob")!;
+    const carol = thread.pushes.find((item) => item.author === "carol")!;
+    const dave = thread.pushes.find((item) => item.author === "dave")!;
+
+    expect(carol.replyTo).toBe(bob.id);
+    expect(dave.replyTo).toBe(bob.id);
   });
 });

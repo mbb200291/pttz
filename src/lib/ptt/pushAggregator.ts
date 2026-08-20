@@ -21,6 +21,36 @@ type AnchoredRawPush = RawPush & {
   rawFloor?: number;
 };
 
+type VoteDirection = "push" | "boo";
+
+interface ParsedPushIntent {
+  kind:
+    | "plain"
+    | "reply"
+    | "reply-vote"
+    | "article-vote"
+    | "reply-vote-withdraw"
+    | "edit";
+  targetFloor?: number;
+  direction?: VoteDirection;
+  visibleContent: string;
+  isControl: boolean;
+  editMode?: "append" | "replace" | "withdraw";
+  targetEndFloor?: number;
+}
+
+type ParsedRawPush = AnchoredRawPush & {
+  intent: ParsedPushIntent;
+  originalContent: string;
+  withdrawn: boolean;
+  editHistory: PushEditHistoryRecord[];
+};
+
+export interface PushEditHistoryRecord {
+  time: string;
+  content: string;
+}
+
 export interface AggregatedPush {
   id: string;
   type: PushType;
@@ -37,11 +67,18 @@ export interface AggregatedPush {
   marker?: string;
   pushVoters: string[]; // 對此聚合推文投「推」的作者（已去重）
   booVoters: string[];  // 對此聚合推文投「噓」的作者（已去重）
+  editHistory?: PushEditHistoryRecord[];
 }
 
 export interface AggregatedThread {
   pushes: AggregatedPush[];
   articleNotes: ArticleEditRecord[];
+  nativeArticleScore: number;
+  nativePushCount: number;
+  nativeBooCount: number;
+  nativeNeutralCount: number;
+  articlePushVoters: string[];
+  articleBooVoters: string[];
 }
 
 export function detectArticleVote(content: string): "push" | "boo" | null {
@@ -83,30 +120,39 @@ function stripContinuationMarker(content: string): string {
   return content.replace(CONTINUATION_MARKER_RE, "").trimEnd();
 }
 
-function isFullPushLine(push: AnchoredRawPush): boolean {
-  const visibleContent = stripContinuationMarker(push.content);
+function isFullPushLine(push: ParsedRawPush): boolean {
+  const visibleContent = stripContinuationMarker(push.intent.visibleContent);
   return push.isFullWidthLine ?? isFull(visibleContent);
 }
 
-function canContinueFromPush(push: AnchoredRawPush): boolean {
-  if (hasContinuationMarker(push.content)) return true;
+function canContinueFromPush(push: ParsedRawPush): boolean {
+  if (hasContinuationMarker(push.intent.visibleContent)) return true;
 
-  const visibleContent = stripContinuationMarker(push.content);
+  const visibleContent = stripContinuationMarker(push.intent.visibleContent);
   return !END_TERMINATOR_RE.test(visibleContent);
 }
 
-function mergePushContents(pushes: AnchoredRawPush[]): string {
+function mergePushContents(pushes: ParsedRawPush[]): string {
   if (pushes.length === 0) return "";
 
-  let merged = stripContinuationMarker(pushes[0].content);
+  let merged = stripContinuationMarker(pushes[0].intent.visibleContent);
   for (let i = 1; i < pushes.length; i += 1) {
     const previous = pushes[i - 1];
-    const current = stripContinuationMarker(pushes[i].content);
+    const current = stripContinuationMarker(pushes[i].intent.visibleContent);
     const separator = isFullPushLine(previous) ? "" : "\n";
     merged += `${separator}${current}`;
   }
 
   return merged;
+}
+
+function mergeOriginalPushContents(pushes: ParsedRawPush[]): string {
+  return mergePushContents(
+    pushes.map((push) => ({
+      ...push,
+      intent: { ...push.intent, visibleContent: push.originalContent },
+    })),
+  );
 }
 
 /** 解析 "MM/DD HH:mm" → 當年的分鐘數（用於計算時間差） */
@@ -127,27 +173,36 @@ function timeDiffMinutes(t1: string, t2: string): number {
 // ─── 合併群組 ─────────────────────────────────────────────────────────────────
 
 interface PushGroup {
-  pushes: AnchoredRawPush[]; // 要合併在一起的原始推文
+  pushes: ParsedRawPush[]; // 要合併在一起的原始推文
   anchorOrder: number;
+  targetFloor: number | null;
 }
 
 /**
  * 第一步：將原始推文分群（同作者可合併者放在同一群）
  */
-function groupPushes(rawPushes: AnchoredRawPush[]): PushGroup[] {
+function groupPushes(rawPushes: ParsedRawPush[]): PushGroup[] {
   const groups: PushGroup[] = [];
 
   for (let i = 0; i < rawPushes.length; i++) {
     const cur = rawPushes[i];
 
     // Vote events must stay independent from adjacent discussion content.
-    if (isPureVote(cur.content) || detectArticleVote(cur.content)) {
-      groups.push({ pushes: [cur], anchorOrder: cur.anchorOffset ?? i });
+    if (cur.intent.isControl) {
+      groups.push({
+        pushes: [cur],
+        anchorOrder: cur.anchorOffset ?? i,
+        targetFloor: cur.intent.targetFloor ?? null,
+      });
       continue;
     }
 
     if (groups.length === 0) {
-      groups.push({ pushes: [cur], anchorOrder: cur.anchorOffset ?? i });
+      groups.push({
+        pushes: [cur],
+        anchorOrder: cur.anchorOffset ?? i,
+        targetFloor: cur.intent.targetFloor ?? null,
+      });
       continue;
     }
 
@@ -162,15 +217,34 @@ function groupPushes(rawPushes: AnchoredRawPush[]): PushGroup[] {
 
     if (sameAuthorGroupIdx === -1) {
       // 從未出現過此作者
-      groups.push({ pushes: [cur], anchorOrder: cur.anchorOffset ?? i });
+      groups.push({
+        pushes: [cur],
+        anchorOrder: cur.anchorOffset ?? i,
+        targetFloor: cur.intent.targetFloor ?? null,
+      });
       continue;
     }
 
     const sameGroup = groups[sameAuthorGroupIdx];
     const lastPush = sameGroup.pushes[sameGroup.pushes.length - 1];
 
-    if (isPureVote(lastPush.content) || detectArticleVote(lastPush.content)) {
-      groups.push({ pushes: [cur], anchorOrder: cur.anchorOffset ?? i });
+    if (lastPush.intent.isControl) {
+      groups.push({
+        pushes: [cur],
+        anchorOrder: cur.anchorOffset ?? i,
+        targetFloor: cur.intent.targetFloor ?? null,
+      });
+      continue;
+    }
+
+    // 明確指向不同樓層的內容不得聚合；沒有 prefix 的續行則繼承前一群的目標。
+    const currentTarget = cur.intent.targetFloor ?? sameGroup.targetFloor;
+    if (currentTarget !== sameGroup.targetFloor) {
+      groups.push({
+        pushes: [cur],
+        anchorOrder: cur.anchorOffset ?? i,
+        targetFloor: cur.intent.targetFloor ?? null,
+      });
       continue;
     }
 
@@ -184,9 +258,12 @@ function groupPushes(rawPushes: AnchoredRawPush[]): PushGroup[] {
 
     if (canContinueFromPush(lastPush) && (isConsecutive || timeOk)) {
       sameGroup.pushes.push(cur);
-      sameGroup.anchorOrder = cur.anchorOffset ?? i;
     } else {
-      groups.push({ pushes: [cur], anchorOrder: cur.anchorOffset ?? i });
+      groups.push({
+        pushes: [cur],
+        anchorOrder: cur.anchorOffset ?? i,
+        targetFloor: cur.intent.targetFloor ?? null,
+      });
     }
   }
 
@@ -197,11 +274,11 @@ function groupPushes(rawPushes: AnchoredRawPush[]): PushGroup[] {
 
 const FLOOR_NUMBER_SOURCE = "[0-9零〇一二兩三四五六七八九十百千萬]+";
 const REPLY_PATTERNS: RegExp[] = [
-  new RegExp(`(^|[\\s\\u3000])回\\s*(${FLOOR_NUMBER_SOURCE})\\s*樓\\s*[：:]?\\s*`, "iu"),
-  new RegExp(`(^|[\\s\\u3000])回\\s*(${FLOOR_NUMBER_SOURCE})\\s*[fF]\\b\\s*[：:]?\\s*`, "iu"),
-  new RegExp(`(^|[\\s\\u3000])reply\\s+to\\s+(${FLOOR_NUMBER_SOURCE})\\s*[fF]\\b\\s*[：:]?\\s*`, "iu"),
-  new RegExp(`(^|[\\s\\u3000])to\\s*(${FLOOR_NUMBER_SOURCE})\\s*[fF]\\b\\s*[：:]?\\s*`, "iu"),
-  new RegExp(`(^|[\\s\\u3000])>>\\s*(${FLOOR_NUMBER_SOURCE})\\s*[fF]\\b\\s*[：:]?\\s*`, "iu"),
+  new RegExp(`^\\s*回\\s*(${FLOOR_NUMBER_SOURCE})\\s*樓(?=$|[\\s\\u3000：:])(?:[\\s\\u3000]*[：:]?[\\s\\u3000]*)([\\s\\S]*)$`, "iu"),
+  new RegExp(`^\\s*回\\s*(${FLOOR_NUMBER_SOURCE})\\s*[fF](?=$|[\\s\\u3000：:])(?:[\\s\\u3000]*[：:]?[\\s\\u3000]*)([\\s\\S]*)$`, "iu"),
+  new RegExp(`^\\s*reply\\s+to\\s+(${FLOOR_NUMBER_SOURCE})\\s*[fF](?=$|[\\s\\u3000：:])(?:[\\s\\u3000]*[：:]?[\\s\\u3000]*)([\\s\\S]*)$`, "iu"),
+  new RegExp(`^\\s*to\\s*(${FLOOR_NUMBER_SOURCE})\\s*[fF](?=$|[\\s\\u3000：:])(?:[\\s\\u3000]*[：:]?[\\s\\u3000]*)([\\s\\S]*)$`, "iu"),
+  new RegExp(`^\\s*>>\\s*(${FLOOR_NUMBER_SOURCE})\\s*[fF](?=$|[\\s\\u3000：:])(?:[\\s\\u3000]*[：:]?[\\s\\u3000]*)([\\s\\S]*)$`, "iu"),
 ];
 
 interface ReplyInfo {
@@ -213,14 +290,11 @@ function detectReply(content: string): ReplyInfo | null {
   for (const pattern of REPLY_PATTERNS) {
     const m = content.match(pattern);
     if (!m) continue;
-    const targetFloor = parseFloorNumber(m[2]);
+    const targetFloor = parseFloorNumber(m[1]);
     if (targetFloor === null) return null;
-    const before = content.slice(0, m.index).trimEnd();
-    const after = content.slice((m.index ?? 0) + m[0].length).trimStart();
-    const strippedContent = [before, after].filter(Boolean).join(" ");
     return {
       targetFloor,
-      strippedContent,
+      strippedContent: (m[2] ?? "").trimStart(),
     };
   }
 
@@ -283,54 +357,193 @@ function parseFloorNumber(raw: string): number | null {
 
 const VOTE_PATTERNS: Array<{
   re: RegExp;
-  direction: "push" | "boo";
+  direction: VoteDirection;
 }> = [
-  { re: /^推\s*([0-9零〇一二兩三四五六七八九十百千萬]+)\s*樓/iu, direction: "push" },
-  { re: /^([0-9零〇一二兩三四五六七八九十百千萬]+)\s*樓推一個/iu, direction: "push" },
-  { re: /^噓\s*([0-9零〇一二兩三四五六七八九十百千萬]+)\s*樓/iu, direction: "boo" },
+  {
+    re: new RegExp(`^\\s*推\\s*(${FLOOR_NUMBER_SOURCE})\\s*樓(?=$|[\\s\\u3000：:])(?:[\\s\\u3000]*[：:]?[\\s\\u3000]*)([\\s\\S]*)$`, "iu"),
+    direction: "push",
+  },
+  {
+    re: new RegExp(`^\\s*(${FLOOR_NUMBER_SOURCE})\\s*樓推一個(?=$|[\\s\\u3000：:])(?:[\\s\\u3000]*[：:]?[\\s\\u3000]*)([\\s\\S]*)$`, "iu"),
+    direction: "push",
+  },
+  {
+    re: new RegExp(`^\\s*噓\\s*(${FLOOR_NUMBER_SOURCE})\\s*樓(?=$|[\\s\\u3000：:])(?:[\\s\\u3000]*[：:]?[\\s\\u3000]*)([\\s\\S]*)$`, "iu"),
+    direction: "boo",
+  },
 ];
 
 interface VoteInfo {
   targetFloor: number;
-  direction: "push" | "boo";
+  direction: VoteDirection;
 }
 
-export function detectVote(content: string): VoteInfo | null {
+interface ParsedVoteInfo extends VoteInfo {
+  remainingContent: string;
+}
+
+function parseVote(content: string): ParsedVoteInfo | null {
   for (const { re, direction } of VOTE_PATTERNS) {
     const m = content.match(re);
     if (!m) continue;
     const targetFloor = parseFloorNumber(m[1]);
     if (targetFloor === null) continue;
-    return { targetFloor, direction };
+    return {
+      targetFloor,
+      direction,
+      remainingContent: (m[2] ?? "").trimStart(),
+    };
   }
   return null;
 }
 
-/**
- * 檢測是否為「純投票」（只有投票操作，後面無其他內容）
- * 例如：「推0樓」是純投票，「推0樓 我同意」不是純投票
- */
-function isPureVote(content: string): boolean {
-  const vote = detectVote(content);
-  if (!vote) return false;
+export function detectVote(content: string): VoteInfo | null {
+  const vote = parseVote(content);
+  if (!vote) return null;
+  return { targetFloor: vote.targetFloor, direction: vote.direction };
+}
 
-  // 找到投票 pattern 的結尾
-  const patterns = [
-    /^推\s*([0-9零〇一二兩三四五六七八九十百千萬]+)\s*樓/iu,
-    /^([0-9零〇一二兩三四五六七八九十百千萬]+)\s*樓推一個/iu,
-    /^噓\s*([0-9零〇一二兩三四五六七八九十百千萬]+)\s*樓/iu,
-  ];
-
-  for (const pattern of patterns) {
-    const m = content.match(pattern);
-    if (!m) continue;
-
-    // 投票後面是否還有其他內容（非空白）
-    const afterVote = content.slice(m[0].length).trim();
-    return afterVote.length === 0;
+function parsePushIntent(content: string): ParsedPushIntent {
+  const replyVoteWithdrawal = content.match(
+    new RegExp(`^\\s*撤回我對\\s*(${FLOOR_NUMBER_SOURCE})\\s*樓的(推|噓)\\s*$`, "u"),
+  );
+  if (replyVoteWithdrawal) {
+    const targetFloor = parseFloorNumber(replyVoteWithdrawal[1]);
+    if (targetFloor !== null) {
+      return {
+        kind: "reply-vote-withdraw",
+        targetFloor,
+        direction: replyVoteWithdrawal[2] === "推" ? "push" : "boo",
+        visibleContent: "",
+        isControl: true,
+      };
+    }
   }
 
-  return false;
+  const withdrawal = content.match(
+    new RegExp(`^\\s*撤回我在\\s*(${FLOOR_NUMBER_SOURCE})\\s*(?:樓\\s*)?(?:[~～-]\\s*(${FLOOR_NUMBER_SOURCE})\\s*樓?)?的發言\\s*$`, "u"),
+  );
+  if (withdrawal) {
+    const targetFloor = parseFloorNumber(withdrawal[1]);
+    const targetEndFloor = withdrawal[2]
+      ? parseFloorNumber(withdrawal[2])
+      : targetFloor;
+    if (targetFloor !== null && targetEndFloor !== null) {
+      return {
+        kind: "edit",
+        editMode: "withdraw",
+        targetFloor,
+        targetEndFloor,
+        visibleContent: "",
+        isControl: true,
+      };
+    }
+  }
+
+  const edit = content.match(
+    new RegExp(`^\\s*(補充|修正|更正(?:一下)?)我在\\s*(${FLOOR_NUMBER_SOURCE})\\s*樓(?:\\s*(?:說的|的說法|的回覆|發言))?\\s*[：:]\\s*([\\s\\S]*)$`, "u"),
+  );
+  if (edit) {
+    const targetFloor = parseFloorNumber(edit[2]);
+    if (targetFloor !== null) {
+      return {
+        kind: "edit",
+        editMode: edit[1] === "補充" ? "append" : "replace",
+        targetFloor,
+        targetEndFloor: targetFloor,
+        // Payload is intentionally opaque and never parsed as another command.
+        visibleContent: edit[3],
+        isControl: true,
+      };
+    }
+  }
+
+  const articleVote = detectArticleVote(content);
+  if (articleVote) {
+    return {
+      kind: "article-vote",
+      direction: articleVote,
+      visibleContent: "",
+      isControl: true,
+    };
+  }
+
+  const vote = parseVote(content);
+  if (vote) {
+    return {
+      kind: "reply-vote",
+      targetFloor: vote.targetFloor,
+      direction: vote.direction,
+      visibleContent: vote.remainingContent,
+      isControl: vote.remainingContent.length === 0,
+    };
+  }
+
+  const reply = detectReply(content);
+  if (reply) {
+    return {
+      kind: "reply",
+      targetFloor: reply.targetFloor,
+      visibleContent: reply.strippedContent,
+      isControl: false,
+    };
+  }
+
+  return {
+    kind: "plain",
+    visibleContent: content,
+    isControl: false,
+  };
+}
+
+function applyPushEdits(pushes: ParsedRawPush[]): void {
+  for (const command of pushes) {
+    if (command.intent.kind !== "edit") continue;
+    const start = command.intent.targetFloor;
+    const end = command.intent.targetEndFloor ?? start;
+    if (start === undefined || end === undefined) continue;
+
+    const commandAuthor = normalizePttId(command.author);
+    for (const target of pushes) {
+      const floor = target.rawFloor;
+      if (
+        floor === undefined ||
+        floor >= (command.rawFloor ?? Infinity) ||
+        floor < Math.min(start, end) ||
+        floor > Math.max(start, end) ||
+        normalizePttId(target.author) !== commandAuthor ||
+        target.intent.isControl
+      ) {
+        continue;
+      }
+
+      if (target.editHistory.length === 0) {
+        target.editHistory.push({
+          time: target.time,
+          content: target.intent.visibleContent,
+        });
+      }
+
+      if (command.intent.editMode === "withdraw") {
+        target.withdrawn = true;
+        target.editHistory.push({ time: command.time, content: " " });
+        continue;
+      }
+
+      if (command.intent.editMode === "append") {
+        const addition = command.intent.visibleContent;
+        target.intent.visibleContent = target.intent.visibleContent
+          ? `${target.intent.visibleContent}\n${addition}`
+          : addition;
+      } else {
+        target.intent.visibleContent = command.intent.visibleContent;
+      }
+      target.editHistory.push({
+        time: command.time,
+        content: target.intent.visibleContent,
+      });
+    }
+  }
 }
 
 function extractAuthorId(author: string): string {
@@ -390,9 +603,20 @@ export function aggregatePushes(
   articleEditRecords: ArticleEditRecord[] = [],
 ): AggregatedThread {
   const articleAuthorId = extractAuthorId(articleAuthor);
+  const parsedPushes: ParsedRawPush[] = rawPushes.map((push, index) => ({
+    ...push,
+    rawFloor: push.rawFloor ?? index + 1,
+    intent: parsePushIntent(push.content),
+    originalContent: push.content,
+    withdrawn: false,
+    editHistory: [],
+  }));
+  applyPushEdits(parsedPushes);
 
   // Step 1：分群
-  const groups = groupPushes(rawPushes);
+  const groups = groupPushes(
+    parsedPushes.filter((push) => !push.withdrawn && !push.intent.isControl),
+  );
 
   // Step 2：每群合成一則 AggregatedPush（暫時 replyTo=null, score=0）
   const firstLayer: AggregatedPush[] = [];
@@ -421,18 +645,28 @@ export function aggregatePushes(
       sourceFloors: g.pushes.map((push, index) => push.rawFloor ?? i + index + 1),
       pushVoters: [],
       booVoters: [],
+      editHistory: g.pushes.flatMap((push) => push.editHistory),
     });
   }
 
   // Step 2b：收集投票者（誰推了哪一樓 / 噓了哪一樓）
   // 在原始推文層級掃描，以支援同作者先推後噓的覆蓋邏輯
   // Map<pushId, Map<author, "push"|"boo">> 用於覆蓋式去重
-  const voterDirectionMap = new Map<string, Map<string, "push" | "boo">>();
-  for (const rawPush of rawPushes) {
-    const vote = detectVote(rawPush.content);
-    if (!vote) continue;
+  const voterDirectionMap = new Map<string, Map<string, VoteDirection>>();
+  for (const rawPush of parsedPushes) {
+    if (rawPush.withdrawn) continue;
+    const intent = rawPush.intent;
+    if (
+      intent.kind !== "reply-vote" &&
+      intent.kind !== "reply-vote-withdraw"
+    ) {
+      continue;
+    }
+    const targetFloor = intent.targetFloor;
+    const direction = intent.direction;
+    if (targetFloor === undefined || direction === undefined) continue;
     const target = firstLayer.find((candidate) =>
-      candidate.sourceFloors.includes(vote.targetFloor),
+      candidate.sourceFloors.includes(targetFloor),
     );
     if (!target) continue;
 
@@ -442,7 +676,21 @@ export function aggregatePushes(
     const authorMap = voterDirectionMap.get(target.id)!;
     const voterId = normalizePttId(rawPush.author);
     const previous = authorMap.get(voterId);
-    if (previous === vote.direction) continue; // 無變化
+    if (intent.kind === "reply-vote-withdraw") {
+      if (previous !== direction) continue;
+      if (previous === "push") {
+        target.pushVoters = target.pushVoters.filter(
+          (author) => normalizePttId(author) !== voterId,
+        );
+      } else {
+        target.booVoters = target.booVoters.filter(
+          (author) => normalizePttId(author) !== voterId,
+        );
+      }
+      authorMap.delete(voterId);
+      continue;
+    }
+    if (previous === direction) continue; // 無變化
 
     // 移除舊方向
     if (previous === "push") {
@@ -456,12 +704,12 @@ export function aggregatePushes(
     }
 
     // 加入新方向
-    if (vote.direction === "push") {
+    if (direction === "push") {
       target.pushVoters.push(rawPush.author);
     } else {
       target.booVoters.push(rawPush.author);
     }
-    authorMap.set(voterId, vote.direction);
+    authorMap.set(voterId, direction);
   }
 
   for (const push of firstLayer) {
@@ -473,19 +721,20 @@ export function aggregatePushes(
   const topLevel: AggregatedPush[] = [];
   const pushById = new Map(firstLayer.map((push) => [push.id, push]));
   let floor = 1;
-  for (const p of firstLayer) {
-    const reply = detectReply(p.content);
-    if (reply) {
+  for (let i = 0; i < firstLayer.length; i += 1) {
+    const p = firstLayer[i];
+    const targetFloor = groups[i].targetFloor;
+    if (targetFloor !== null) {
       const target = firstLayer.find((candidate) =>
-        candidate.sourceFloors.includes(reply.targetFloor),
+        candidate.sourceFloors.includes(targetFloor),
       );
       if (target && target.id !== p.id && target.anchorOrder < p.anchorOrder) {
         const clampedTarget = clampReplyTargetDepth(target, pushById);
         p.replyTo = clampedTarget.id;
-        p.content = reply.strippedContent;
         p.floorNumber = clampedTarget.floorNumber;
       } else {
         p.replyTo = null;
+        p.content = mergeOriginalPushContents(groups[i].pushes);
         p.floorNumber = floor;
         floor++;
         topLevel.push(p);
@@ -508,12 +757,17 @@ export function aggregatePushes(
 
     for (let i = 0; i < firstLayer.length; i += 1) {
       const candidate = firstLayer[i];
+      const candidateLastOrder = Math.max(
+        ...groups[i].pushes.map((push, pushIndex) =>
+          push.anchorOffset ?? candidate.anchorOrder + pushIndex,
+        ),
+      );
       if (
-        candidate.anchorOrder < note.contentAnchorOffset &&
-        candidate.anchorOrder > targetOrder
+        candidateLastOrder < note.contentAnchorOffset &&
+        candidateLastOrder > targetOrder
       ) {
         target = candidate;
-        targetOrder = candidate.anchorOrder;
+        targetOrder = candidateLastOrder;
       }
     }
 
@@ -538,31 +792,48 @@ export function aggregatePushes(
     }
   }
 
-  // Step 5：過濾掉純投票推文（不顯示為獨立回文）
-  // 純投票已在 Step 2b 時對投票目標記錄過投票者，此處只移除顯示
-  const displayedPushes = threadPushes.filter((push) => {
-    // 編輯記錄類型保留
-    if (push.type === "edit") return true;
-    // 檢查是否為純投票推文
-    return !isPureVote(push.content);
-  });
+  const articleVoters = new Map<string, { author: string; direction: VoteDirection }>();
+  for (const rawPush of parsedPushes) {
+    if (rawPush.withdrawn || rawPush.intent.kind !== "article-vote") continue;
+    const direction = rawPush.intent.direction;
+    if (!direction) continue;
+    const voterId = normalizePttId(rawPush.author);
+    const previous = articleVoters.get(voterId);
+    if (previous?.direction === direction) continue;
+    if (previous && previous.direction !== direction) {
+      articleVoters.delete(voterId);
+      continue;
+    }
+    articleVoters.set(voterId, { author: rawPush.author, direction });
+  }
+
+  const nativePushCount = rawPushes.filter((push) => push.type === "push").length;
+  const nativeBooCount = rawPushes.filter((push) => push.type === "boo").length;
+  const nativeNeutralCount = rawPushes.filter((push) => push.type === "neutral").length;
 
   return {
-    pushes: displayedPushes,
+    pushes: threadPushes,
     articleNotes: articleEditRecords,
+    nativeArticleScore: nativePushCount - nativeBooCount,
+    nativePushCount,
+    nativeBooCount,
+    nativeNeutralCount,
+    articlePushVoters: [...articleVoters.values()]
+      .filter((vote) => vote.direction === "push")
+      .map((vote) => vote.author),
+    articleBooVoters: [...articleVoters.values()]
+      .filter((vote) => vote.direction === "boo")
+      .map((vote) => vote.author),
   };
 }
 
 /**
  * 計算文章的推/噓總分（只看第一層非嵌套推文）
  */
-export function calcArticleScore(pushes: AggregatedPush[]): number {
-  return pushes
-    .filter((p) => p.replyTo === null)
-    .reduce((acc, p) => {
-      const direction = detectArticleVote(p.content) ?? p.type;
-      if (direction === "push") return acc + 1;
-      if (direction === "boo") return acc - 1;
-      return acc;
-    }, 0);
+export function calcArticleScore(pushes: Array<Pick<RawPush, "type">>): number {
+  return pushes.reduce((score, push) => {
+    if (push.type === "push") return score + 1;
+    if (push.type === "boo") return score - 1;
+    return score;
+  }, 0);
 }
