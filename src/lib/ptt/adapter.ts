@@ -191,6 +191,18 @@ export interface ReplyArticleToBoardRequest {
   body: string;
 }
 
+export interface ArticleReplyTimeouts {
+  completionMs: number;
+  pollMs: number;
+  afterPromptMs: number;
+}
+
+const DEFAULT_ARTICLE_REPLY_TIMEOUTS: ArticleReplyTimeouts = {
+  completionMs: 8000,
+  pollMs: 50,
+  afterPromptMs: 80,
+};
+
 export function formatBoardReplyTitle(title: string): string {
   return `Re: ${title.replace(/^(?:Re:\s*)+/giu, "").trim()}`;
 }
@@ -2155,6 +2167,7 @@ export async function submitArticleEditFromBot(
 export async function submitArticleReplyToBoardFromBot(
   bot: WriteBot,
   request: ReplyArticleToBoardRequest,
+  timeoutOverrides: Partial<ArticleReplyTimeouts> = {},
 ): Promise<ActionResult> {
   if (!bot.send || !bot.getLine || !bot.getLines) {
     return { ok: false, reason: "PTT client 不支援回應文章" };
@@ -2162,6 +2175,10 @@ export async function submitArticleReplyToBoardFromBot(
 
   const body = sanitizePostBody(request.body).trimEnd();
   if (!body.trim()) return { ok: false, reason: "回應正文不可為空" };
+  const timeouts = {
+    ...DEFAULT_ARTICLE_REPLY_TIMEOUTS,
+    ...timeoutOverrides,
+  };
 
   const aid = request.articleAid?.trim().replace(/^#/u, "") ?? "";
   if (request.articleIndex <= 0 && !aid) {
@@ -2273,26 +2290,38 @@ export async function submitArticleReplyToBoardFromBot(
   let answeredSave = false;
   let answeredRule = false;
   let answeredSignature = false;
-  while (Date.now() - savedAt < 8000) {
+  while (Date.now() - savedAt < timeouts.completionMs) {
     const screen = readVisibleScreen(bot);
     const plain = stripAnsi(screen).replace(/\r/g, "");
     if (
-      isPostSuccessScreen(plain) ||
-      (extractCurrentBoardName(screen)?.toLowerCase() ===
-        request.boardName.toLowerCase() && isBoardListScreen(screen))
+      answeredSave &&
+      /請按任意鍵繼續|按任意鍵繼續/u.test(plain)
     ) {
+      await bot.send("\r");
+      await sleep(timeouts.afterPromptMs);
+      await ensureNormalBoardView(bot, request.boardName);
+      return { ok: true };
+    }
+    if (
+      extractCurrentBoardName(screen)?.toLowerCase() ===
+        request.boardName.toLowerCase() && isBoardListScreen(screen)
+    ) {
+      return { ok: true };
+    }
+    if (isPostSuccessScreen(plain)) {
+      await ensureNormalBoardView(bot, request.boardName);
       return { ok: true };
     }
     if (!answeredSignature && /簽名檔|signature/iu.test(plain)) {
       await bot.send("0\r");
       answeredSignature = true;
-      await sleep(80);
+      await sleep(timeouts.afterPromptMs);
       continue;
     }
     if (!answeredRule && answeredSave && /符合分類|分類規定/u.test(plain)) {
       await bot.send("y\r");
       answeredRule = true;
-      await sleep(80);
+      await sleep(timeouts.afterPromptMs);
       continue;
     }
     if (
@@ -2301,16 +2330,19 @@ export async function submitArticleReplyToBoardFromBot(
     ) {
       await bot.send("y\r");
       answeredSave = true;
-      await sleep(80);
+      await sleep(timeouts.afterPromptMs);
       continue;
     }
-    await sleep(50);
+    await sleep(timeouts.pollMs);
   }
 
+  const restored = await ensureNormalBoardView(bot, request.boardName);
   return {
     ok: false,
     reason: answeredSave
-      ? "無法確認回應是否送出，請重新整理看板檢查"
+      ? restored
+        ? "無法確認回應是否送出，已返回看板，請重新整理檢查"
+        : "無法確認回應是否送出，請重新整理看板檢查"
       : "PTT 未顯示回應儲存確認",
   };
 }
