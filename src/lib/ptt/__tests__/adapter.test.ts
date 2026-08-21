@@ -84,8 +84,77 @@ describe("ptt adapter module", () => {
         afterConfirmMs: 0,
         afterContinueMs: 0,
       }),
-    ).resolves.toEqual({ ok: false });
+    ).resolves.toEqual({
+      ok: false,
+      code: "push-entry-timeout",
+      reason: "PTT 未顯示推文方式，請重新載入文章後再試",
+    });
     expect(sent).toEqual(["X", "\x03"]);
+  });
+
+  it("reports when the push content prompt cannot be confirmed", async () => {
+    const mod = await import("../adapter");
+    const sent: string[] = [];
+    const bot = {
+      async send(command: string) {
+        sent.push(command);
+        return true;
+      },
+      getLine(index: number) {
+        return {
+          str: index === 0 ? "1.值得推薦 2.給它噓聲 3.只加註解" : "",
+        };
+      },
+    };
+
+    await expect(
+      mod.submitPushFromCurrentArticle(bot, "內容", "neutral", undefined, {
+        typePromptMs: 5,
+        confirmMs: 5,
+        pollMs: 1,
+        afterTypeMs: 0,
+        afterConfirmMs: 0,
+        afterContinueMs: 0,
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      code: "push-content-prompt-timeout",
+      reason: "PTT 未顯示推文輸入框，請重新載入文章後再試",
+    });
+    expect(sent).toEqual(["X", "3", "\x03"]);
+  });
+
+  it("reports an uncertain result when push confirmation is missing", async () => {
+    const mod = await import("../adapter");
+    const sent: string[] = [];
+    let screen = "1.值得推薦 2.給它噓聲 3.只加註解";
+    const bot = {
+      async send(command: string) {
+        sent.push(command);
+        if (command === "3") screen = "請輸入推文內容:";
+        if (command === "內容\r") screen = "瀏覽文章";
+        return true;
+      },
+      getLine(index: number) {
+        return { str: index === 0 ? screen : "" };
+      },
+    };
+
+    await expect(
+      mod.submitPushFromCurrentArticle(bot, "內容", "neutral", undefined, {
+        typePromptMs: 10,
+        confirmMs: 5,
+        pollMs: 1,
+        afterTypeMs: 0,
+        afterConfirmMs: 0,
+        afterContinueMs: 0,
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      code: "push-confirm-timeout",
+      reason: "無法確認回文是否送出，請重新整理文章檢查",
+    });
+    expect(sent).toEqual(["X", "3", "內容\r"]);
   });
 
   it.each([

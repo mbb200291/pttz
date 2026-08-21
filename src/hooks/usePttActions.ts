@@ -83,28 +83,28 @@ export interface PttActionsResult {
     content: string,
     pushType: PushType,
     boardName?: string,
-  ): Promise<{ ok: boolean }>;
+  ): Promise<ActionResult>;
   replyToPush(
     floor: number,
     content: string,
     pushType: PushType,
     boardName?: string,
-  ): Promise<{ ok: boolean }>;
+  ): Promise<ActionResult>;
   voteArticle(
     floor: number,
     kind: "push" | "boo",
     boardName?: string,
-  ): Promise<{ ok: boolean }>;
+  ): Promise<ActionResult>;
   votePush(
     floor: number,
     kind: "push" | "boo",
     boardName?: string,
-  ): Promise<{ ok: boolean }>;
+  ): Promise<ActionResult>;
   withdrawPushVote(
     floor: number,
     kind: "push" | "boo",
     boardName?: string,
-  ): Promise<{ ok: boolean }>;
+  ): Promise<ActionResult>;
   postArticle(
     board: string,
     category: string,

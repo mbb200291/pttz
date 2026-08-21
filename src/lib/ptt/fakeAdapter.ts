@@ -381,7 +381,7 @@ class FakePttAdapter implements PttAdapter {
     return board ? [board.category, "測試", "閒聊", "分享"] : ["測試"];
   }
 
-  async replyToArticle(content: string, pushType: PushType, boardName?: string): Promise<{ ok: boolean }> {
+  async replyToArticle(content: string, pushType: PushType, boardName?: string): Promise<ActionResult> {
     return this.appendPush(boardName, content, pushType);
   }
 
@@ -390,22 +390,22 @@ class FakePttAdapter implements PttAdapter {
     content: string,
     pushType: PushType,
     boardName?: string,
-  ): Promise<{ ok: boolean }> {
+  ): Promise<ActionResult> {
     const body = content.trim().match(/^回.+樓/u)
       ? content
       : `回${floor}樓：${content}`;
     return this.appendPush(boardName, body, pushType);
   }
 
-  async voteArticle(floor: number, kind: "push" | "boo", boardName?: string): Promise<{ ok: boolean }> {
+  async voteArticle(floor: number, kind: "push" | "boo", boardName?: string): Promise<ActionResult> {
     return this.appendPush(boardName, `${kind === "push" ? "推" : "噓"}${floor}樓`, "neutral");
   }
 
-  async votePush(floor: number, kind: "push" | "boo", boardName?: string): Promise<{ ok: boolean }> {
+  async votePush(floor: number, kind: "push" | "boo", boardName?: string): Promise<ActionResult> {
     return this.voteArticle(floor, kind, boardName);
   }
 
-  async withdrawPushVote(floor: number, kind: "push" | "boo", boardName?: string): Promise<{ ok: boolean }> {
+  async withdrawPushVote(floor: number, kind: "push" | "boo", boardName?: string): Promise<ActionResult> {
     return this.appendPush(
       boardName,
       `撤回我對${floor}樓的${kind === "push" ? "推" : "噓"}`,

@@ -154,9 +154,15 @@ export interface ArticleOpenTrace {
   finalBoard?: string;
 }
 
+export type ActionFailureCode =
+  | "push-entry-timeout"
+  | "push-content-prompt-timeout"
+  | "push-confirm-timeout";
+
 export interface ActionResult {
   ok: boolean;
   reason?: string;
+  code?: ActionFailureCode;
 }
 
 export interface EditArticleRequest {
@@ -238,28 +244,28 @@ export interface PttAdapter {
     content: string,
     pushType: PushType,
     boardName?: string,
-  ) => Promise<{ ok: boolean }>;
+  ) => Promise<ActionResult>;
   replyToPush: (
     floor: number,
     content: string,
     pushType: PushType,
     boardName?: string,
-  ) => Promise<{ ok: boolean }>;
+  ) => Promise<ActionResult>;
   voteArticle: (
     floor: number,
     kind: "push" | "boo",
     boardName?: string,
-  ) => Promise<{ ok: boolean }>;
+  ) => Promise<ActionResult>;
   votePush: (
     floor: number,
     kind: "push" | "boo",
     boardName?: string,
-  ) => Promise<{ ok: boolean }>;
+  ) => Promise<ActionResult>;
   withdrawPushVote: (
     floor: number,
     kind: "push" | "boo",
     boardName?: string,
-  ) => Promise<{ ok: boolean }>;
+  ) => Promise<ActionResult>;
   postArticle: (
     board: string,
     category: string,
@@ -824,7 +830,7 @@ class PttClientAdapter implements PttAdapter {
     content: string,
     pushType: PushType,
     boardName?: string,
-  ): Promise<{ ok: boolean }> {
+  ): Promise<ActionResult> {
     return this.runSerial(async () => {
       await this.waitUntilLoggedIn();
       return submitPushFromCurrentArticle(this.bot, content, pushType, boardName);
@@ -836,7 +842,7 @@ class PttClientAdapter implements PttAdapter {
     content: string,
     pushType: PushType,
     boardName?: string,
-  ): Promise<{ ok: boolean }> {
+  ): Promise<ActionResult> {
     return this.replyToArticle(formatReplyToFloor(floor, content), pushType, boardName);
   }
 
@@ -844,7 +850,7 @@ class PttClientAdapter implements PttAdapter {
     floor: number,
     kind: "push" | "boo",
     boardName?: string,
-  ): Promise<{ ok: boolean }> {
+  ): Promise<ActionResult> {
     return this.replyToArticle(formatVoteForFloor(floor, kind), "neutral", boardName);
   }
 
@@ -852,7 +858,7 @@ class PttClientAdapter implements PttAdapter {
     floor: number,
     kind: "push" | "boo",
     boardName?: string,
-  ): Promise<{ ok: boolean }> {
+  ): Promise<ActionResult> {
     return this.replyToArticle(formatVoteForFloor(floor, kind), "neutral", boardName);
   }
 
@@ -860,7 +866,7 @@ class PttClientAdapter implements PttAdapter {
     floor: number,
     kind: "push" | "boo",
     boardName?: string,
-  ): Promise<{ ok: boolean }> {
+  ): Promise<ActionResult> {
     const direction = kind === "push" ? "推" : "噓";
     return this.replyToArticle(`撤回我對${floor}樓的${direction}`, "neutral", boardName);
   }
@@ -2352,7 +2358,7 @@ export async function submitPushFromCurrentArticle(
   pushType: PushType,
   returnBoardName?: string,
   timeoutOverrides: Partial<SubmitPushTimeouts> = {},
-): Promise<{ ok: boolean }> {
+): Promise<ActionResult> {
   const trimmed = content.trim();
   if (!trimmed) return { ok: false };
   if (!bot.send || !bot.getLine) {
@@ -2381,11 +2387,19 @@ export async function submitPushFromCurrentArticle(
     );
     if (!contentReady) {
       await bot.send(PTT_KEY_CTRL_C);
-      return { ok: false };
+      return {
+        ok: false,
+        code: "push-content-prompt-timeout",
+        reason: "PTT 未顯示推文輸入框，請重新載入文章後再試",
+      };
     }
   } else if (entry !== "content" || pushType !== "neutral") {
     await bot.send(PTT_KEY_CTRL_C);
-    return { ok: false };
+    return {
+      ok: false,
+      code: "push-entry-timeout",
+      reason: "PTT 未顯示推文方式，請重新載入文章後再試",
+    };
   }
 
   await bot.send(`${trimmed}\r`);
@@ -2410,7 +2424,11 @@ export async function submitPushFromCurrentArticle(
     return { ok: true };
   }
 
-  return { ok: false };
+  return {
+    ok: false,
+    code: "push-confirm-timeout",
+    reason: "無法確認回文是否送出，請重新整理文章檢查",
+  };
 }
 
 function sanitizePostBody(body: string): string {
