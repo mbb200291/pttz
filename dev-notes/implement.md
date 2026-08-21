@@ -85,6 +85,7 @@ src/components/              ← React UI 元件（LoginModal、ArticleList、Ar
 5. 文章 debug dump 產生，協助定位真站解析問題
 6. 發文、回文與文章編輯的序列化終端操作
 7. 文章編輯前後的文章身分、editor、儲存提示與完成畫面驗證
+8. 回文寫入的結構化失敗階段、安全單次恢復，以及原生看板回應的 continuation / terminal 歸位
 
 ### 2. 狀態橋接層
 
@@ -208,6 +209,7 @@ src/components/              ← React UI 元件（LoginModal、ArticleList、Ar
 28. PTT 推噓寫入需確認類型選單，無法確認時不降級為箭頭推文
 29. 作者文章刪除：二次確認後由 adapter serial queue 透過 ptt-client bot 送出刪文指令，身分與成功狀態無法確認時安全失敗
 30. Goal 3／7 投票模型對齊：raw PTT 類別與內容 intent 分軌、複合回覆、原始樓號聚合、文章／回文投票 reducer、撤回與 opaque 編輯歷史
+31. Goal 7 回文狀態安全：原作者只能用 `→`、推文失敗原因可辨識、內容送出前可安全重試一次、原生看板回應完成提示與不確定結果歸位
 
 ## 目前保留的舊程式邏輯
 
