@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ArticleData } from "../../hooks/useArticle";
 import { Article } from "../Article";
@@ -157,6 +157,49 @@ describe("Article push voting", () => {
     expect((screen.getAllByRole("button", { name: "推" }).at(-1) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getAllByRole("button", { name: "噓" }).at(-1) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: "→" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("reloads and retries once when no reply content was sent", async () => {
+    mocks.replyToArticle
+      .mockResolvedValueOnce({
+        ok: false,
+        code: "push-entry-timeout",
+        reason: "PTT 未顯示推文方式，請重新載入文章後再試",
+      })
+      .mockResolvedValueOnce({ ok: true });
+    renderArticle();
+
+    act(() => screen.getByRole("button", { name: "回覆此文" }).click());
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "安全重試" },
+    });
+    act(() => screen.getByRole("button", { name: "送出" }).click());
+
+    await waitFor(() => expect(mocks.replyToArticle).toHaveBeenCalledTimes(2));
+    expect(mocks.reload).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  it("does not retry after reply content may have been sent", async () => {
+    mocks.replyToArticle.mockResolvedValue({
+      ok: false,
+      code: "push-confirm-timeout",
+      reason: "無法確認回文是否送出，請重新整理文章檢查",
+    });
+    renderArticle();
+
+    act(() => screen.getByRole("button", { name: "回覆此文" }).click());
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "不可重送" },
+    });
+    act(() => screen.getByRole("button", { name: "送出" }).click());
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "無法確認回文是否送出，請重新整理文章檢查",
+    );
+    expect(mocks.replyToArticle).toHaveBeenCalledTimes(1);
+    expect(mocks.reload).not.toHaveBeenCalled();
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("不可重送");
   });
   it("clicking the selected reply direction sends a withdrawal", async () => {
     mocks.withdrawPushVote.mockResolvedValue({ ok: true });

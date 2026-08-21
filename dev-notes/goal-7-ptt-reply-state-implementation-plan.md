@@ -152,7 +152,7 @@ mocks.replyToArticle
   .mockResolvedValueOnce({ ok: true });
 ```
 
-驗證 `reload` 一次、`replyToArticle` 兩次且 composer 關閉。另一案例回傳 `push-confirm-timeout`，驗證不 reload、不重試，而且 alert 顯示 adapter reason、草稿仍在。
+驗證 `reload` 兩次（重試前歸位一次、成功後刷新一次）、`replyToArticle` 兩次且 composer 關閉。另一案例回傳 `push-confirm-timeout`，驗證不 reload、不重試，而且 alert 顯示 adapter reason、草稿仍在。
 
 - [ ] **Step 2: 驗證 RED**
 

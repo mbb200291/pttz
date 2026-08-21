@@ -574,16 +574,31 @@ export function Article({
         ? `回${payload.targetFloor}樓：${payload.body}`
         : payload.body;
     const outgoingPushType = isArticleAuthor ? "neutral" : payload.pushType;
-    void actions.replyToArticle(body, outgoingPushType, boardName).then((result) => {
-      if (!result.ok) {
-        setComposerSubmitError("回文送出失敗");
-        return;
+    void (async () => {
+      try {
+        let result = await actions.replyToArticle(body, outgoingPushType, boardName);
+        if (
+          !result.ok &&
+          (result.code === "push-entry-timeout" ||
+            result.code === "push-content-prompt-timeout")
+        ) {
+          await liveReload();
+          result = await actions.replyToArticle(body, outgoingPushType, boardName);
+        }
+        if (!result.ok) {
+          setComposerSubmitError(result.reason ?? "回文送出失敗");
+          return;
+        }
+        setComposer(null);
+        void liveReload();
+      } catch (error) {
+        setComposerSubmitError(
+          error instanceof Error ? error.message : "回文送出失敗",
+        );
+      } finally {
+        setComposerSubmitting(false);
       }
-      setComposer(null);
-      void liveReload();
-    }).catch((error) => {
-      setComposerSubmitError(error instanceof Error ? error.message : "回文送出失敗");
-    }).finally(() => setComposerSubmitting(false));
+    })();
   }, [actions, boardName, composer, composerSubmitting, isArticleAuthor, liveReload]);
 
   const initialArticle =
