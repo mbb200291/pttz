@@ -44,7 +44,7 @@
 - 真實與 fake adapter 的回文投票固定以 `neutral` 送出；撤回格式為 `撤回我對x樓的推／噓`。
 - 文章投票再次操作時，以相反的 PTT 推噓類別送出純 `推／噓` 來抵銷原生分數。
 - Article 使用解析器回傳的文章投票者、raw 類別統計與原生分數，不再從可見卡片反推。
-- PushThread 顯示 `1–2F`、`1、3F` 等原始來源樓號，並使用解析後的 server-side 編輯歷史。
+- PushThread 不顯示原始來源樓號；`sourceFloors` 仍保留於應用狀態，卡片 DOM 另以 `data-source-floors` 保存，且不提供 tooltip 或選單。編輯歷史仍使用 server-side 解析結果。
 - UI 不再禁止第四層回覆；仍送出被點擊卡片的原始樓號，由 parser 套用三層顯示上限。
 
 ### HTML cases 覆蓋

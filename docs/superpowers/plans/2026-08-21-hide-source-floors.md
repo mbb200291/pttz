@@ -16,7 +16,7 @@
 - Modify: `src/components/PushThread.tsx:154-183,450-545`
 - Test: `src/components/__tests__/PushThread.test.tsx:245-259`
 
-- [ ] **Step 1: Replace the visible-floor test with a metadata contract**
+- [x] **Step 1: Replace the visible-floor test with a metadata contract**
 
 ```tsx
 it("hides source floors while retaining DOM metadata", () => {
@@ -37,13 +37,13 @@ it("hides source floors while retaining DOM metadata", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test and verify RED**
+- [x] **Step 2: Run the test and verify RED**
 
 Run: `npx vitest run src/components/__tests__/PushThread.test.tsx`
 
 Expected: FAIL because the markup still renders `1–2F` and `4、7F`, and has no `data-source-floors` attribute.
 
-- [ ] **Step 3: Make the minimal component change**
+- [x] **Step 3: Make the minimal component change**
 
 Delete `formatSourceFloors` and `FloorChip`. Add the metadata to the visible card container:
 
@@ -61,7 +61,7 @@ Delete `formatSourceFloors` and `FloorChip`. Add the metadata to the visible car
 
 Delete the header block that renders `<FloorChip>`.
 
-- [ ] **Step 4: Verify GREEN and regression safety**
+- [x] **Step 4: Verify GREEN and regression safety**
 
 Run: `npx vitest run src/components/__tests__/PushThread.test.tsx`
 
@@ -71,7 +71,7 @@ Run: `npm test && npm run build`
 
 Expected: all repository tests and the production build pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/components/PushThread.tsx src/components/__tests__/PushThread.test.tsx docs/superpowers/plans/2026-08-21-hide-source-floors.md

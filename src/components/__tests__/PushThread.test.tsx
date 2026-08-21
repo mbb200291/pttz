@@ -242,7 +242,7 @@ describe("PushThread", () => {
     expect(html).toContain("沒有新回文");
   });
 
-  it("shows original source floors for contiguous and interleaved aggregates", () => {
+  it("hides source floors while retaining DOM metadata", () => {
     const html = renderToStaticMarkup(
       <PushThread
         score={0}
@@ -253,8 +253,10 @@ describe("PushThread", () => {
       />,
     );
 
-    expect(html).toContain("1–2F");
-    expect(html).toContain("4、7F");
+    expect(html).toContain('data-source-floors="1,2"');
+    expect(html).toContain('data-source-floors="4,7"');
+    expect(html).not.toContain("1–2F");
+    expect(html).not.toContain("4、7F");
   });
 
   it("hides standalone article votes from the discussion thread", () => {

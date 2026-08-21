@@ -151,36 +151,6 @@ function PushBadge({ type }: { type: AggregatedPush["type"] }) {
   );
 }
 
-// ─── FloorChip ────────────────────────────────────────────────────────────────
-
-function formatSourceFloors(sourceFloors: number[], fallbackFloor: number): string {
-  const floors = [...new Set(sourceFloors.length > 0 ? sourceFloors : [fallbackFloor])]
-    .filter(Boolean)
-    .sort((a, b) => a - b);
-  if (floors.length === 0) return "";
-  const consecutive = floors.every((floor, index) => index === 0 || floor === floors[index - 1] + 1);
-  if (floors.length > 1 && consecutive) return `${floors[0]}–${floors[floors.length - 1]}F`;
-  return `${floors.join("、")}F`;
-}
-
-function FloorChip({ sourceFloors, fallbackFloor }: { sourceFloors: number[]; fallbackFloor: number }) {
-  const label = formatSourceFloors(sourceFloors, fallbackFloor);
-  if (!label) return null;
-  return (
-    <span style={{
-      fontFamily: "var(--font-mono)",
-      fontSize: 10.5,
-      color: "var(--text-dim)",
-      padding: "2px 6px",
-      borderRadius: 5,
-      background: "var(--surface)",
-      border: "1px solid var(--border)",
-    }}>
-      {label}
-    </span>
-  );
-}
-
 // ─── ghostBtn style factory ───────────────────────────────────────────────────
 
 function ghostBtnStyle(active = false): React.CSSProperties {
@@ -459,17 +429,22 @@ function PushItem({
         }} />
       )}
 
-      <div style={{
-        border: cardBorder,
-        borderRadius: 10,
-        padding: "8px 10px",
-        marginBottom: 4,
-        background: cardBackground,
-        display: "flex",
-        alignItems: "flex-start",
-        gap: 10,
-        flexWrap: "wrap",
-      }}>
+      <div
+        data-source-floors={
+          push.sourceFloors.length > 0 ? push.sourceFloors.join(",") : undefined
+        }
+        style={{
+          border: cardBorder,
+          borderRadius: 10,
+          padding: "8px 10px",
+          marginBottom: 4,
+          background: cardBackground,
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 10,
+          flexWrap: "wrap",
+        }}
+      >
         <div style={{ flex: 1, minWidth: 0 }}>
           {/* Card header */}
           <div style={{
@@ -528,12 +503,6 @@ function PushItem({
               </span>
             )}
 
-            {(push.floorNumber > 0 || push.sourceFloors.length > 0) && (
-              <FloorChip
-                sourceFloors={push.sourceFloors}
-                fallbackFloor={push.floorNumber}
-              />
-            )}
           </div>
 
           {/* Content */}
