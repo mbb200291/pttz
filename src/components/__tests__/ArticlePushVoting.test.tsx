@@ -119,7 +119,7 @@ describe("Article push voting", () => {
     const booButton = screen.getAllByRole("button", { name: "噓" })[0] as HTMLButtonElement;
     expect(pushButton.disabled).toBe(true);
     expect(booButton.disabled).toBe(true);
-    expect(screen.getByText("作者不能推噓自己的文章，可使用回覆加註。")).toBeTruthy();
+    expect(screen.getByText("作者本人, 使用 → 加註方式")).toBeTruthy();
 
     act(() => {
       pushButton.click();
@@ -133,7 +133,30 @@ describe("Article push voting", () => {
 
     expect((screen.getAllByRole("button", { name: "推" })[0] as HTMLButtonElement).disabled).toBe(false);
     expect((screen.getAllByRole("button", { name: "噓" })[0] as HTMLButtonElement).disabled).toBe(false);
-    expect(screen.queryByText("作者不能推噓自己的文章，可使用回覆加註。")).toBeNull();
+    expect(screen.queryByText("作者本人, 使用 → 加註方式")).toBeNull();
+  });
+
+  it("limits the article author composer to neutral replies", () => {
+    renderArticle(article, "OP");
+
+    act(() => screen.getByRole("button", { name: "回覆此文" }).click());
+
+    const pushButtons = screen.getAllByRole("button", { name: "推" });
+    const booButtons = screen.getAllByRole("button", { name: "噓" });
+    expect((pushButtons.at(-1) as HTMLButtonElement).disabled).toBe(true);
+    expect((booButtons.at(-1) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "→" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getAllByText("作者本人, 使用 → 加註方式")).toHaveLength(2);
+  });
+
+  it("limits the article author floor-reply composer to neutral replies", () => {
+    renderArticle(article, "OP");
+
+    act(() => screen.getAllByRole("button", { name: "回覆" })[0].click());
+
+    expect((screen.getAllByRole("button", { name: "推" }).at(-1) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getAllByRole("button", { name: "噓" }).at(-1) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "→" }) as HTMLButtonElement).disabled).toBe(false);
   });
   it("clicking the selected reply direction sends a withdrawal", async () => {
     mocks.withdrawPushVote.mockResolvedValue({ ok: true });

@@ -57,10 +57,37 @@ describe("Composer", () => {
 
   it("push type selector is shown for mode=reply", () => {
     render(<Composer {...defaultProps} mode="reply" />);
-    expect(screen.getByRole("button", { name: "推" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "→" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "噓" })).toBeTruthy();
+    expect((screen.getByRole("button", { name: "推" }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole("button", { name: "→" }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole("button", { name: "噓" }) as HTMLButtonElement).disabled).toBe(false);
   });
+
+  it.each(["reply", "reply-push"] as const)(
+    "limits article authors to neutral in %s mode",
+    async (mode) => {
+      const onSubmit = vi.fn();
+      render(
+        <Composer
+          {...defaultProps}
+          mode={mode}
+          initial={{ pushType: "push", targetFloor: mode === "reply-push" ? 9 : undefined }}
+          neutralOnly
+          onSubmit={onSubmit}
+        />,
+      );
+
+      expect((screen.getByRole("button", { name: "推" }) as HTMLButtonElement).disabled).toBe(true);
+      expect((screen.getByRole("button", { name: "→" }) as HTMLButtonElement).disabled).toBe(false);
+      expect((screen.getByRole("button", { name: "噓" }) as HTMLButtonElement).disabled).toBe(true);
+      expect(screen.getByText("作者本人, 使用 → 加註方式")).toBeTruthy();
+
+      await userEvent.type(screen.getByRole("textbox"), "作者補充");
+      await userEvent.click(screen.getByRole("button", { name: "送出" }));
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ pushType: "neutral" }),
+      );
+    },
+  );
 
   it("does not show the hidden target floor prefix for reply-push mode", async () => {
     const onSubmit = vi.fn();

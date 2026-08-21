@@ -40,6 +40,7 @@ const EDIT_MODES: EditPushMode[] = ["補充", "更正", "撤回"];
 export function Composer({
   mode,
   initial,
+  neutralOnly = false,
   submitting = false,
   submitError = null,
   onClose,
@@ -47,6 +48,7 @@ export function Composer({
 }: {
   mode: ComposerMode;
   initial: ComposerInitial;
+  neutralOnly?: boolean;
   submitting?: boolean;
   submitError?: string | null;
   onClose: () => void;
@@ -54,7 +56,7 @@ export function Composer({
 }): JSX.Element {
   const [body, setBody] = useState(initial.body ?? "");
   const [pushType, setPushType] = useState<"push" | "neutral" | "boo">(
-    initial.pushType ?? "push",
+    neutralOnly ? "neutral" : initial.pushType ?? "push",
   );
   const [editMode, setEditMode] = useState<EditPushMode>(
     initial.editMode ?? "補充",
@@ -94,6 +96,7 @@ export function Composer({
         body,
       )
     : body;
+  const effectivePushType = neutralOnly ? "neutral" : pushType;
   const remaining = MAX_BYTES - approximatePttBytes(submittedContent);
   const isSubmitDisabled =
     submitting ||
@@ -110,7 +113,7 @@ export function Composer({
     if (isSubmitDisabled) return;
     onSubmit({
       body,
-      pushType,
+      pushType: effectivePushType,
       editMode,
       targetFloor: initial.targetFloor,
       targetEndFloor: initial.targetEndFloor,
@@ -190,30 +193,39 @@ export function Composer({
 
         {/* Push type selector */}
         {(mode === "reply" || mode === "reply-push") && (
-          <div className="flex gap-2">
-            {PUSH_TYPES.map(({ value, label }) => {
-              const isActive = pushType === value;
-              const activeClass =
-                value === "push"
-                  ? "bg-green-500/15 text-green-300"
-                  : value === "neutral"
-                    ? "bg-gray-700 text-gray-300"
-                    : "bg-red-500/15 text-red-300";
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setPushType(value)}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                    isActive
-                      ? `${activeClass} border-transparent`
-                      : "border-gray-700 text-gray-400 hover:text-gray-200"
-                  }`}
-                >
-                  {label}
-                </button>
-              );
-            })}
+          <div>
+            <div className="flex gap-2">
+              {PUSH_TYPES.map(({ value, label }) => {
+                const isActive = effectivePushType === value;
+                const typeDisabled = submitting || (neutralOnly && value !== "neutral");
+                const activeClass =
+                  value === "push"
+                    ? "bg-green-500/15 text-green-300"
+                    : value === "neutral"
+                      ? "bg-gray-700 text-gray-300"
+                      : "bg-red-500/15 text-red-300";
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setPushType(value)}
+                    disabled={typeDisabled}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                      isActive
+                        ? `${activeClass} border-transparent`
+                        : "border-gray-700 text-gray-400 hover:text-gray-200"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            {neutralOnly && (
+              <p className="mt-2 text-xs text-gray-500">
+                作者本人, 使用 → 加註方式
+              </p>
+            )}
           </div>
         )}
 

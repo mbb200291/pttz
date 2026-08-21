@@ -573,7 +573,8 @@ export function Article({
       composer?.mode === "reply-push" && payload.targetFloor
         ? `回${payload.targetFloor}樓：${payload.body}`
         : payload.body;
-    void actions.replyToArticle(body, payload.pushType, boardName).then((result) => {
+    const outgoingPushType = isArticleAuthor ? "neutral" : payload.pushType;
+    void actions.replyToArticle(body, outgoingPushType, boardName).then((result) => {
       if (!result.ok) {
         setComposerSubmitError("回文送出失敗");
         return;
@@ -583,7 +584,7 @@ export function Article({
     }).catch((error) => {
       setComposerSubmitError(error instanceof Error ? error.message : "回文送出失敗");
     }).finally(() => setComposerSubmitting(false));
-  }, [actions, boardName, composer, composerSubmitting, liveReload]);
+  }, [actions, boardName, composer, composerSubmitting, isArticleAuthor, liveReload]);
 
   const initialArticle =
     initialArticleSummary && !articleAid
@@ -850,7 +851,7 @@ export function Article({
               />
               {isArticleAuthor && (
                 <span style={{ color: "var(--text-dim)", fontSize: 12 }}>
-                  作者不能推噓自己的文章，可使用回覆加註。
+                  作者本人, 使用 → 加註方式
                 </span>
               )}
               {isLoggedIn && (
@@ -880,6 +881,7 @@ export function Article({
         <Composer
           mode={composer.mode}
           initial={composer.initial}
+          neutralOnly={isArticleAuthor}
           submitting={composerSubmitting}
           submitError={composerSubmitError}
           onClose={handleComposerClose}
