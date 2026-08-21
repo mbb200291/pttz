@@ -143,8 +143,8 @@ describe("Article push voting", () => {
 
     const pushButtons = screen.getAllByRole("button", { name: "推" });
     const booButtons = screen.getAllByRole("button", { name: "噓" });
-    expect((pushButtons.at(-1) as HTMLButtonElement).disabled).toBe(true);
-    expect((booButtons.at(-1) as HTMLButtonElement).disabled).toBe(true);
+    expect((pushButtons[pushButtons.length - 1] as HTMLButtonElement).disabled).toBe(true);
+    expect((booButtons[booButtons.length - 1] as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: "→" }) as HTMLButtonElement).disabled).toBe(false);
     expect(screen.getAllByText("作者本人, 使用 → 加註方式")).toHaveLength(2);
   });
@@ -154,8 +154,10 @@ describe("Article push voting", () => {
 
     act(() => screen.getAllByRole("button", { name: "回覆" })[0].click());
 
-    expect((screen.getAllByRole("button", { name: "推" }).at(-1) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getAllByRole("button", { name: "噓" }).at(-1) as HTMLButtonElement).disabled).toBe(true);
+    const pushButtons = screen.getAllByRole("button", { name: "推" });
+    const booButtons = screen.getAllByRole("button", { name: "噓" });
+    expect((pushButtons[pushButtons.length - 1] as HTMLButtonElement).disabled).toBe(true);
+    expect((booButtons[booButtons.length - 1] as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: "→" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
