@@ -2303,6 +2303,7 @@ export async function submitArticleReplyToBoardFromBot(
       return { ok: true };
     }
     if (
+      answeredSave &&
       extractCurrentBoardName(screen)?.toLowerCase() ===
         request.boardName.toLowerCase() && isBoardListScreen(screen)
     ) {
