@@ -170,7 +170,8 @@ describe("Article push voting", () => {
     renderArticle(article, "OP");
 
     act(() => screen.getAllByRole("button", { name: "回覆" })[0].click());
-    act(() => screen.getAllByRole("button", { name: label }).at(-1)?.click());
+    const directionButtons = screen.getAllByRole("button", { name: label });
+    act(() => directionButtons[directionButtons.length - 1].click());
     fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "同意" },
     });
