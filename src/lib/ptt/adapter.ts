@@ -2368,7 +2368,8 @@ const DEFAULT_SUBMIT_PUSH_TIMEOUTS: SubmitPushTimeouts = {
 
 const PUSH_TYPE_MENU_RE =
   /1\..*(2\.|噓)|值得推薦|給它噓聲|只加註解|推文方式|推文種類/u;
-const PUSH_CONTENT_PROMPT_RE = /請輸入推文內容|輸入推文內容|推文內容[:：]/u;
+const PUSH_CONTENT_PROMPT_RE =
+  /請輸入推文內容|輸入推文內容|推文內容[:：]|作者本人[，,]?\s*使用\s*→\s*加註方式/u;
 
 async function waitForPushEntry(
   bot: WriteBot,

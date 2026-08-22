@@ -275,6 +275,7 @@ src/components/              ← React UI 元件（LoginModal、ArticleList、Ar
 18. 文章單獨推噓事件隱藏、回文最後一票與嚴格 PTT 類型選擇
 19. 作者文章二次確認刪除、身分防護與 Fake Adapter 持久移除
 20. 作者文章推噓前端防護、固定文章動作列與 PTT 原生看板回應
+21. 文章統計顯示可見聚合回覆數、回文卡片去除重複淨分，並支援作者 neutral 專用輸入畫面
 
 ### 正在維護
 

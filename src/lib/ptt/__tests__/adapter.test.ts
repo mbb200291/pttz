@@ -92,6 +92,68 @@ describe("ptt adapter module", () => {
     expect(sent).toEqual(["X", "\x03"]);
   });
 
+  it("sends a neutral reply from the author's direct input prompt", async () => {
+    const mod = await import("../adapter");
+    const sent: string[] = [];
+    let screen = "瀏覽文章";
+    const bot = {
+      async send(command: string) {
+        sent.push(command);
+        if (command === "X") screen = "作者本人，使用 → 加註方式\n→ MBB200291:";
+        if (command === "噓1樓\r") screen = "確定送出推文嗎";
+        if (command === "y\r") screen = "瀏覽文章";
+        return true;
+      },
+      getLine(index: number) {
+        return { str: index === 0 ? screen : "" };
+      },
+    };
+
+    await expect(
+      mod.submitPushFromCurrentArticle(bot, "噓1樓", "neutral", undefined, {
+        typePromptMs: 10,
+        confirmMs: 10,
+        pollMs: 1,
+        afterTypeMs: 0,
+        afterConfirmMs: 0,
+        afterContinueMs: 0,
+      }),
+    ).resolves.toEqual({ ok: true });
+    expect(sent).toEqual(["X", "噓1樓\r", "y\r"]);
+  });
+
+  it("does not bypass the author's neutral-only prompt for a raw boo", async () => {
+    const mod = await import("../adapter");
+    const sent: string[] = [];
+    let screen = "瀏覽文章";
+    const bot = {
+      async send(command: string) {
+        sent.push(command);
+        if (command === "X") screen = "作者本人，使用 → 加註方式\n→ MBB200291:";
+        return true;
+      },
+      getLine(index: number) {
+        return { str: index === 0 ? screen : "" };
+      },
+    };
+
+    await expect(
+      mod.submitPushFromCurrentArticle(bot, "噓", "boo", undefined, {
+        typePromptMs: 10,
+        confirmMs: 10,
+        pollMs: 1,
+        afterTypeMs: 0,
+        afterConfirmMs: 0,
+        afterContinueMs: 0,
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      code: "push-entry-timeout",
+      reason: "PTT 未顯示推文方式，請重新載入文章後再試",
+    });
+    expect(sent).toEqual(["X", "\x03"]);
+  });
+
   it("reports when the push content prompt cannot be confirmed", async () => {
     const mod = await import("../adapter");
     const sent: string[] = [];

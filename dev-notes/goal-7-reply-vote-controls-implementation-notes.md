@@ -24,3 +24,22 @@
 - `npm test`：26 個 test files、382/382 tests 通過。
 - `npm run build`：TypeScript 與 Vite production build 通過；保留既有的 chunk size warning。
 - `npm run lint`：0 errors、6 個既有 warnings，分布於 `ArticleList.tsx`、`PushThread.tsx` 與 `useArticle.ts`。
+
+## Follow-up：統計與作者輸入畫面
+
+- 文章統計列保留 PTT 原生推／噓數，第三項改為所有可見聚合回覆總數；包含第一層與巢狀回覆，排除純文章投票、控制事件與 synthetic edit。
+- 回文卡片保留原始 PTT 類別 `推／噓／→`，移除容易與右側票數重複的 `推 +n／噓 -n` 淨分 badge。
+- PTT 作者本人按 `X` 時可能直接進入「作者本人，使用 → 加註方式」輸入畫面。adapter 現在將此提示辨認為 neutral content prompt，讓 PTTzzz 的樓層回覆與評分 pattern 能送出。
+- direct content prompt 仍只接受 raw neutral；raw push／boo 會中止，避免繞過 PTT 的作者限制。
+
+### Follow-up TDD 證據
+
+- 統計測試先確認舊 UI 仍顯示 `99 中立`，修正後顯示 `聚合後回覆 2`。
+- 卡片測試先確認 `推 +2／噓 -1` 仍存在，修正後只保留原始類別 badge。
+- adapter 測試先確認作者提示導致 `push-entry-timeout`，修正後 neutral pattern 成功送出，raw boo 防護測試也維持通過。
+
+### Follow-up 最終驗證
+
+- `npm test`：26 個 test files、385/385 tests 通過。
+- `npm run build`：TypeScript 與 Vite production build 通過；保留既有的 chunk size warning。
+- `npm run lint`：0 errors、6 個既有 warnings，分布於 `ArticleList.tsx`、`PushThread.tsx` 與 `useArticle.ts`。
