@@ -149,16 +149,37 @@ describe("Article push voting", () => {
     expect(screen.getAllByText("作者本人, 使用 → 加註方式")).toHaveLength(2);
   });
 
-  it("limits the article author floor-reply composer to neutral replies", () => {
+  it("keeps all directions available when the article author replies to a floor", () => {
     renderArticle(article, "OP");
 
     act(() => screen.getAllByRole("button", { name: "回覆" })[0].click());
 
     const pushButtons = screen.getAllByRole("button", { name: "推" });
     const booButtons = screen.getAllByRole("button", { name: "噓" });
-    expect((pushButtons[pushButtons.length - 1] as HTMLButtonElement).disabled).toBe(true);
-    expect((booButtons[booButtons.length - 1] as HTMLButtonElement).disabled).toBe(true);
+    expect((pushButtons[pushButtons.length - 1] as HTMLButtonElement).disabled).toBe(false);
+    expect((booButtons[booButtons.length - 1] as HTMLButtonElement).disabled).toBe(false);
     expect((screen.getByRole("button", { name: "→" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it.each([
+    ["推", "推1樓 同意"],
+    ["→", "回1樓：同意"],
+    ["噓", "噓1樓 同意"],
+  ] as const)("sends floor reply direction %s as a neutral pattern", async (label, expectedBody) => {
+    mocks.replyToArticle.mockResolvedValue({ ok: true });
+    renderArticle(article, "OP");
+
+    act(() => screen.getAllByRole("button", { name: "回覆" })[0].click());
+    const directionButtons = screen.getAllByRole("button", { name: label });
+    act(() => directionButtons[directionButtons.length - 1].click());
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "同意" },
+    });
+    act(() => screen.getByRole("button", { name: "送出" }).click());
+
+    await waitFor(() =>
+      expect(mocks.replyToArticle).toHaveBeenCalledWith(expectedBody, "neutral", "Test"),
+    );
   });
 
   it("reloads and retries once when no reply content was sent", async () => {
@@ -360,7 +381,19 @@ describe("Article push voting", () => {
     expect(mocks.reload).toHaveBeenCalledTimes(1);
   });
 
-  it("unlocks the reply after a failed vote", async () => {
+  it("shows a reply vote immediately while the request is pending", () => {
+    mocks.votePush.mockReturnValue(new Promise(() => {}));
+    renderArticle();
+    const pushButton = screen.getAllByRole("button", { name: "推" })[1];
+
+    act(() => pushButton.click());
+
+    expect(pushButton.getAttribute("aria-pressed")).toBe("true");
+    expect(pushButton.textContent).toContain("1");
+    expect((pushButton as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("rolls back a failed reply vote and displays the reason", async () => {
     mocks.votePush.mockResolvedValue({
       ok: false,
       reason: "PTT 拒絕寫入",
@@ -369,10 +402,12 @@ describe("Article push voting", () => {
     const pushButton = screen.getAllByRole("button", { name: "推" })[1];
 
     act(() => pushButton.click());
-    await waitFor(() =>
-      expect((pushButton as HTMLButtonElement).disabled).toBe(false),
-    );
+    expect(pushButton.getAttribute("aria-pressed")).toBe("true");
+
+    expect((await screen.findByRole("alert")).textContent).toContain("PTT 拒絕寫入");
+    expect(pushButton.getAttribute("aria-pressed")).toBe("false");
     expect(pushButton.textContent).toContain("0");
+    expect((pushButton as HTMLButtonElement).disabled).toBe(false);
 
     act(() => pushButton.click());
     await waitFor(() => expect(mocks.votePush).toHaveBeenCalledTimes(2));

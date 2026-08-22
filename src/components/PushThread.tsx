@@ -346,10 +346,6 @@ function PushItem({
     : "1px solid var(--border)";
   const cardBackground = depth === 0 ? "var(--surface)" : "var(--surface-2)";
 
-  const scoreAbs = Math.abs(push.score);
-  const scoreLabel = push.score > 0 ? `推 +${scoreAbs}` : `噓 -${scoreAbs}`;
-  const scoreFg = push.score > 0 ? "var(--push-fg)" : "var(--boo-fg)";
-  const scoreBg = push.score > 0 ? "var(--push-bg)" : "var(--boo-bg)";
   const canEdit = Boolean(
     onEdit &&
     currentUser &&
@@ -487,22 +483,6 @@ function PushItem({
             )}
 
             <PushBadge type={push.type} />
-
-            {push.score !== 0 && !isEditNode && (
-              <span style={{
-                fontSize: 11,
-                fontWeight: 600,
-                color: scoreFg,
-                background: scoreBg,
-                borderRadius: 5,
-                padding: "1px 6px",
-              }}
-                title="此回文收到的明確投票分數"
-              >
-                {scoreLabel}
-              </span>
-            )}
-
           </div>
 
           {/* Content */}

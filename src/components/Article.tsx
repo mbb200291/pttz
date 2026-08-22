@@ -221,6 +221,16 @@ function getPushFloor(push: AggregatedPush): number {
   return push.sourceFloors[0] ?? push.floorNumber;
 }
 
+function formatFloorReply(
+  floor: number,
+  body: string,
+  direction: "push" | "neutral" | "boo",
+): string {
+  const content = body.trim();
+  if (direction === "neutral") return `回${floor}樓：${content}`;
+  return `${direction === "push" ? "推" : "噓"}${floor}樓 ${content}`;
+}
+
 function getViewerPushVote(push: AggregatedPush, currentUser?: string): -1 | 0 | 1 {
   if (!currentUser) return 0;
   const viewerId = normalizePttId(currentUser);
@@ -341,6 +351,7 @@ export function Article({
   const [pendingPushVoteIds, setPendingPushVoteIds] = useState<Set<string>>(
     new Set(),
   );
+  const [pushVoteError, setPushVoteError] = useState<string | null>(null);
 
   const [articleVotePending, setArticleVotePending] = useState(false);
   const articleVotePendingRef = useRef(false);
@@ -493,16 +504,41 @@ export function Article({
     pendingPushVoteIdsRef.current.add(pushId);
     setPendingPushVoteIds(new Set(pendingPushVoteIdsRef.current));
 
+    const previousOptimistic = pushVotes.get(pushId);
+    setPushVoteError(null);
+    setPushVotes((previous) =>
+      new Map(previous).set(
+        pushId,
+        transitionVoteState(currentState, resultingVote),
+      ),
+    );
+
+    const rollback = () => {
+      setPushVotes((previous) => {
+        const rolledBack = new Map(previous);
+        if (previousOptimistic) rolledBack.set(pushId, previousOptimistic);
+        else rolledBack.delete(pushId);
+        return rolledBack;
+      });
+    };
+
     const request = isWithdrawal
       ? actions.withdrawPushVote(targetFloor, direction, boardName)
       : actions.votePush(targetFloor, direction, boardName);
     void request
       .then((result) => {
-        if (!result.ok) return;
-        setPushVotes((prev) =>
-          new Map(prev).set(pushId, transitionVoteState(currentState, resultingVote)),
-        );
+        if (!result.ok) {
+          rollback();
+          setPushVoteError(result.reason ?? "回文推噓送出失敗");
+          return;
+        }
         void liveReload();
+      })
+      .catch((error) => {
+        rollback();
+        setPushVoteError(
+          error instanceof Error ? error.message : "回文推噓送出失敗",
+        );
       })
       .finally(() => {
         pendingPushVoteIdsRef.current.delete(pushId);
@@ -569,11 +605,15 @@ export function Article({
       }).finally(() => setComposerSubmitting(false));
       return;
     }
-    const body =
-      composer?.mode === "reply-push" && payload.targetFloor
-        ? `回${payload.targetFloor}樓：${payload.body}`
-        : payload.body;
-    const outgoingPushType = isArticleAuthor ? "neutral" : payload.pushType;
+    const isFloorReply = Boolean(
+      composer?.mode === "reply-push" && payload.targetFloor,
+    );
+    const body = isFloorReply
+      ? formatFloorReply(payload.targetFloor ?? 0, payload.body, payload.pushType)
+      : payload.body;
+    const outgoingPushType = isFloorReply
+      ? "neutral"
+      : isArticleAuthor ? "neutral" : payload.pushType;
     void (async () => {
       try {
         let result = await actions.replyToArticle(body, outgoingPushType, boardName);
@@ -641,11 +681,14 @@ export function Article({
     };
   }, [article, articleIndex, boardName]);
 
-  // Compute push/boo/neutral counts for stats bar
+  // Compute native article votes and visible aggregated replies for the stats bar.
   const fallbackPushTypes = article?.pushes.map((push) => push.type) ?? [];
   const pushCount = article?.nativePushCount ?? fallbackPushTypes.filter((type) => type === "push").length;
   const booCount = article?.nativeBooCount ?? fallbackPushTypes.filter((type) => type === "boo").length;
-  const neutralCount = article?.nativeNeutralCount ?? fallbackPushTypes.filter((type) => type === "neutral").length;
+  const replyCount = (article?.pushes ?? []).filter((push) =>
+    push.type !== "edit" &&
+    (Boolean(push.editHistory?.length) || detectArticleVote(push.content) === null)
+  ).length;
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--text)" }}>
@@ -841,11 +884,14 @@ export function Article({
                 <span style={{ fontWeight: 700, fontSize: 14, color: "var(--boo-fg)", fontFamily: "var(--font-mono)" }}>{booCount}</span>
                 <span style={{ fontSize: 12, color: "var(--text-dim)" }}>噓</span>
               </div>
-              {/* neutral count */}
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {/* aggregated reply count */}
+              <div
+                aria-label={`聚合後回覆 ${replyCount}`}
+                style={{ display: "flex", alignItems: "center", gap: 6 }}
+              >
                 <PushTypeBadge type="neutral" />
-                <span style={{ fontWeight: 700, fontSize: 14, color: "var(--neutral-fg)", fontFamily: "var(--font-mono)" }}>{neutralCount}</span>
-                <span style={{ fontSize: 12, color: "var(--text-dim)" }}>中立</span>
+                <span style={{ fontWeight: 700, fontSize: 14, color: "var(--neutral-fg)", fontFamily: "var(--font-mono)" }}>{replyCount}</span>
+                <span style={{ fontSize: 12, color: "var(--text-dim)" }}>回覆</span>
               </div>
             </div>
 
@@ -876,6 +922,11 @@ export function Article({
                 </button>
               )}
             </div>
+            {pushVoteError && (
+              <p role="alert" className="mb-3 text-sm text-red-400">
+                {pushVoteError}
+              </p>
+            )}
             <PushThread
               pushes={article.pushes}
               score={article.score}
@@ -896,7 +947,7 @@ export function Article({
         <Composer
           mode={composer.mode}
           initial={composer.initial}
-          neutralOnly={isArticleAuthor}
+          neutralOnly={isArticleAuthor && composer.mode === "reply"}
           submitting={composerSubmitting}
           submitError={composerSubmitError}
           onClose={handleComposerClose}
