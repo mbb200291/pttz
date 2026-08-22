@@ -151,4 +151,55 @@ describe("Article", () => {
     expect(html.indexOf("正文")).toBeLessThan(html.indexOf("編輯紀錄"));
     expect(html).toContain("修正來源");
   });
+
+  it("shows visible aggregated replies instead of the native neutral count", async () => {
+    vi.resetModules();
+    const { Article } = await import("../Article");
+    const push = (overrides: Record<string, unknown>) => ({
+      id: "reply-1",
+      type: "neutral",
+      author: "alice",
+      content: "第一層回覆",
+      time: "12:00",
+      ipAddresses: [],
+      isOP: false,
+      replyTo: null,
+      score: 0,
+      floorNumber: 1,
+      anchorOrder: 0,
+      sourceFloors: [1],
+      pushVoters: [],
+      booVoters: [],
+      ...overrides,
+    });
+
+    const html = renderToStaticMarkup(
+      <Article
+        boardName="Test"
+        articleIndex={123}
+        onBack={() => {}}
+        mockArticle={{
+          title: "[測試] reply count",
+          author: "op",
+          date: "08/22",
+          board: "Test",
+          body: "正文",
+          pushes: [
+            push({}),
+            push({ id: "reply-2", content: "巢狀回覆", replyTo: "reply-1", sourceFloors: [2] }),
+            push({ id: "article-vote", content: "推", sourceFloors: [3] }),
+            push({ id: "edit", type: "edit", content: "編輯紀錄", sourceFloors: [4] }),
+          ],
+          articleNotes: [],
+          score: 0,
+          nativePushCount: 1,
+          nativeBooCount: 0,
+          nativeNeutralCount: 99,
+        } as never}
+      />,
+    );
+
+    expect(html).toContain('aria-label="聚合後回覆 2"');
+    expect(html).not.toContain(">中立<");
+  });
 });

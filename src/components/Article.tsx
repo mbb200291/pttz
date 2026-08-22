@@ -681,11 +681,14 @@ export function Article({
     };
   }, [article, articleIndex, boardName]);
 
-  // Compute push/boo/neutral counts for stats bar
+  // Compute native article votes and visible aggregated replies for the stats bar.
   const fallbackPushTypes = article?.pushes.map((push) => push.type) ?? [];
   const pushCount = article?.nativePushCount ?? fallbackPushTypes.filter((type) => type === "push").length;
   const booCount = article?.nativeBooCount ?? fallbackPushTypes.filter((type) => type === "boo").length;
-  const neutralCount = article?.nativeNeutralCount ?? fallbackPushTypes.filter((type) => type === "neutral").length;
+  const replyCount = (article?.pushes ?? []).filter((push) =>
+    push.type !== "edit" &&
+    (Boolean(push.editHistory?.length) || detectArticleVote(push.content) === null)
+  ).length;
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--text)" }}>
@@ -881,11 +884,14 @@ export function Article({
                 <span style={{ fontWeight: 700, fontSize: 14, color: "var(--boo-fg)", fontFamily: "var(--font-mono)" }}>{booCount}</span>
                 <span style={{ fontSize: 12, color: "var(--text-dim)" }}>噓</span>
               </div>
-              {/* neutral count */}
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {/* aggregated reply count */}
+              <div
+                aria-label={`聚合後回覆 ${replyCount}`}
+                style={{ display: "flex", alignItems: "center", gap: 6 }}
+              >
                 <PushTypeBadge type="neutral" />
-                <span style={{ fontWeight: 700, fontSize: 14, color: "var(--neutral-fg)", fontFamily: "var(--font-mono)" }}>{neutralCount}</span>
-                <span style={{ fontSize: 12, color: "var(--text-dim)" }}>中立</span>
+                <span style={{ fontWeight: 700, fontSize: 14, color: "var(--neutral-fg)", fontFamily: "var(--font-mono)" }}>{replyCount}</span>
+                <span style={{ fontSize: 12, color: "var(--text-dim)" }}>回覆</span>
               </div>
             </div>
 
