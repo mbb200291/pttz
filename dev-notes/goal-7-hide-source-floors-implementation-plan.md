@@ -74,6 +74,6 @@ Expected: all repository tests and the production build pass.
 - [x] **Step 5: Commit**
 
 ```bash
-git add src/components/PushThread.tsx src/components/__tests__/PushThread.test.tsx docs/superpowers/plans/2026-08-21-hide-source-floors.md
+git add src/components/PushThread.tsx src/components/__tests__/PushThread.test.tsx dev-notes/goal-7-hide-source-floors-implementation-plan.md
 git commit -m "fix: hide PTT source floor labels"
 ```
