@@ -117,13 +117,14 @@ describe("PushThread", () => {
     expect(html).toContain("sure?");
   });
 
-  it("shows reply score on the aggregated reply card", () => {
+  it("keeps the raw push badge without duplicating the reply score", () => {
     const html = renderToStaticMarkup(
       <PushThread
         score={0}
         pushes={[
           push({
             id: "push-0",
+            type: "push",
             author: "askz0",
             content: "Ok?",
             score: 2,
@@ -152,16 +153,19 @@ describe("PushThread", () => {
       />,
     );
 
-    expect(html).toContain("推 +2");
+    expect(html).toContain(">推</span>");
+    expect(html).not.toContain("推 +2");
+    expect(html).not.toContain("此回文收到的明確投票分數");
   });
 
-  it("shows negative reply score as boo count", () => {
+  it("keeps the raw boo badge without duplicating the negative reply score", () => {
     const html = renderToStaticMarkup(
       <PushThread
         score={0}
         pushes={[
           push({
             id: "push-0",
+            type: "boo",
             author: "askz0",
             content: "Ok?",
             score: -1,
@@ -172,7 +176,9 @@ describe("PushThread", () => {
       />,
     );
 
-    expect(html).toContain("噓 -1");
+    expect(html).toContain(">噓</span>");
+    expect(html).not.toContain("噓 -1");
+    expect(html).not.toContain("此回文收到的明確投票分數");
   });
 
   it("shows reply IP address next to the author without hover", () => {
