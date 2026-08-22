@@ -380,7 +380,19 @@ describe("Article push voting", () => {
     expect(mocks.reload).toHaveBeenCalledTimes(1);
   });
 
-  it("unlocks the reply after a failed vote", async () => {
+  it("shows a reply vote immediately while the request is pending", () => {
+    mocks.votePush.mockReturnValue(new Promise(() => {}));
+    renderArticle();
+    const pushButton = screen.getAllByRole("button", { name: "推" })[1];
+
+    act(() => pushButton.click());
+
+    expect(pushButton.getAttribute("aria-pressed")).toBe("true");
+    expect(pushButton.textContent).toContain("1");
+    expect((pushButton as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("rolls back a failed reply vote and displays the reason", async () => {
     mocks.votePush.mockResolvedValue({
       ok: false,
       reason: "PTT 拒絕寫入",
@@ -389,10 +401,12 @@ describe("Article push voting", () => {
     const pushButton = screen.getAllByRole("button", { name: "推" })[1];
 
     act(() => pushButton.click());
-    await waitFor(() =>
-      expect((pushButton as HTMLButtonElement).disabled).toBe(false),
-    );
+    expect(pushButton.getAttribute("aria-pressed")).toBe("true");
+
+    expect((await screen.findByRole("alert")).textContent).toContain("PTT 拒絕寫入");
+    expect(pushButton.getAttribute("aria-pressed")).toBe("false");
     expect(pushButton.textContent).toContain("0");
+    expect((pushButton as HTMLButtonElement).disabled).toBe(false);
 
     act(() => pushButton.click());
     await waitFor(() => expect(mocks.votePush).toHaveBeenCalledTimes(2));

@@ -351,6 +351,7 @@ export function Article({
   const [pendingPushVoteIds, setPendingPushVoteIds] = useState<Set<string>>(
     new Set(),
   );
+  const [pushVoteError, setPushVoteError] = useState<string | null>(null);
 
   const [articleVotePending, setArticleVotePending] = useState(false);
   const articleVotePendingRef = useRef(false);
@@ -503,16 +504,41 @@ export function Article({
     pendingPushVoteIdsRef.current.add(pushId);
     setPendingPushVoteIds(new Set(pendingPushVoteIdsRef.current));
 
+    const previousOptimistic = pushVotes.get(pushId);
+    setPushVoteError(null);
+    setPushVotes((previous) =>
+      new Map(previous).set(
+        pushId,
+        transitionVoteState(currentState, resultingVote),
+      ),
+    );
+
+    const rollback = () => {
+      setPushVotes((previous) => {
+        const rolledBack = new Map(previous);
+        if (previousOptimistic) rolledBack.set(pushId, previousOptimistic);
+        else rolledBack.delete(pushId);
+        return rolledBack;
+      });
+    };
+
     const request = isWithdrawal
       ? actions.withdrawPushVote(targetFloor, direction, boardName)
       : actions.votePush(targetFloor, direction, boardName);
     void request
       .then((result) => {
-        if (!result.ok) return;
-        setPushVotes((prev) =>
-          new Map(prev).set(pushId, transitionVoteState(currentState, resultingVote)),
-        );
+        if (!result.ok) {
+          rollback();
+          setPushVoteError(result.reason ?? "回文推噓送出失敗");
+          return;
+        }
         void liveReload();
+      })
+      .catch((error) => {
+        rollback();
+        setPushVoteError(
+          error instanceof Error ? error.message : "回文推噓送出失敗",
+        );
       })
       .finally(() => {
         pendingPushVoteIdsRef.current.delete(pushId);
@@ -890,6 +916,11 @@ export function Article({
                 </button>
               )}
             </div>
+            {pushVoteError && (
+              <p role="alert" className="mb-3 text-sm text-red-400">
+                {pushVoteError}
+              </p>
+            )}
             <PushThread
               pushes={article.pushes}
               score={article.score}
