@@ -225,3 +225,152 @@ Expected: ESLint 0 errors；既有 warnings 可保留並於 notes 記錄。
 git add dev-notes/goal-7-reply-vote-controls-implementation-plan.md dev-notes/goal-7-reply-vote-controls-implementation-notes.md dev-notes/implement.md
 git commit -m "docs: record reply vote control fix"
 ```
+
+### Task 4: 將中立統計改為聚合後回覆總數
+
+**Files:**
+- Modify: `src/components/__tests__/Article.test.tsx`
+- Modify: `src/components/Article.tsx`
+
+- [ ] **Step 1: 寫回覆總數 failing test**
+
+在 `Article.test.tsx` render 一篇包含第一層回覆、巢狀回覆、synthetic edit 與相容性 pure article vote 的文章，驗證統計列顯示 `回覆 2`，不顯示 `中立`：
+
+使用 Testing Library 以「回覆」標籤定位同一個統計項目，再斷言其數值為 `2`；不要只搜尋頁面上任意的 `2`。同時驗證頁面不再出現「中立」標籤。
+
+- [ ] **Step 2: 執行測試並確認 RED**
+
+Run: `npx vitest run src/components/__tests__/Article.test.tsx`
+
+Expected: 現有 UI 仍顯示 `nativeNeutralCount` 與「中立」，測試失敗。
+
+- [ ] **Step 3: 以既有可見性規則計算回覆數**
+
+在 `Article.tsx` 以與 `PushThread` 相同的相容性條件過濾文章 pushes，再排除 edit：
+
+```ts
+const replyCount = (article?.pushes ?? []).filter((push) =>
+  push.type !== "edit" &&
+  (Boolean(push.editHistory?.length) || detectArticleVote(push.content) === null)
+).length;
+```
+
+統計列第三項沿用 neutral 色系與 arrow badge，但數字改用 `replyCount`、標籤改為「回覆」。原生 push／boo 數保持不變。
+
+- [ ] **Step 4: 執行測試並確認 GREEN**
+
+Run: `npx vitest run src/components/__tests__/Article.test.tsx`
+
+Expected: test file 全部通過。
+
+- [ ] **Step 5: 提交統計修正**
+
+```bash
+git add src/components/Article.tsx src/components/__tests__/Article.test.tsx
+git commit -m "fix: show aggregated reply count in article stats"
+```
+
+### Task 5: 移除回文卡片淨分 badge
+
+**Files:**
+- Modify: `src/components/__tests__/PushThread.test.tsx`
+- Modify: `src/components/PushThread.tsx`
+
+- [ ] **Step 1: 將 score badge 測試改為 failing absence test**
+
+保留一筆 raw `push`、score `2` 的回文，驗證原始類別仍出現，但淨分標籤與 title 不再存在：
+
+```tsx
+expect(html).toContain(">推<");
+expect(html).not.toContain("推 +2");
+expect(html).not.toContain("此回文收到的明確投票分數");
+```
+
+負分案例同樣驗證不顯示 `噓 -1`。
+
+- [ ] **Step 2: 執行測試並確認 RED**
+
+Run: `npx vitest run src/components/__tests__/PushThread.test.tsx`
+
+Expected: 現有卡片仍 render score badge，測試失敗。
+
+- [ ] **Step 3: 刪除淨分 badge render code**
+
+從 `PushItem` 移除 `scoreAbs`、`scoreLabel`、`scoreFg`、`scoreBg` 及 `push.score !== 0` 的 badge block；保留 `<PushBadge type={push.type} />` 與右側 `VotePair`。
+
+- [ ] **Step 4: 執行測試並確認 GREEN**
+
+Run: `npx vitest run src/components/__tests__/PushThread.test.tsx`
+
+Expected: test file 全部通過。
+
+- [ ] **Step 5: 提交卡片顯示修正**
+
+```bash
+git add src/components/PushThread.tsx src/components/__tests__/PushThread.test.tsx
+git commit -m "fix: remove duplicate reply score badge"
+```
+
+### Task 6: 辨認作者專用 neutral 輸入畫面
+
+**Files:**
+- Modify: `src/lib/ptt/__tests__/adapter.test.ts`
+- Modify: `src/lib/ptt/adapter.ts`
+
+- [ ] **Step 1: 寫作者輸入畫面 failing tests**
+
+新增測試讓 `X` 後畫面成為作者專用提示：
+
+```ts
+screen = "作者本人，使用 → 加註方式\n→ MBB200291:";
+```
+
+驗證 raw neutral 會直接送出內容並確認：
+
+```ts
+expect(sent).toEqual(["X", "噓1樓\r", "y\r"]);
+```
+
+另以相同畫面要求 raw `boo`，驗證只送 `X` 與 Ctrl-C，並回傳 `push-entry-timeout`，防止繞過 PTT 原生限制。
+
+- [ ] **Step 2: 執行測試並確認 RED**
+
+Run: `npx vitest run src/lib/ptt/__tests__/adapter.test.ts`
+
+Expected: neutral 案例因現有 regex 不認得作者提示而回傳 `push-entry-timeout`。
+
+- [ ] **Step 3: 擴充內容輸入狀態 regex**
+
+將作者提示加入 `PUSH_CONTENT_PROMPT_RE`：
+
+```ts
+const PUSH_CONTENT_PROMPT_RE =
+  /請輸入推文內容|輸入推文內容|推文內容[:：]|作者本人[，,]?\s*使用\s*→\s*加註方式/u;
+```
+
+不修改 `entry !== "content" || pushType !== "neutral"` 的既有安全檢查。
+
+- [ ] **Step 4: 執行測試並確認 GREEN**
+
+Run: `npx vitest run src/lib/ptt/__tests__/adapter.test.ts`
+
+Expected: adapter test file 全部通過。
+
+- [ ] **Step 5: 更新 notes 並執行完整驗證**
+
+在 `dev-notes/goal-7-reply-vote-controls-implementation-notes.md` 記錄 follow-up 行為與真站提示根因，再執行：
+
+```bash
+npm test
+npm run build
+npm run lint
+```
+
+Expected: tests 與 build 通過；lint 0 errors，既有 warnings 另行記錄。
+
+- [ ] **Step 6: 提交 terminal 修正與文件**
+
+```bash
+git add src/lib/ptt/adapter.ts src/lib/ptt/__tests__/adapter.test.ts dev-notes/goal-7-reply-vote-controls-implementation-plan.md dev-notes/goal-7-reply-vote-controls-implementation-notes.md dev-notes/implement.md
+git commit -m "fix: support author neutral push input"
+```
