@@ -149,16 +149,36 @@ describe("Article push voting", () => {
     expect(screen.getAllByText("作者本人, 使用 → 加註方式")).toHaveLength(2);
   });
 
-  it("limits the article author floor-reply composer to neutral replies", () => {
+  it("keeps all directions available when the article author replies to a floor", () => {
     renderArticle(article, "OP");
 
     act(() => screen.getAllByRole("button", { name: "回覆" })[0].click());
 
     const pushButtons = screen.getAllByRole("button", { name: "推" });
     const booButtons = screen.getAllByRole("button", { name: "噓" });
-    expect((pushButtons[pushButtons.length - 1] as HTMLButtonElement).disabled).toBe(true);
-    expect((booButtons[booButtons.length - 1] as HTMLButtonElement).disabled).toBe(true);
+    expect((pushButtons[pushButtons.length - 1] as HTMLButtonElement).disabled).toBe(false);
+    expect((booButtons[booButtons.length - 1] as HTMLButtonElement).disabled).toBe(false);
     expect((screen.getByRole("button", { name: "→" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it.each([
+    ["推", "推1樓 同意"],
+    ["→", "回1樓：同意"],
+    ["噓", "噓1樓 同意"],
+  ] as const)("sends floor reply direction %s as a neutral pattern", async (label, expectedBody) => {
+    mocks.replyToArticle.mockResolvedValue({ ok: true });
+    renderArticle(article, "OP");
+
+    act(() => screen.getAllByRole("button", { name: "回覆" })[0].click());
+    act(() => screen.getAllByRole("button", { name: label }).at(-1)?.click());
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "同意" },
+    });
+    act(() => screen.getByRole("button", { name: "送出" }).click());
+
+    await waitFor(() =>
+      expect(mocks.replyToArticle).toHaveBeenCalledWith(expectedBody, "neutral", "Test"),
+    );
   });
 
   it("reloads and retries once when no reply content was sent", async () => {

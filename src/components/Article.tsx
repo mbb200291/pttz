@@ -221,6 +221,16 @@ function getPushFloor(push: AggregatedPush): number {
   return push.sourceFloors[0] ?? push.floorNumber;
 }
 
+function formatFloorReply(
+  floor: number,
+  body: string,
+  direction: "push" | "neutral" | "boo",
+): string {
+  const content = body.trim();
+  if (direction === "neutral") return `回${floor}樓：${content}`;
+  return `${direction === "push" ? "推" : "噓"}${floor}樓 ${content}`;
+}
+
 function getViewerPushVote(push: AggregatedPush, currentUser?: string): -1 | 0 | 1 {
   if (!currentUser) return 0;
   const viewerId = normalizePttId(currentUser);
@@ -569,11 +579,15 @@ export function Article({
       }).finally(() => setComposerSubmitting(false));
       return;
     }
-    const body =
-      composer?.mode === "reply-push" && payload.targetFloor
-        ? `回${payload.targetFloor}樓：${payload.body}`
-        : payload.body;
-    const outgoingPushType = isArticleAuthor ? "neutral" : payload.pushType;
+    const isFloorReply = Boolean(
+      composer?.mode === "reply-push" && payload.targetFloor,
+    );
+    const body = isFloorReply
+      ? formatFloorReply(payload.targetFloor ?? 0, payload.body, payload.pushType)
+      : payload.body;
+    const outgoingPushType = isFloorReply
+      ? "neutral"
+      : isArticleAuthor ? "neutral" : payload.pushType;
     void (async () => {
       try {
         let result = await actions.replyToArticle(body, outgoingPushType, boardName);
@@ -896,7 +910,7 @@ export function Article({
         <Composer
           mode={composer.mode}
           initial={composer.initial}
-          neutralOnly={isArticleAuthor}
+          neutralOnly={isArticleAuthor && composer.mode === "reply"}
           submitting={composerSubmitting}
           submitError={composerSubmitError}
           onClose={handleComposerClose}
