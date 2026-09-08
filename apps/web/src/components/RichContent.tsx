@@ -42,7 +42,7 @@ export function RichContent({ text, variant }: RichContentProps) {
 
   // inline variant for push content
   return (
-    <span>
+    <span style={{ whiteSpace: "pre-wrap" }}>
       {segments.map((seg, i) => {
         if (seg.kind === "image") {
           return (

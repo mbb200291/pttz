@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   extractArticleThreadEvents,
-  formatPttzzzEditSummary,
   parsePushBuffer,
   parsePushLine,
   splitArticleBody,
@@ -67,18 +66,6 @@ describe("splitArticleBody", () => {
   });
 });
 
-describe("formatPttzzzEditSummary", () => {
-  it("normalizes summaries into one safe marker line", () => {
-    expect(formatPttzzzEditSummary("  修正\n來源\u001b[31m  ")).toBe(
-      "※ PTTzzz 編輯摘要：修正 來源",
-    );
-  });
-
-  it("rejects an empty summary", () => {
-    expect(formatPttzzzEditSummary(" \n\u001b ")).toBeNull();
-  });
-});
-
 describe("splitArticleEditableContent", () => {
   it("keeps the signature and native edit records outside the editable body", () => {
     expect(
@@ -121,7 +108,7 @@ describe("parsePushBuffer", () => {
     ]);
   });
 
-  it("marks push lines as visually full when content reaches the IP column", () => {
+  it("does not mark a line full while one full-width character still fits", () => {
     const pushes = parsePushBuffer(
       "→ neoa01: 新聞：專家：「跑山獸的存在」讓7.5億消   223.136.103.248 04/11 23:01\n→ neoa01: 短句                                    223.136.103.248 04/11 23:02",
     );
@@ -129,16 +116,16 @@ describe("parsePushBuffer", () => {
     expect(pushes[0]).toMatchObject({
       author: "neoa01",
       content: "新聞：專家：「跑山獸的存在」讓7.5億消",
-      isFullWidthLine: true,
+      remainingContentColumns: 3,
     });
     expect(pushes[1]).toMatchObject({
       author: "neoa01",
       content: "短句",
-      isFullWidthLine: false,
+      remainingContentColumns: 36,
     });
   });
 
-  it("marks real-site full lines even when the IP padding is wider than three spaces", () => {
+  it("uses the PTT input capacity instead of visible IP padding", () => {
     const pushes = parsePushBuffer(
       "推 CMCC: 函釋是在說明可以列入，懂嗎？ 而非限制必須    42.73.44.229 04/12 08:43\n→ CMCC: 列入，因為政治獻金有稅法上優勢，所以釋法     42.73.44.229 04/12 08:43",
     );
@@ -146,16 +133,16 @@ describe("parsePushBuffer", () => {
     expect(pushes[0]).toMatchObject({
       author: "CMCC",
       content: "函釋是在說明可以列入，懂嗎？ 而非限制必須",
-      isFullWidthLine: true,
+      remainingContentColumns: 1,
     });
     expect(pushes[1]).toMatchObject({
       author: "CMCC",
       content: "列入，因為政治獻金有稅法上優勢，所以釋法",
-      isFullWidthLine: true,
+      remainingContentColumns: 2,
     });
   });
 
-  it("accounts for long author columns when marking visually full lines", () => {
+  it("accounts for long author IDs in the PTT input capacity", () => {
     const pushes = parsePushBuffer(
       "推 alisabonsai: 候選人在選舉的時候只想要曝光換選       49.216.90.142 04/12 08:24\n→ alisabonsai: 票 會想要肖像權換鈔票的還是首見          49.216.90.142 04/12 08:24",
     );
@@ -163,8 +150,61 @@ describe("parsePushBuffer", () => {
     expect(pushes[0]).toMatchObject({
       author: "alisabonsai",
       content: "候選人在選舉的時候只想要曝光換選",
-      isFullWidthLine: true,
+      remainingContentColumns: 3,
     });
+  });
+
+  it("uses the remaining gap before a time-only field to identify full lines", () => {
+    const pushes = parsePushBuffer([
+      "→ ayufly      : 3W9那是第一次有撐 會再下去第二次代表出大事一定破  08/29 16:55",
+      "→ dsrte       : 但是美股利空 台股也看空時 就是開低走低 勝率高     08/29 16:55",
+      "推 antiSOC     : 川：華許幹的好 我來找買點                         08/29 16:56",
+    ].join("\n"));
+
+    expect(pushes.map((push) => push.remainingContentColumns)).toEqual([1, 4, 24]);
+  });
+
+  it("distinguishes unaligned long IDs from aligned author padding", () => {
+    const pushes = parsePushBuffer([
+      "推 SouthEast62: 雖然會被拒租是有點誇張，但50歲還需要租房，的確     08/24 13:23",
+      "→ frank111: 有碰過繼承房產的中年婦人來租，說賣房中很有錢，不租    08/24 13:22",
+    ].join("\n"));
+
+    expect(pushes.map((push) => ({
+      author: push.author,
+      remaining: push.remainingContentColumns,
+    }))).toEqual([
+      { author: "SouthEast62", remaining: 4 },
+      { author: "frank111", remaining: 3 },
+    ]);
+  });
+
+  it("treats one remaining column as full and two as not full", () => {
+    const pushes = parsePushBuffer([
+      `→ alice: ${"a".repeat(55)}  08/24 13:21`,
+      `→ alice: ${"a".repeat(54)}   08/24 13:22`,
+    ].join("\n"));
+
+    expect(pushes.map((push) => push.remainingContentColumns)).toEqual([1, 2]);
+    expect(pushes.every((push) => push.isFullWidthLine === undefined)).toBe(true);
+  });
+
+  it("normalizes the fixed-width IP field before measuring the remaining gap", () => {
+    const pushes = parsePushBuffer([
+      "推 MonkeyCL: 新竹人值得高虹安                      180.218.220.211 08/29 23:22",
+      "→ dragon0: 包商不會沒事特別去外面找廢鐵去埋        36.234.196.218 08/29 23:23",
+      "→ neverfly: 那一沱這麼完整的鋼條幹嘛不載去換錢      114.43.99.196 08/29 23:23",
+      "推 WeasoN: 小草:你說這個我都懂 但為什麼垃圾這麼大   220.133.186.61 08/29 23:23",
+      "→ Herbert2021: 老實說用攝影技巧放大還是覺得：這      111.252.3.43 08/29 23:24",
+    ].join("\n"));
+
+    expect(pushes.map((push) => push.remainingContentColumns)).toEqual([
+      22,
+      7,
+      4,
+      2,
+      3,
+    ]);
   });
 
   it("parses padded author columns before the colon", () => {

@@ -66,6 +66,8 @@
 
 ## 滿行判斷踩坑
 
+> **2026-08-30 修正：** 以下內容保留早期 heuristic 的演進背景；目前實作已改依 PTT `recommend()` 與 `getdata()` 的實際輸入容量計算 `remainingContentColumns`。少於兩個終端欄位、已塞不下一個全形中文字時才算滿行；不再以 IP／時間欄前空白或固定 byte 門檻判定。現行規則與案例以白皮書 MERGE-002、`parser.ts` 及對應測試為準。
+
 一開始用固定 byte 門檻判斷推文是否塞滿：
 
 - 先前假設 PTT 推文內容區約 45 bytes

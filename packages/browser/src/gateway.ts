@@ -25,8 +25,10 @@ import {
 import {
   approximatePttBytes,
   formatEditPushCommand,
+  formatSectionEditCommand,
   formatReplyPush,
   MAX_PTT_PUSH_BYTES,
+  validateSectionChanges,
 } from "@pttzzz/core/internal";
 import {
   createTerminalDriver,
@@ -334,12 +336,18 @@ export class BrowserPttGateway implements PttGateway {
         retryable: false,
       };
     }
+    if (command.type === "edit-floor" && command.mode === "section") {
+      const message = validateSectionChanges(command.changes);
+      if (message) return { ok: false, code: "INVALID_INPUT", message, outcome: "not-sent", retryable: false };
+    }
     const finalPush = command.type === "reply-article"
       ? command.content
       : command.type === "reply-floor"
         ? formatReplyPush(command.floor, command.content)
         : command.type === "edit-floor"
-          ? formatEditPushCommand(command.floor, command.mode, command.content)
+          ? command.mode === "section"
+            ? formatSectionEditCommand(command.floor, command.changes)
+            : formatEditPushCommand(command.floor, command.mode, command.content)
           : null;
     if (finalPush !== null && approximatePttBytes(finalPush) > MAX_PTT_PUSH_BYTES) {
       return {

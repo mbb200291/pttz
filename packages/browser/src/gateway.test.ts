@@ -125,6 +125,29 @@ describe("BrowserPttGateway", () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
+  it("validates and forwards structured section edits without UI control strings", async () => {
+    const execute = vi.fn<BrowserGatewayDriver["execute"]>(async () => ({ ok: true }));
+    const gateway = new BrowserPttGateway(driver({ execute }));
+    const valid: PttCommand = {
+      type: "edit-floor",
+      article: articleByIndex,
+      floor: 12,
+      mode: "section",
+      changes: [{ start: 1, end: 3, replacement: "新" }],
+    };
+
+    await expect(gateway.execute(valid)).resolves.toEqual({ ok: true, outcome: "sent" });
+    expect(execute).toHaveBeenCalledWith(valid);
+    await expect(gateway.execute({
+      ...valid,
+      changes: [
+        { start: 1, end: 3, replacement: "x" },
+        { start: 2, end: 4, replacement: "y" },
+      ],
+    })).resolves.toMatchObject({ ok: false, code: "INVALID_INPUT", outcome: "not-sent" });
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
   it("maps commands to the private positional terminal workflow", async () => {
     const executeArticleCommand = vi.fn(async () => ({
       ok: false,

@@ -31,6 +31,8 @@ function article(board: string, index: number, revision: number, body: string): 
     nativeBooCount: 0,
     nativeNeutralCount: 0,
     nativeScore: 0,
+    nativeVotes: { pushCount: 0, booCount: 0, score: 0 },
+    articleVotes: { pushCount: 0, booCount: 0, score: 0 },
   };
 }
 
@@ -152,6 +154,7 @@ describe("useArticle public event bridge", () => {
       pushType: "neutral",
       depth: 1,
       score: 0,
+      votes: { pushCount: 0, booCount: 0, score: 0 },
       isOp: false,
       visible: true,
       edits: [{
@@ -172,6 +175,40 @@ describe("useArticle public event bridge", () => {
       floorNumber: 0,
       sourceFloors: [],
       editHistory: [{ content: "replacement command", resultContent: "replacement result" }],
+    });
+  });
+
+  it("projects authoritative native, article, and reply vote totals", async () => {
+    const withVotes: Article = {
+      ...article("Test", 10, 1, "body"),
+      nativePushCount: 8,
+      nativeBooCount: 3,
+      nativeScore: 5,
+      nativeVotes: { pushCount: 8, booCount: 3, score: 5, viewerVote: "push" },
+      articleVotes: { pushCount: 5, booCount: 2, score: 3, viewerVote: "boo" },
+      replies: [{
+        replyId: "reply:12",
+        author: "alice",
+        content: "reply",
+        pushType: "neutral",
+        depth: 1,
+        score: 4,
+        votes: { pushCount: 6, booCount: 2, score: 4, viewerVote: "push" },
+        isOp: false,
+        visible: true,
+        edits: [],
+        children: [],
+      }],
+    };
+    getArticle.mockResolvedValue({ ok: true, value: withVotes });
+
+    const { result } = renderHook(() => useArticle("Test", 10));
+    await waitFor(() => expect(result.current.article).not.toBeNull());
+    expect(result.current.article).toMatchObject({
+      score: 3,
+      nativeVotes: { pushCount: 8, booCount: 3, score: 5, viewerVote: "push" },
+      articleVotes: { pushCount: 5, booCount: 2, score: 3, viewerVote: "boo" },
+      pushes: [{ votes: { pushCount: 6, booCount: 2, score: 4, viewerVote: "push" } }],
     });
   });
 });

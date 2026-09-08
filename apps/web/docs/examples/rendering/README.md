@@ -1,6 +1,6 @@
 # Rendering DTOs
 
-Renderer 只消費 0.1 DTO，不解析 raw pushes。規則語意見[白皮書](../../whitepaper/pttzzz-core.md)，型別見 [contracts](../../api/contracts.md)。
+Renderer 只消費 0.1 DTO，不解析 raw pushes。規則語意見[白皮書](../../../../docs/whitepaper/pttzzz-core.md)，型別見 [contracts](../../../../packages/core/docs/contracts.md)。
 
 ```tsx
 import type { Article, PartialArticle, Reply } from "@pttzzz/core";

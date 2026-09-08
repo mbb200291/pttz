@@ -18,7 +18,7 @@ type ContractHarness = {
 function allCommands(key: ArticleKey): PttCommand[] {
   return [
     { type: "create-article", board: key.board, category: "問卦", title: "t", content: "b" },
-    { type: "edit-article", article: key, content: "new", editSummary: "fix" },
+    { type: "edit-article", article: key, content: "new" },
     { type: "delete-article", article: key },
     { type: "reply-article", article: key, content: "push", pushType: "neutral" },
     { type: "reply-article-to-board", article: key, content: "board reply" },
@@ -270,11 +270,11 @@ describe("real terminal gateway supplemental contract", () => {
     await gateway.execute({
       type: "create-article", board: "Test", category: "問卦", title: "title", content: "body",
     });
-    await gateway.execute({ type: "edit-article", article: key, content: "new", editSummary: "fix" });
+    await gateway.execute({ type: "edit-article", article: key, content: "new" });
     await gateway.execute({ type: "reply-article-to-board", article: key, content: "response" });
     expect(methods.postArticle).toHaveBeenCalledWith("Test", "問卦", "title", "body");
     expect(methods.executeArticleCommand).toHaveBeenNthCalledWith(1, {
-      type: "edit-article", article: key, content: "new", editSummary: "fix",
+      type: "edit-article", article: key, content: "new",
     });
     expect(methods.executeArticleCommand).toHaveBeenNthCalledWith(2, {
       type: "reply-article-to-board", article: key, content: "response",

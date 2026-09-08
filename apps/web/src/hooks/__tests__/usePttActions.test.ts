@@ -28,7 +28,7 @@ describe("usePttActions public client delegation", () => {
     const { result } = renderHook(() => usePttActions());
     const article = { board: "Test", index: 12 } as const;
     await result.current.createArticle({ board: "Test", category: "問卦", title: "title", content: "body" });
-    await result.current.editArticle({ article, content: "new", editSummary: "fix" });
+    await result.current.editArticle({ article, content: "new" });
     await result.current.deleteArticle({ article });
     await result.current.replyToArticle({ article, content: "reply", pushType: "neutral" });
     await result.current.replyArticleToBoard({ article, content: "board reply" });
@@ -36,7 +36,7 @@ describe("usePttActions public client delegation", () => {
     await result.current.withdrawArticleVote({ article, direction: "push" });
 
     expect(methods.createArticle).toHaveBeenCalledWith({ board: "Test", category: "問卦", title: "title", content: "body" });
-    expect(methods.editArticle).toHaveBeenCalledWith({ article, content: "new", editSummary: "fix" });
+    expect(methods.editArticle).toHaveBeenCalledWith({ article, content: "new" });
     expect(methods.deleteArticle).toHaveBeenCalledWith({ article });
     expect(methods.replyToArticle).toHaveBeenCalledWith({ article, content: "reply", pushType: "neutral" });
     expect(methods.replyArticleToBoard).toHaveBeenCalledWith({ article, content: "board reply" });

@@ -6,21 +6,38 @@
   "items": {
     "type": "object",
     "additionalProperties": false,
-    "required": ["id", "rules", "articleAuthor", "rawPushes", "expected"],
+    "required": ["id", "primaryRule", "rules", "articleAuthor", "rawPushes", "expected"],
     "properties": {
       "id": { "type": "string", "minLength": 1 },
+      "primaryRule": {
+        "type": "string",
+        "pattern": "^(RAW|MERGE|THREAD|VOTE|EDIT|OP)-[0-9]{3}\\.[0-9]+$"
+      },
       "rules": {
         "type": "array",
         "minItems": 1,
         "uniqueItems": true,
-        "items": { "type": "string", "pattern": "^(RAW|THREAD|VOTE|EDIT|PARTIAL)-[0-9]{3}$" }
+        "items": {
+          "type": "string",
+          "pattern": "^(RAW|MERGE|THREAD|VOTE|EDIT|OP)-[0-9]{3}\\.[0-9]+$"
+        }
       },
       "articleAuthor": { "type": "string", "minLength": 1 },
       "rawPushes": {
         "type": "array",
         "items": { "$ref": "#/$defs/rawPush" }
       },
+      "opEditedReplies": {
+        "type": "array",
+        "items": { "$ref": "#/$defs/opEditedReply" }
+      },
       "expected": { "$ref": "#/$defs/expected" },
+      "expectedArticleScores": { "$ref": "#/$defs/articleScores" },
+      "expectedReplyDetails": {
+        "type": "array",
+        "items": { "$ref": "#/$defs/replyDetail" }
+      },
+      "expectedCommand": { "$ref": "#/$defs/expectedCommand" },
       "expectedNormalizedEvents": {
         "type": "array",
         "items": { "$ref": "#/$defs/normalizedEvent" }
@@ -33,6 +50,18 @@
     }
   },
   "$defs": {
+    "opEditedReply": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["marker", "content", "rawBlock", "contentAnchorOffset", "markerOffset"],
+      "properties": {
+        "marker": { "type": "string" },
+        "content": { "type": "string" },
+        "rawBlock": { "type": "string" },
+        "contentAnchorOffset": { "type": "integer", "minimum": 0 },
+        "markerOffset": { "type": "integer", "minimum": 0 }
+      }
+    },
     "rawPush": {
       "type": "object",
       "additionalProperties": false,
@@ -43,6 +72,7 @@
         "content": { "type": "string" },
         "time": { "type": "string" },
         "ipAddress": { "type": "string" },
+        "remainingContentColumns": { "type": "integer", "minimum": 0 },
         "isFullWidthLine": { "type": "boolean" }
       }
     },
@@ -55,6 +85,88 @@
         "content": { "type": "string" },
         "replyToAuthor": { "type": ["string", "null"] },
         "score": { "type": "integer" }
+      }
+    },
+    "replyDetail": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["author", "content", "isOP", "sourceFloors", "visible", "editKinds"],
+      "properties": {
+        "author": { "type": "string" },
+        "content": { "type": "string" },
+        "isOP": { "type": "boolean" },
+        "sourceFloors": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 1 }
+        },
+        "visible": { "type": "boolean" },
+        "editKinds": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "expectedCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "actor"],
+      "properties": {
+        "action": {
+          "enum": ["vote-reply", "withdraw-reply-vote", "withdraw-article-vote", "edit-reply"]
+        },
+        "actor": { "type": "string", "minLength": 1 },
+        "targetFloor": { "type": "integer", "minimum": 1 },
+        "direction": { "enum": ["push", "boo"] },
+        "mode": { "enum": ["append", "replace", "section"] },
+        "inputContent": { "type": "string" },
+        "changes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/sectionChange" }
+        },
+        "pushType": { "enum": ["push", "boo", "neutral"] },
+        "content": { "type": "string" },
+        "suppressed": { "type": "boolean" },
+        "reason": { "type": "string", "minLength": 1 }
+      },
+      "oneOf": [
+        { "required": ["pushType", "content"] },
+        {
+          "required": ["suppressed", "reason"],
+          "properties": { "suppressed": { "const": true } }
+        }
+      ],
+      "allOf": [
+        {
+          "if": { "properties": { "action": { "enum": ["vote-reply", "withdraw-reply-vote"] } } },
+          "then": { "required": ["targetFloor", "direction"] }
+        },
+        {
+          "if": { "properties": { "action": { "const": "withdraw-article-vote" } } },
+          "then": { "required": ["direction"] }
+        },
+        {
+          "if": { "properties": { "action": { "const": "edit-reply" } } },
+          "then": { "required": ["targetFloor", "mode"] }
+        },
+        {
+          "if": { "properties": { "mode": { "enum": ["append", "replace"] } }, "required": ["mode"] },
+          "then": { "required": ["inputContent"] }
+        },
+        {
+          "if": { "properties": { "mode": { "const": "section" } }, "required": ["mode"] },
+          "then": { "required": ["changes"] }
+        }
+      ]
+    },
+    "sectionChange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end", "replacement"],
+      "properties": {
+        "start": { "type": "integer", "minimum": 0 },
+        "end": { "type": "integer", "minimum": 0 },
+        "replacement": { "type": "string" }
       }
     },
     "normalizedEvent": {
@@ -97,6 +209,26 @@
         "complete": { "type": "boolean" },
         "rawPushCount": { "type": "integer", "minimum": 0 },
         "expected": { "$ref": "#/$defs/stageExpected" }
+      }
+    },
+    "articleScores": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "articlePushCount",
+        "articleBooCount",
+        "articleScore",
+        "nativePushCount",
+        "nativeBooCount",
+        "nativeArticleScore"
+      ],
+      "properties": {
+        "articlePushCount": { "type": "integer", "minimum": 0 },
+        "articleBooCount": { "type": "integer", "minimum": 0 },
+        "articleScore": { "type": "integer" },
+        "nativePushCount": { "type": "integer", "minimum": 0 },
+        "nativeBooCount": { "type": "integer", "minimum": 0 },
+        "nativeArticleScore": { "type": "integer" }
       }
     },
     "stageExpected": {

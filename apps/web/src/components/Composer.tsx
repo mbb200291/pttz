@@ -9,7 +9,7 @@ import { uploadToImgur } from "../lib/imgur";
 import { approximatePttBytes } from "../lib/ptt/pttBytes";
 
 export type ComposerMode = "reply" | "reply-push" | "edit-push";
-export type EditPushMode = "補充" | "更正" | "撤回";
+export type EditPushMode = "補充" | "更正" | "區段" | "撤回";
 
 export interface ComposerInitial {
   body?: string;
@@ -21,6 +21,8 @@ export interface ComposerPayload {
   body: string;
   pushType: "push" | "neutral" | "boo";
   editMode: EditPushMode;
+  sectionStart: number;
+  sectionEnd: number;
 }
 
 const MAX_BYTES = 80;
@@ -31,7 +33,7 @@ const PUSH_TYPES: { value: "push" | "neutral" | "boo"; label: string }[] = [
   { value: "boo", label: "噓" },
 ];
 
-const EDIT_MODES: EditPushMode[] = ["補充", "更正", "撤回"];
+const EDIT_MODES: EditPushMode[] = ["補充", "更正", "區段", "撤回"];
 
 export function Composer({
   mode,
@@ -61,6 +63,8 @@ export function Composer({
   const [editMode, setEditMode] = useState<EditPushMode>(
     initial.editMode ?? "補充",
   );
+  const [sectionStart, setSectionStart] = useState(0);
+  const [sectionEnd, setSectionEnd] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
@@ -90,14 +94,18 @@ export function Composer({
 
   const submittedContent = body;
   const effectivePushType = neutralOnly ? "neutral" : pushType;
-  const currentPayload = { body, pushType: effectivePushType, editMode };
+  const currentPayload = { body, pushType: effectivePushType, editMode, sectionStart, sectionEnd };
   const remaining = MAX_BYTES - approximatePttBytes(submittedContent);
   const isSubmitDisabled =
     submitting ||
     submitLocked ||
     Boolean(isSubmitLocked?.(currentPayload)) ||
     remaining < 0 ||
-    (body.trim() === "" && !(mode === "edit-push" && editMode === "撤回"));
+    (mode === "edit-push" && editMode === "區段" && (
+      !Number.isInteger(sectionStart) || !Number.isInteger(sectionEnd) ||
+      sectionStart < 0 || sectionEnd < sectionStart || sectionEnd > (initial.body?.length ?? 0)
+    )) ||
+    (body.trim() === "" && !(mode === "edit-push" && (editMode === "撤回" || editMode === "區段")));
 
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget && !submitting) {
@@ -228,7 +236,11 @@ export function Composer({
                 <button
                   key={em}
                   type="button"
-                  onClick={() => setEditMode(em)}
+                  onClick={() => {
+                    if (em === "區段" && editMode !== "區段") setBody("");
+                    if (em !== "區段" && editMode === "區段") setBody(initial.body ?? "");
+                    setEditMode(em);
+                  }}
                   disabled={submitting}
                   className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
                     isActive
@@ -240,6 +252,41 @@ export function Composer({
                 </button>
               );
             })}
+          </div>
+        )}
+
+        {mode === "edit-push" && editMode === "區段" && (
+          <div className="rounded-xl border border-gray-700 bg-gray-800/50 p-3">
+            <p className="mb-2 text-xs text-gray-400">
+              以原內容字元位置指定半開區間 [起點, 終點)；起點等於終點時會插入文字。
+            </p>
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 text-xs text-gray-400">
+                起點
+                <input
+                  aria-label="區段起點"
+                  type="number"
+                  min={0}
+                  max={initial.body?.length ?? 0}
+                  value={sectionStart}
+                  onChange={(event) => setSectionStart(Number(event.target.value))}
+                  className="w-20 rounded-lg border border-gray-700 bg-gray-900 px-2 py-1 text-gray-100"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-xs text-gray-400">
+                終點
+                <input
+                  aria-label="區段終點"
+                  type="number"
+                  min={0}
+                  max={initial.body?.length ?? 0}
+                  value={sectionEnd}
+                  onChange={(event) => setSectionEnd(Number(event.target.value))}
+                  className="w-20 rounded-lg border border-gray-700 bg-gray-900 px-2 py-1 text-gray-100"
+                />
+              </label>
+              <span className="text-xs text-gray-500">原內容共 {initial.body?.length ?? 0} 字元</span>
+            </div>
           </div>
         )}
 
@@ -255,7 +302,7 @@ export function Composer({
             }}
             rows={4}
             className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-sky-500 resize-none"
-            placeholder="輸入內容…"
+            placeholder={editMode === "區段" ? "輸入替代內容；留空代表刪除…" : "輸入內容…"}
           />
           <span
             className={`absolute bottom-3 right-3 text-xs ${

@@ -6,9 +6,10 @@ import {
   type CoreEvent,
   type PartialArticle,
   type Reply,
+  type VoteSummary,
 } from "@pttzzz/core";
 import { usePttSocketStore } from "./usePttSocket";
-import type { AggregatedPush } from "../lib/ptt/uiTypes";
+import { projectThreadForDisplay, type AggregatedPush } from "../lib/ptt/uiTypes";
 import type {
   ArticleEditRecord,
   ArticleRevision,
@@ -28,6 +29,8 @@ export interface ArticleData {
   nativePushCount?: number;
   nativeBooCount?: number;
   nativeNeutralCount?: number;
+  nativeVotes?: VoteSummary;
+  articleVotes?: VoteSummary;
   articlePushVoters?: string[];
   articleBooVoters?: string[];
   debug?: unknown;
@@ -63,7 +66,7 @@ function cacheableArticle(article: Article): Article {
   return withoutRaw;
 }
 
-function replyPush(reply: Reply, order: number, viewerId?: string): AggregatedPush {
+function replyPush(reply: Reply, order: number): AggregatedPush {
   return {
     id: reply.replyId,
     type: reply.pushType,
@@ -73,12 +76,14 @@ function replyPush(reply: Reply, order: number, viewerId?: string): AggregatedPu
     time: reply.createdAt ?? "",
     isOP: reply.isOp,
     replyTo: reply.replyTo ?? null,
+    structuralDepth: reply.depth,
     score: reply.score,
     floorNumber: 0,
     anchorOrder: order,
     sourceFloors: [],
-    pushVoters: reply.viewerVote === "push" && viewerId ? [viewerId] : [],
-    booVoters: reply.viewerVote === "boo" && viewerId ? [viewerId] : [],
+    votes: reply.votes,
+    pushVoters: [],
+    booVoters: [],
     editHistory: reply.edits.map((edit, index) => ({
       kind: edit.kind,
       content: edit.content,
@@ -89,27 +94,27 @@ function replyPush(reply: Reply, order: number, viewerId?: string): AggregatedPu
   };
 }
 
-function flattenReplies(replies: readonly Reply[], viewerId?: string): AggregatedPush[] {
+function flattenReplies(replies: readonly Reply[]): AggregatedPush[] {
   const result: AggregatedPush[] = [];
   const visit = (items: readonly Reply[]) => {
     for (const reply of items) {
       if (!reply.visible) continue;
-      result.push(replyPush(reply, result.length, viewerId));
+      result.push(replyPush(reply, result.length));
       visit(reply.children);
     }
   };
   visit(replies);
-  return result;
+  return projectThreadForDisplay(result);
 }
 
-function partialView(article: PartialArticle | Article, viewerId?: string): PartialArticleData {
+function partialView(article: PartialArticle | Article): PartialArticleData {
   return {
     title: article.title ?? "",
     author: article.author ?? "",
     date: article.completeness === "final" ? article.publishedAt ?? "" : "",
     board: article.key.board,
     body: article.body ?? "",
-    pushes: flattenReplies(article.replies, viewerId),
+    pushes: flattenReplies(article.replies),
     articleNotes: (article.articleEdits ?? []).map((edit) => ({
       marker: edit.marker,
       content: edit.content,
@@ -121,12 +126,12 @@ function partialView(article: PartialArticle | Article, viewerId?: string): Part
       rawBlock: "",
       markerOffset: revision.sequence,
     })),
-    score: article.completeness === "final" ? article.nativeScore ?? 0 : 0,
+    score: article.completeness === "final" ? article.articleVotes?.score ?? 0 : 0,
   };
 }
 
-function articleView(article: Article, viewerId?: string): ArticleData {
-  const projected = partialView(article, viewerId);
+function articleView(article: Article): ArticleData {
+  const projected = partialView(article);
   return {
     ...projected,
     title: article.title,
@@ -135,12 +140,14 @@ function articleView(article: Article, viewerId?: string): ArticleData {
     pushes: projected.pushes ?? [],
     articleNotes: projected.articleNotes ?? [],
     revisions: projected.revisions ?? [],
-    score: article.nativeScore ?? 0,
+    score: article.articleVotes.score,
     nativePushCount: article.nativePushCount,
     nativeBooCount: article.nativeBooCount,
     nativeNeutralCount: article.nativeNeutralCount,
-    articlePushVoters: article.viewerVote === "push" && viewerId ? [viewerId] : [],
-    articleBooVoters: article.viewerVote === "boo" && viewerId ? [viewerId] : [],
+    nativeVotes: article.nativeVotes,
+    articleVotes: article.articleVotes,
+    articlePushVoters: [],
+    articleBooVoters: [],
     ...(!import.meta.env.DEV || article.metadata?.raw === undefined
       ? {}
       : { debug: article.metadata.raw }),
@@ -155,7 +162,6 @@ export function useArticle(
 ): UseArticleReturn {
   const client = usePttSocketStore((state) => state.client);
   const pttState = usePttSocketStore((state) => state.pttState);
-  const viewerId = usePttSocketStore((state) => state.credentials?.username);
   const [article, setArticle] = useState<ArticleData | null>(null);
   const [partialArticle, setPartialArticle] = useState<PartialArticleData | null>(null);
   const [cachedArticle, setCachedArticle] = useState<PartialArticleData | null>(null);
@@ -183,10 +189,10 @@ export function useArticle(
     if (mode === "initial") {
       setPartialArticle(null);
       const cached = articleAid ? null : readArticleCache(boardName, articleIndex);
-      setCachedArticle(cached ? partialView(cached, viewerId) : null);
+      setCachedArticle(cached ? partialView(cached) : null);
       if (cached?.completeness === "final") {
         showingCachedFinal = true;
-        setArticle(articleView(cached, viewerId));
+        setArticle(articleView(cached));
         setCachedArticle(null);
         setReloading(true);
       } else {
@@ -203,10 +209,10 @@ export function useArticle(
       if (articleKeyId(event.articleKey) !== keyId || event.revision <= latestRevision) return;
       latestRevision = event.revision;
       if (event.type === "article.partial") {
-        if (!showingCachedFinal) setPartialArticle(partialView(event.article, viewerId));
+        if (!showingCachedFinal) setPartialArticle(partialView(event.article));
       } else {
         acceptedFinal = true;
-        setArticle(articleView(event.article, viewerId));
+        setArticle(articleView(event.article));
         setPartialArticle(null);
         setCachedArticle(null);
         if (!articleAid) writeArticleCache(boardName, articleIndex, cacheableArticle(event.article));
@@ -226,7 +232,7 @@ export function useArticle(
       if (result.value.revision < latestRevision) return acceptedFinal;
       latestRevision = result.value.revision;
       acceptedFinal = true;
-      setArticle(articleView(result.value, viewerId));
+      setArticle(articleView(result.value));
       setPartialArticle(null);
       setCachedArticle(null);
       if (!articleAid) writeArticleCache(boardName, articleIndex, cacheableArticle(result.value));
@@ -238,7 +244,7 @@ export function useArticle(
         setReloading(false);
       }
     }
-  }, [articleAid, articleIndex, boardName, client, keyId, viewerId]);
+  }, [articleAid, articleIndex, boardName, client, keyId]);
 
   const reload = useCallback(async () => {
     if (pttState !== "ready" || !client || !boardName || (!articleAid && articleIndex <= 0)) return false;

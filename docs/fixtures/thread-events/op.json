@@ -1,0 +1,177 @@
+[
+  {
+    "id": "op-marks-replies-by-article-author",
+    "primaryRule": "OP-001.1",
+    "rules": ["OP-001.1"],
+    "articleAuthor": "Alice",
+    "rawPushes": [
+      { "type": "neutral", "author": "Alice", "content": "作者回覆。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "bob", "content": "一般回覆。", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "Alice", "content": "作者回覆。", "replyToAuthor": null, "score": 0 },
+        { "author": "bob", "content": "一般回覆。", "replyToAuthor": null, "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    },
+    "expectedReplyDetails": [
+      { "author": "Alice", "content": "作者回覆。", "isOP": true, "sourceFloors": [1], "visible": true, "editKinds": [] },
+      { "author": "bob", "content": "一般回覆。", "isOP": false, "sourceFloors": [2], "visible": true, "editKinds": [] }
+    ]
+  },
+  {
+    "id": "op-author-comparison-is-case-insensitive",
+    "primaryRule": "OP-001.2",
+    "rules": ["OP-001.1", "OP-001.2"],
+    "articleAuthor": "Alice",
+    "rawPushes": [
+      { "type": "neutral", "author": "aLiCe", "content": "大小寫不同。", "time": "01/01 12:00" }
+    ],
+    "expected": {
+      "replies": [{ "author": "aLiCe", "content": "大小寫不同。", "replyToAuthor": null, "score": 0 }],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    },
+    "expectedReplyDetails": [
+      { "author": "aLiCe", "content": "大小寫不同。", "isOP": true, "sourceFloors": [1], "visible": true, "editKinds": [] }
+    ]
+  },
+  {
+    "id": "op-marker-does-not-change-thread-semantics",
+    "primaryRule": "OP-001.3",
+    "rules": ["OP-001.3", "THREAD-001.1", "VOTE-002.1"],
+    "articleAuthor": "alice",
+    "rawPushes": [
+      { "type": "neutral", "author": "root", "content": "目標。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "回1樓：作者嵌套回覆。", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "bob", "content": "推2樓", "time": "01/01 12:02" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "root", "content": "目標。", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "作者嵌套回覆。", "replyToAuthor": "root", "score": 1 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    },
+    "expectedReplyDetails": [
+      { "author": "root", "content": "目標。", "isOP": false, "sourceFloors": [1], "visible": true, "editKinds": [] },
+      { "author": "alice", "content": "作者嵌套回覆。", "isOP": true, "sourceFloors": [2], "visible": true, "editKinds": [] }
+    ]
+  },
+  {
+    "id": "op-article-edit-creates-an-author-reply",
+    "primaryRule": "OP-002.1",
+    "rules": ["OP-002.1", "OP-002.3"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "前方回文。", "time": "01/01 12:00" }
+    ],
+    "opEditedReplies": [
+      { "marker": "作者編輯", "content": "作者插入文字", "rawBlock": "作者插入文字", "contentAnchorOffset": 10, "markerOffset": 10 }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "alice", "content": "前方回文。", "replyToAuthor": null, "score": 0 },
+        { "author": "op", "content": "作者插入文字", "replyToAuthor": "alice", "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "op-article-edit-targets-nearest-previous-reply",
+    "primaryRule": "OP-002.2",
+    "rules": ["OP-002.1", "OP-002.2"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "第一則。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "bob", "content": "第二則。", "time": "01/01 12:01" }
+    ],
+    "opEditedReplies": [
+      { "marker": "作者編輯", "content": "接在第二則後", "rawBlock": "接在第二則後", "contentAnchorOffset": 10, "markerOffset": 10 }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "alice", "content": "第一則。", "replyToAuthor": null, "score": 0 },
+        { "author": "bob", "content": "第二則。", "replyToAuthor": null, "score": 0 },
+        { "author": "op", "content": "接在第二則後", "replyToAuthor": "bob", "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "op-article-edit-is-marked-and-nested",
+    "primaryRule": "OP-002.3",
+    "rules": ["OP-001.1", "OP-002.1", "OP-002.3"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "前方回文。", "time": "01/01 12:00" }
+    ],
+    "opEditedReplies": [
+      { "marker": "作者編輯", "content": "作者回覆", "rawBlock": "作者回覆", "contentAnchorOffset": 10, "markerOffset": 10 }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "alice", "content": "前方回文。", "replyToAuthor": null, "score": 0 },
+        { "author": "op", "content": "作者回覆", "replyToAuthor": "alice", "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    },
+    "expectedReplyDetails": [
+      { "author": "alice", "content": "前方回文。", "isOP": false, "sourceFloors": [1], "visible": true, "editKinds": [] },
+      { "author": "op", "content": "作者回覆", "isOP": true, "sourceFloors": [], "visible": true, "editKinds": [] }
+    ]
+  },
+  {
+    "id": "op-article-edit-does-not-consume-raw-floor",
+    "primaryRule": "OP-002.4",
+    "rules": ["RAW-001.1", "OP-002.4"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "前方回文。", "time": "01/01 12:00" }
+    ],
+    "opEditedReplies": [
+      { "marker": "作者編輯", "content": "無樓號作者回覆", "rawBlock": "無樓號作者回覆", "contentAnchorOffset": 10, "markerOffset": 10 }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "alice", "content": "前方回文。", "replyToAuthor": null, "score": 0 },
+        { "author": "op", "content": "無樓號作者回覆", "replyToAuthor": "alice", "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    },
+    "expectedReplyDetails": [
+      { "author": "alice", "content": "前方回文。", "isOP": false, "sourceFloors": [1], "visible": true, "editKinds": [] },
+      { "author": "op", "content": "無樓號作者回覆", "isOP": true, "sourceFloors": [], "visible": true, "editKinds": [] }
+    ]
+  },
+  {
+    "id": "op-article-edit-before-any-reply-is-not-nested",
+    "primaryRule": "OP-002.5",
+    "rules": ["OP-002.5"],
+    "articleAuthor": "op",
+    "rawPushes": [],
+    "opEditedReplies": [
+      { "marker": "作者編輯", "content": "沒有前方目標", "rawBlock": "沒有前方目標", "contentAnchorOffset": 0, "markerOffset": 0 }
+    ],
+    "expected": {
+      "replies": [],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  }
+]

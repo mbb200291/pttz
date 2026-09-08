@@ -689,7 +689,7 @@ git commit -m "refactor: isolate browser terminal driver"
 - `subscribe()` 回傳 unsubscribe，並把 status 轉成 `GatewayEvent`。
 - `readArticle()` 依序 yield incomplete／final `RawArticleSource`，且完整保留輸入的 `ArticleKey` 表示。
 - `execute(PttCommand)` 分派到 terminal workflow 並正規化 `ActionReceipt`。
-- behavioral contract 必須覆蓋全部 command variant，包含獨立的 `reply-article-to-board`、帶 category 的 create 與帶 `editSummary` 的 index/AID edit。
+- behavioral contract 必須覆蓋全部 command variant，包含獨立的 `reply-article-to-board`、帶 category 的 create，以及只傳更新正文並保留 index/AID identity 的 edit。
 - package root 沒有 `send()`、raw screen 或 positional action methods。
 
 Run: `npx vitest run packages/browser/src/gateway.test.ts`

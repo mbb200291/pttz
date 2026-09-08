@@ -4,6 +4,7 @@
  * 將文字內容（文章 body 或推文 content）解析為 ContentSegment 陣列。
  * 支援的 URL 類型：
  *   - imgur 圖片（https://i.imgur.com/<id>.<ext> 或 https://imgur.com/<id>.<ext>）
+ *   - 任意 HTTPS 主機上的直接圖片網址（png / jpg / jpeg / gif / webp）
  *   - YouTube 影片（youtube.com/watch?v=<id> 或 youtu.be/<id>）
  * 其餘文字保留為純文字段落。
  */
@@ -15,7 +16,7 @@ export type ContentSegment =
 
 // Combined URL pattern to find positions of all media URLs
 const MEDIA_URL_RE =
-  /https?:\/\/(?:(?:i\.)?imgur\.com\/[A-Za-z0-9]+(?:\.[A-Za-z]+)?|(?:www\.|m\.)?youtube\.com\/watch\?[^\s#]*v=[A-Za-z0-9_-]{11}[^\s#]*|youtu\.be\/[A-Za-z0-9_-]{11}[^\s]*)/gi;
+  /(?:https:\/\/[^\s?#]+\.(?:png|jpe?g|gif|webp)(?:[?#][^\s]*)?|https?:\/\/(?:(?:i\.)?imgur\.com\/[A-Za-z0-9]+(?:\.[A-Za-z]+)?|(?:www\.|m\.)?youtube\.com\/watch\?[^\s#]*v=[A-Za-z0-9_-]{11}[^\s#]*|youtu\.be\/[A-Za-z0-9_-]{11}[^\s]*))/gi;
 
 function extractYouTubeId(url: string): string | null {
   // Reset lastIndex since we're reusing the regex
@@ -28,6 +29,10 @@ function extractYouTubeId(url: string): string | null {
 
 function isImgurUrl(url: string): boolean {
   return /^https?:\/\/(?:i\.)?imgur\.com\//i.test(url);
+}
+
+function isDirectHttpsImageUrl(url: string): boolean {
+  return /^https:\/\/[^\s?#]+\.(?:png|jpe?g|gif|webp)(?:[?#][^\s]*)?$/i.test(url);
 }
 
 function isYouTubeUrl(url: string): boolean {
@@ -73,8 +78,11 @@ export function parseContentSegments(text: string): ContentSegment[] {
       } else {
         segments.push({ kind: "text", content: url });
       }
-    } else if (isImgurUrl(url)) {
-      segments.push({ kind: "image", url: normalizeImgurUrl(url) });
+    } else if (isImgurUrl(url) || isDirectHttpsImageUrl(url)) {
+      segments.push({
+        kind: "image",
+        url: isImgurUrl(url) ? normalizeImgurUrl(url) : url,
+      });
     } else {
       segments.push({ kind: "text", content: url });
     }

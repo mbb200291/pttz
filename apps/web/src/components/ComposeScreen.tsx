@@ -2,7 +2,7 @@
  * ComposeScreen — full-page compose / edit-article screen
  *
  * mode="post"          → compose a new article
- * mode="edit-article"  → edit an existing article (requires editSummary)
+ * mode="edit-article"  → edit an existing article
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -21,7 +21,6 @@ export interface ComposePayload {
   category: string;
   title: string;
   body: string;
-  editSummary: string;
 }
 
 interface ComposeScreenProps {
@@ -82,14 +81,12 @@ export function ComposeScreen({
   const [category, setCategory] = useState(initial?.category ?? "");
   const [title, setTitle] = useState(initial?.title ?? "");
   const [body, setBody] = useState(initial?.body ?? "");
-  const [editSummary, setEditSummary] = useState("");
   const [preview, setPreview] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [titleFocused, setTitleFocused] = useState(false);
   const [bodyFocused, setBodyFocused] = useState(false);
-  const [editSummaryFocused, setEditSummaryFocused] = useState(false);
 
   const draftTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
@@ -122,16 +119,14 @@ export function ComposeScreen({
     };
   }, [title, body]);
 
-  const canSubmit = title.trim() !== "" && body.trim() !== "" && (
-    mode !== "edit-article" || editSummary.trim() !== ""
-  );
-  const currentPayload = { board, category, title, body, editSummary };
+  const canSubmit = title.trim() !== "" && body.trim() !== "";
+  const currentPayload = { board, category, title, body };
   const currentSubmitLocked = submitLocked || Boolean(isSubmitLocked?.(currentPayload));
 
   const handleSubmit = useCallback(() => {
     if (!canSubmit || submitting || currentSubmitLocked) return;
-    onSubmit({ board, category, title, body, editSummary });
-  }, [canSubmit, submitting, currentSubmitLocked, onSubmit, board, category, title, body, editSummary]);
+    onSubmit({ board, category, title, body });
+  }, [canSubmit, submitting, currentSubmitLocked, onSubmit, board, category, title, body]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -889,51 +884,11 @@ export function ComposeScreen({
                   color: "var(--boo-fg)",
                 }}
               >
-                {mode === "edit-article" && !editSummary.trim()
-                  ? "請填寫修訂說明"
-                  : "標題與內容為必填"}
+                標題與內容為必填
               </span>
             )}
           </div>
 
-          {/* Edit summary (edit-article only) */}
-          {mode === "edit-article" && (
-            <div style={{ marginTop: 24 }}>
-              <div
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: "var(--text-dim)",
-                  letterSpacing: "0.06em",
-                  textTransform: "uppercase",
-                  marginBottom: 8,
-                }}
-              >
-                修訂說明
-              </div>
-              <textarea
-                value={editSummary}
-                onChange={(e) => setEditSummary(e.target.value)}
-                placeholder="描述這次的修改內容（必填）"
-                onFocus={() => setEditSummaryFocused(true)}
-                onBlur={() => setEditSummaryFocused(false)}
-                rows={3}
-                style={{
-                  width: "100%",
-                  padding: "10px 14px",
-                  background: "var(--surface)",
-                  border: `1px solid ${editSummaryFocused ? "var(--accent-border)" : "var(--border)"}`,
-                  borderRadius: 10,
-                  color: "var(--text)",
-                  fontSize: 14,
-                  fontFamily: "var(--font)",
-                  outline: "none",
-                  resize: "vertical",
-                  boxSizing: "border-box",
-                }}
-              />
-            </div>
-          )}
         </div>
 
         {/* Right sidebar */}

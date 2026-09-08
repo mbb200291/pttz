@@ -1,6 +1,6 @@
 # React / Zustand bridge
 
-Core 本身沒有 store，也不依賴 React 或 Zustand。這個 0.1 範例只把 `PttzzzClient` events 橋接到 app-owned store；完整 API 見 [contracts](../../api/contracts.md)。
+Core 本身沒有 store，也不依賴 React 或 Zustand。這個 0.1 範例只把 `PttzzzClient` events 橋接到 app-owned store；完整 API 見 [contracts](../../../../packages/core/docs/contracts.md)。
 
 ```ts
 import { create } from "zustand";

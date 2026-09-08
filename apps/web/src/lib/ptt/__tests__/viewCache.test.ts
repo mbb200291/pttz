@@ -46,6 +46,8 @@ describe("ptt view cache", () => {
       nativePushCount: 0,
       nativeBooCount: 0,
       nativeNeutralCount: 0,
+      nativeVotes: { pushCount: 0, booCount: 0, score: 0 },
+      articleVotes: { pushCount: 0, booCount: 0, score: 0 },
     });
 
     expect(mod.readArticleCache("Gossiping", 785692)).toEqual({
@@ -62,6 +64,8 @@ describe("ptt view cache", () => {
       nativePushCount: 0,
       nativeBooCount: 0,
       nativeNeutralCount: 0,
+      nativeVotes: { pushCount: 0, booCount: 0, score: 0 },
+      articleVotes: { pushCount: 0, booCount: 0, score: 0 },
     });
   });
 

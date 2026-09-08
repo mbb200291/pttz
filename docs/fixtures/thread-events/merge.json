@@ -1,0 +1,348 @@
+[
+  {
+    "id": "aggregation-five-minute-interleaving",
+    "primaryRule": "MERGE-001.3",
+    "rules": ["MERGE-001.1", "MERGE-001.3", "RAW-001.3"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "前半段", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "bob", "content": "插話。", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "後半段", "time": "01/01 12:05" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "alice", "content": "前半段\n後半段", "replyToAuthor": null, "score": 0 },
+        { "author": "bob", "content": "插話。", "replyToAuthor": null, "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    },
+    "stages": [
+      {
+        "complete": false,
+        "rawPushCount": 1,
+        "expected": {
+          "replies": [
+            { "author": "alice", "content": "前半段", "replyToAuthor": null, "score": 0 }
+          ],
+          "nativeArticleScore": 0,
+          "articlePushVoters": [],
+          "articleBooVoters": [],
+          "status": "incomplete"
+        }
+      },
+      {
+        "complete": true,
+        "rawPushCount": 3,
+        "expected": {
+          "replies": [
+            { "author": "alice", "content": "前半段\n後半段", "replyToAuthor": null, "score": 0 },
+            { "author": "bob", "content": "插話。", "replyToAuthor": null, "score": 0 }
+          ],
+          "nativeArticleScore": 0,
+          "articlePushVoters": [],
+          "articleBooVoters": [],
+          "status": "final"
+        }
+      }
+    ]
+  },
+  {
+    "id": "aggregation-forced-continuation-different-target",
+    "primaryRule": "MERGE-003.3",
+    "rules": ["MERGE-003.1", "MERGE-003.3", "THREAD-003.2"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "root-a", "content": "A。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "root-b", "content": "B。", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "回1樓：前段||", "time": "01/01 12:02" },
+      { "type": "neutral", "author": "alice", "content": "回2樓：不同目標", "time": "01/01 12:03" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "root-a", "content": "A。", "replyToAuthor": null, "score": 0 },
+        { "author": "root-b", "content": "B。", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "前段", "replyToAuthor": "root-a", "score": 0 },
+        { "author": "alice", "content": "不同目標", "replyToAuthor": "root-b", "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "aggregation-forced-continuation-continuous-six-minutes",
+    "primaryRule": "MERGE-001.2",
+    "rules": ["MERGE-001.2", "MERGE-003.1"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "root", "content": "根。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "回1樓：前段。||", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "回1樓：六分鐘後", "time": "01/01 12:07" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "root", "content": "根。", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "前段。\n六分鐘後", "replyToAuthor": "root", "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "aggregation-interleaved-six-minutes-splits",
+    "primaryRule": "MERGE-001.3",
+    "rules": ["MERGE-001.3"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "前段", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "bob", "content": "插入。", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "六分鐘後", "time": "01/01 12:06" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "alice", "content": "前段", "replyToAuthor": null, "score": 0 },
+        { "author": "bob", "content": "插入。", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "六分鐘後", "replyToAuthor": null, "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "aggregation-forced-continuation-respects-boundaries",
+    "primaryRule": "MERGE-003.3",
+    "rules": ["MERGE-001.1", "MERGE-001.3", "MERGE-003.1", "MERGE-003.2", "MERGE-003.3", "THREAD-003.2"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "root-a", "content": "A。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "root-b", "content": "B。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "回1樓：句號。||", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "回1樓：同目標續接", "time": "01/01 12:03" },
+      { "type": "neutral", "author": "bob", "content": "回1樓：不同作者", "time": "01/01 12:04" },
+      { "type": "neutral", "author": "alice", "content": "回2樓：不同目標||", "time": "01/01 12:04" },
+      { "type": "neutral", "author": "eve", "content": "中間事件。", "time": "01/01 12:05" },
+      { "type": "neutral", "author": "alice", "content": "回2樓：超過五分鐘", "time": "01/01 12:10" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "root-a", "content": "A。", "replyToAuthor": null, "score": 0 },
+        { "author": "root-b", "content": "B。", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "句號。\n同目標續接", "replyToAuthor": "root-a", "score": 0 },
+        { "author": "bob", "content": "不同作者", "replyToAuthor": "root-a", "score": 0 },
+        { "author": "alice", "content": "不同目標", "replyToAuthor": "root-b", "score": 0 },
+        { "author": "eve", "content": "中間事件。", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "超過五分鐘", "replyToAuthor": "root-b", "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "aggregation-full-and-non-full-lines",
+    "primaryRule": "MERGE-002.1",
+    "rules": ["MERGE-002.1", "MERGE-002.2", "MERGE-002.5"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "滿行前段", "time": "01/01 12:00", "remainingContentColumns": 1 },
+      { "type": "neutral", "author": "alice", "content": "直接接上", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "bob", "content": "未滿前段", "time": "01/01 12:02", "remainingContentColumns": 2 },
+      { "type": "neutral", "author": "bob", "content": "換行接上", "time": "01/01 12:03" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "alice", "content": "滿行前段直接接上", "replyToAuthor": null, "score": 0 },
+        { "author": "bob", "content": "未滿前段\n換行接上", "replyToAuthor": null, "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "merge-requires-same-author-and-target",
+    "primaryRule": "MERGE-001.1",
+    "rules": ["MERGE-001.1", "THREAD-003.2"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "root-a", "content": "A。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "root-b", "content": "B。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "回1樓：同作者第一段", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "回2樓：不同目標", "time": "01/01 12:02" },
+      { "type": "neutral", "author": "bob", "content": "回1樓：不同作者", "time": "01/01 12:03" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "root-a", "content": "A。", "replyToAuthor": null, "score": 0 },
+        { "author": "root-b", "content": "B。", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "同作者第一段", "replyToAuthor": "root-a", "score": 0 },
+        { "author": "alice", "content": "不同目標", "replyToAuthor": "root-b", "score": 0 },
+        { "author": "bob", "content": "不同作者", "replyToAuthor": "root-a", "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "merge-continuous-pushes-ignore-time-gap",
+    "primaryRule": "MERGE-001.2",
+    "rules": ["MERGE-001.1", "MERGE-001.2"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "第一段", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "六分鐘後仍連續", "time": "01/01 12:06" }
+    ],
+    "expected": {
+      "replies": [{ "author": "alice", "content": "第一段\n六分鐘後仍連續", "replyToAuthor": null, "score": 0 }],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "merge-control-event-cuts-the-group",
+    "primaryRule": "MERGE-001.4",
+    "rules": ["MERGE-001.4", "RAW-001.6"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "第一段", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "推", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "控制事件後另起", "time": "01/01 12:02" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "alice", "content": "第一段", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "控制事件後另起", "replyToAuthor": null, "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": ["alice"],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "merge-terminal-punctuation-cuts-the-group",
+    "primaryRule": "MERGE-001.5",
+    "rules": ["MERGE-001.5"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "完整一句。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "下一則", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "alice", "content": "完整一句。", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "下一則", "replyToAuthor": null, "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "merge-marker-overrides-terminal-punctuation",
+    "primaryRule": "MERGE-003.1",
+    "rules": ["MERGE-001.5", "MERGE-003.1"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "完整一句。||", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "仍然續接", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [{ "author": "alice", "content": "完整一句。\n仍然續接", "replyToAuthor": null, "score": 0 }],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "merge-marker-is-not-visible",
+    "primaryRule": "MERGE-003.2",
+    "rules": ["MERGE-003.1", "MERGE-003.2"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "前段||", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "後段", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [{ "author": "alice", "content": "前段\n後段", "replyToAuthor": null, "score": 0 }],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "merge-non-full-line-inserts-newline",
+    "primaryRule": "MERGE-002.2",
+    "rules": ["MERGE-002.2"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "未滿", "time": "01/01 12:00", "remainingContentColumns": 2 },
+      { "type": "neutral", "author": "alice", "content": "下一行", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [{ "author": "alice", "content": "未滿\n下一行", "replyToAuthor": null, "score": 0 }],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "merge-physical-wrap-is-restored-before-aggregation",
+    "primaryRule": "MERGE-002.3",
+    "rules": ["MERGE-002.3"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "這是一筆在終端折行後還原的完整回文", "time": "01/01 12:00" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "alice", "content": "這是一筆在終端折行後還原的完整回文", "replyToAuthor": null, "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "merge-unknown-line-width-inserts-newline",
+    "primaryRule": "MERGE-002.4",
+    "rules": ["MERGE-002.2", "MERGE-002.4"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "dsrte", "content": "但是美股利空 台股也看空時 就是開低走低 勝率高", "time": "08/29 16:55" },
+      { "type": "neutral", "author": "dsrte", "content": "雖然看他的節目 那種態度蠻討厭的", "time": "08/29 16:58" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "dsrte", "content": "但是美股利空 台股也看空時 就是開低走低 勝率高\n雖然看他的節目 那種態度蠻討厭的", "replyToAuthor": null, "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "merge-full-line-does-not-override-group-boundary",
+    "primaryRule": "MERGE-002.5",
+    "rules": ["MERGE-001.5", "MERGE-002.5"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "完整一句。", "time": "01/01 12:00", "remainingContentColumns": 1 },
+      { "type": "neutral", "author": "alice", "content": "仍須分組", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "alice", "content": "完整一句。", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "仍須分組", "replyToAuthor": null, "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  }
+]

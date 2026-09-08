@@ -74,6 +74,26 @@ beforeEach(() => {
 });
 
 describe("Article push editing", () => {
+  it("sends a structured half-open section edit without exposing control syntax", async () => {
+    mocks.editReply.mockResolvedValue({ ok: true, value: undefined });
+    mocks.reload.mockResolvedValue(true);
+    render(<Article boardName="Test" articleIndex={99} onBack={() => {}} currentUser="alice" mockArticle={article} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "編輯" }));
+    await userEvent.click(screen.getByRole("button", { name: "區段" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "區段起點" }), { target: { value: "1" } });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "區段終點" }), { target: { value: "2" } });
+    await userEvent.type(screen.getByRole("textbox"), "新");
+    await userEvent.click(screen.getByRole("button", { name: "送出" }));
+
+    expect(mocks.editReply).toHaveBeenCalledWith({
+      article: { board: "Test", index: 99 },
+      replyId: "push-1",
+      mode: "section",
+      changes: [{ start: 1, end: 2, replacement: "新" }],
+    });
+  });
+
   it("renders parsed server edit history without local-only state", async () => {
     render(
       <Article

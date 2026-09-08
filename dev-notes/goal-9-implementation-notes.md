@@ -14,7 +14,7 @@ apps/web (React + Zustand reference UI)
 - `packages/core`：白皮書規則、parser／aggregator、公開 DTO、`PttzzzClient`、事件、`Result` 與 write outcome。沒有 React、Zustand、DOM、WebSocket、storage 或 `ptt-client` dependency。
 - `packages/browser`：真實 terminal driver、`BrowserPttGateway`、browser factory，以及 `@pttzzz/browser/testing` fake gateway。只有這層理解 terminal screen、按鍵與 workflow。
 - `apps/web`：既有 UI 的官方範例，只從 `@pttzzz/core`、`@pttzzz/browser` 與 Fake PTT runtime／測試所需的 `@pttzzz/browser/testing` 使用公開入口。
-- `docs/whitepaper`、`docs/fixtures`、`docs/api`：分別固定規則、可執行案例與人類／AI 介面契約。
+- `docs/whitepaper`、`docs/fixtures`、`packages/core/docs`：分別固定規則、可執行案例與人類／AI 介面契約。
 
 ## 公開與內部邊界
 
@@ -46,7 +46,7 @@ PTT 單行限制在 core/browser 共用 final formatter，以 ASCII 1 byte、非
 
 - `@pttzzz/browser/testing` 建立 Fake PTT runtime，供 `apps/web` 的 `?mockPtt=1` 多帳號模式及自動測試使用；real 與 fake gateway 共用 contract suite，並覆蓋 late login、讀寫與 session lifecycle。
 - `scripts/smoke-packages.mjs` 實際 `npm pack` core/browser，離線安裝 tarballs，驗證 ESM、types、exports、dependency closure、LICENSE、secret/path allowlist 與 deep import failure。
-- `docs/examples/minimal-browser` 只使用 packed public roots，實際 typecheck、Vite bundle並在 jsdom 執行。它示範 Result、events、revision gate、nested rendering、`replyId` write、unsubscribe 與 disconnect。
+- `apps/web/docs/examples/minimal-browser` 只使用 packed public roots，實際 typecheck、Vite bundle並在 jsdom 執行。它示範 Result、events、revision gate、nested rendering、`replyId` write、unsubscribe 與 disconnect。
 - Browser host 必須提供 `Buffer` polyfill，並把同源 `/ptt-ws` WebSocket 代理到 `wss://ws.ptt.cc/bbs`，注入 `Origin: https://term.ptt.cc`。這同樣是 production host 的責任，不只是 dev 設定。
 
 ## 實作中遇到的重點

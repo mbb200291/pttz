@@ -20,7 +20,6 @@ import type {
 import {
   aggregatePushes,
   formatBoardReplyTitle,
-  formatPttzzzEditSummary,
   splitArticleBody,
   splitArticleEditableContent,
   type ArticleSummary,
@@ -603,16 +602,10 @@ export class FakePttAdapter {
       return { ok: false, reason: "文章身分已變更，請重新載入" };
     }
 
-    const marker = formatPttzzzEditSummary(request.editSummary);
-    if (!marker) {
-      return { ok: false, reason: "編輯摘要不可為空" };
-    }
-
     const { preservedFooter } = splitArticleEditableContent(article.body);
     article.body = [
       request.body.trimEnd(),
       preservedFooter,
-      marker,
     ]
       .filter(Boolean)
       .join("\n");
@@ -720,7 +713,7 @@ export class FakePttAdapter {
         return this.editArticle({
           boardName: article.board, articleIndex: article.index,
           expectedAuthor: article.author, expectedTitle: article.title,
-          body: command.content, editSummary: command.editSummary,
+          body: command.content,
         });
       case "delete-article":
         return this.deleteArticle({
@@ -738,7 +731,9 @@ export class FakePttAdapter {
         return this.replyToPush(command.floor, command.content, command.pushType, article.board);
       case "edit-floor":
         return this.appendPush(article.board,
-          `${command.mode === "append" ? "補充" : "更正"}我在${command.floor}樓發言：${command.content}`,
+          command.mode === "section"
+            ? `更正我在${command.floor}樓發言：${command.changes.map((change) => `^${change.start}:${change.end}=${change.replacement}`).join(";")}`
+            : `${command.mode === "append" ? "補充" : "更正"}我在${command.floor}樓發言：${command.content}`,
           "neutral");
       case "withdraw-floor":
         for (const range of command.ranges) {

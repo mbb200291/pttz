@@ -313,7 +313,12 @@ describe("PttzzzClient article reads", () => {
       ok: true,
       value: {
         viewerVote: "push",
-        replies: [{ viewerVote: "boo" }],
+        nativeVotes: { pushCount: 1, booCount: 1, score: 0 },
+        articleVotes: { pushCount: 1, booCount: 0, score: 1, viewerVote: "push" },
+        replies: [{
+          viewerVote: "boo",
+          votes: { pushCount: 0, booCount: 1, score: -1, viewerVote: "boo" },
+        }],
       },
     });
     expect(sessionEvents.filter((event) => event.type === "session.changed")).toEqual([
@@ -439,8 +444,8 @@ describe("PttzzzClient article reads", () => {
     expect(result).toMatchObject({
       ok: true,
       value: { replies: [{ edits: [
-        { kind: "append", content: "edit-second", resultContent: "second.\nedit-second" },
-        { kind: "replace", content: "edit-first", resultContent: "edit-first" },
+        { kind: "append", content: "edit-second", resultContent: "first\nsecond.\nedit-second" },
+        { kind: "replace", content: "edit-first", resultContent: "edit-first\nsecond.\nedit-second" },
       ] }] },
     });
   });
@@ -468,6 +473,31 @@ describe("PttzzzClient article reads", () => {
       nativeNeutralCount: 1,
     } });
   });
+
+  it("preserves arbitrary structural reply depth in the public article", async () => {
+    const gateway = new MemoryGateway();
+    gateway.sources = [{
+      articleKey: indexKey,
+      completeness: "final",
+      revision: 1,
+      rawText: raw("deep", "body", [
+        "→ alice: first. 08/22 10:01",
+        "→ bob: 回1樓：second. 08/22 10:02",
+        "→ carol: 回2樓：third. 08/22 10:03",
+        "→ dave: 回3樓：fourth. 08/22 10:04",
+      ].join("\n")),
+    }];
+
+    const result = await new PttzzzClient(gateway).getArticle({ article: indexKey });
+
+    expect(result).toMatchObject({ ok: true, value: { replies: [{
+      depth: 1,
+      children: [{ depth: 2, children: [{
+        depth: 3,
+        children: [{ depth: 4, replyTo: "reply:3" }],
+      }] }],
+    }] } });
+  });
 });
 
 describe("PttzzzClient writes", () => {
@@ -476,7 +506,7 @@ describe("PttzzzClient writes", () => {
     const client = new PttzzzClient(gateway);
 
     await client.createArticle({ board: "Test", category: "閒聊", title: "title", content: "body" });
-    await client.editArticle({ article: indexKey, content: "updated", editSummary: "fix" });
+    await client.editArticle({ article: indexKey, content: "updated" });
     await client.deleteArticle({ article: indexKey });
     await client.replyToArticle({ article: indexKey, content: "comment", pushType: "neutral" });
     await client.replyArticleToBoard({ article: indexKey, content: "board reply" });
@@ -485,7 +515,7 @@ describe("PttzzzClient writes", () => {
 
     expect(gateway.commands).toEqual([
       { type: "create-article", board: "Test", category: "閒聊", title: "title", content: "body" },
-      { type: "edit-article", article: indexKey, content: "updated", editSummary: "fix" },
+      { type: "edit-article", article: indexKey, content: "updated" },
       { type: "delete-article", article: indexKey },
       { type: "reply-article", article: indexKey, content: "comment", pushType: "neutral" },
       { type: "reply-article-to-board", article: indexKey, content: "board reply" },
@@ -507,6 +537,12 @@ describe("PttzzzClient writes", () => {
 
     await client.replyToReply({ article: indexKey, replyId, content: " 同意 ", pushType: "push" });
     await client.editReply({ article: indexKey, replyId, mode: "append", content: "more" });
+    await client.editReply({
+      article: indexKey,
+      replyId,
+      mode: "section",
+      changes: [{ start: 2, end: 2, replacement: "新增" }],
+    });
     await client.voteReply({ article: indexKey, replyId, direction: "boo" });
     await client.withdrawReplyVote({ article: indexKey, replyId, direction: "push" });
     await client.withdrawReply({ article: indexKey, replyId });
@@ -514,10 +550,40 @@ describe("PttzzzClient writes", () => {
     expect(gateway.commands).toEqual([
       { type: "reply-floor", article: indexKey, floor: 1, content: " 同意 ", pushType: "push" },
       { type: "edit-floor", article: indexKey, floor: 1, mode: "append", content: "more" },
+      {
+        type: "edit-floor",
+        article: indexKey,
+        floor: 1,
+        mode: "section",
+        changes: [{ start: 2, end: 2, replacement: "新增" }],
+      },
       { type: "vote-floor", article: indexKey, floor: 1, direction: "boo" },
       { type: "withdraw-floor-vote", article: indexKey, floor: 1, direction: "push" },
       { type: "withdraw-floor", article: indexKey, ranges: [{ start: 1, end: 2 }] },
     ]);
+  });
+
+  it("rejects invalid structured section edits before reaching the gateway", async () => {
+    const gateway = new MemoryGateway();
+    gateway.sources = [{
+      articleKey: indexKey, completeness: "final", revision: 1,
+      rawText: raw("thread", "body", "→ bob: target. 08/22 10:01"),
+    }];
+    const client = new PttzzzClient(gateway);
+    const loaded = await client.getArticle({ article: indexKey });
+    if (!loaded.ok) throw new Error("fixture article missing");
+    const replyId = loaded.value.replies[0].replyId;
+
+    await expect(client.editReply({
+      article: indexKey,
+      replyId,
+      mode: "section",
+      changes: [
+        { start: 1, end: 3, replacement: "x" },
+        { start: 2, end: 4, replacement: "y" },
+      ],
+    })).resolves.toMatchObject({ ok: false, error: { code: "INVALID_INPUT" } });
+    expect(gateway.commands).toEqual([]);
   });
 
   it("validates the normalized final wire push with the PTT Big5 approximation", async () => {

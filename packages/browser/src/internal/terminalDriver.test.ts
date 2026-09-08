@@ -79,7 +79,7 @@ describe("terminal driver module", () => {
     const key = { board: "Test", aid: "#expected" } as const;
     const commands = [
       { type: "reply-article", article: key, content: "x", pushType: "neutral" },
-      { type: "edit-article", article: key, content: "new", editSummary: "fix" },
+      { type: "edit-article", article: key, content: "new" },
       { type: "delete-article", article: key },
       { type: "reply-article-to-board", article: key, content: "response" },
     ] as const;
@@ -134,7 +134,7 @@ describe("terminal driver module", () => {
     const mod = await import("./terminalDriver.js");
     const key = { board: "Test", index: 42 } as const;
     const commands = [
-      { type: "edit-article", article: key, content: "new", editSummary: "fix" },
+      { type: "edit-article", article: key, content: "new" },
       { type: "delete-article", article: key },
       { type: "reply-article-to-board", article: key, content: "response" },
     ] as const;
@@ -225,6 +225,70 @@ describe("terminal driver module", () => {
     expect(sent.indexOf("X")).toBeGreaterThan(sent.lastIndexOf("42\r\r"));
     expect(sent).toContain("安全送出\r");
     expect(sent.at(-1)).toBe("q");
+  });
+
+  it("emits each reply vote and edit control command exactly once", async () => {
+    const mod = await import("./terminalDriver.js");
+    const sent: string[] = [];
+    const boardRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 42, date: "08/22", author: "alice", title: "目標文章" }),
+    ];
+    const articleRows = [
+      "作者  alice 看板 Test",
+      "標題  目標文章",
+      "時間  Sat Aug 22 10:00:00 2026",
+      "───────────────────────────────────────",
+      "內容",
+      ...Array.from({ length: 18 }, () => ""),
+      "瀏覽 第 1/1 頁 (100%)",
+    ];
+    let screenRows = boardRows;
+    const controls = new Set([
+      "推12樓",
+      "撤回我對12樓的推",
+      "補充我在12樓發言：補充內容",
+      "更正我在12樓發言：^1:3=新",
+    ]);
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      getLine(index: number) { return { str: screenRows[index] ?? "" }; },
+      async getLines() { return screenRows; },
+      async send(value: string) {
+        sent.push(value);
+        if (value === "42\r\r") screenRows = articleRows;
+        else if (value === "q") screenRows = boardRows;
+        else if (value === "X") screenRows = ["1.值得推薦 2.給它噓聲 3.只加註解"];
+        else if (value === "3") screenRows = ["請輸入推文內容:"];
+        else if (controls.has(value.replace(/\r$/u, ""))) screenRows = ["確定送出推文嗎"];
+        else if (value === "y\r") screenRows = articleRows;
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+    const article = { board: "Test", index: 42 } as const;
+
+    await driver.executeArticleCommand({ type: "vote-floor", article, floor: 12, direction: "push" });
+    await driver.executeArticleCommand({
+      type: "withdraw-floor-vote", article, floor: 12, direction: "push",
+    });
+    await driver.executeArticleCommand({
+      type: "edit-floor", article, floor: 12, mode: "append", content: " 補充內容 ",
+    });
+    await driver.executeArticleCommand({
+      type: "edit-floor",
+      article,
+      floor: 12,
+      mode: "section",
+      changes: [{ start: 1, end: 3, replacement: "新" }],
+    });
+
+    for (const control of controls) {
+      expect(sent.filter((value) => value === `${control}\r`), control).toHaveLength(1);
+    }
+    expect(sent).not.toContain("補充我在12樓發言：補充我在12樓發言：補充內容\r");
   });
 
   it("locates an older index through board pagination before writing", async () => {
@@ -2669,7 +2733,7 @@ describe("terminal driver module", () => {
     );
 
     expect(partialPushContents[0]).toEqual([
-      "alice:第一段第二段:root",
+      "alice:第一段\n第二段:root",
       "bob:收到:reply:1",
     ]);
   });
@@ -3418,7 +3482,7 @@ describe("terminal driver module", () => {
     ).toBe(false);
   });
 
-  it("edits the expected article and preserves structured revision history", async () => {
+  it("edits the expected article without adding a custom summary", async () => {
     const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     const articleRows = [
@@ -3472,7 +3536,6 @@ describe("terminal driver module", () => {
       expectedAuthor: "alice",
       expectedTitle: "[測試] 原標題",
       body: "更新正文",
-      editSummary: "第二次修正",
     });
 
     expect(result).toEqual({ ok: true, outcome: "sent" });
@@ -3489,12 +3552,9 @@ describe("terminal driver module", () => {
     expect(sent.indexOf("※ PTTzzz 編輯摘要：中間修正\r")).toBeLessThan(
       sent.indexOf("※ 編輯: alice, 07/16/2026 10:00:00\r"),
     );
-    expect(sent.indexOf("※ 編輯: alice, 07/16/2026 10:00:00\r")).toBeLessThan(
-      sent.indexOf("※ PTTzzz 編輯摘要：第二次修正\r"),
-    );
     expect(sent.filter((command) => command === "※ PTTzzz 編輯摘要：第一次修正\r")).toHaveLength(1);
     expect(sent.filter((command) => command === "※ PTTzzz 編輯摘要：中間修正\r")).toHaveLength(1);
-    expect(sent).toContain("※ PTTzzz 編輯摘要：第二次修正\r");
+    expect(sent).not.toContain("※ PTTzzz 編輯摘要：第二次修正\r");
     expect(sent).toContain("y\r");
   });
 
@@ -3539,10 +3599,9 @@ describe("terminal driver module", () => {
       expectedAuthor: "alice",
       expectedTitle: "[測試] AID 編輯",
       body: "新正文",
-      editSummary: "AID 修正",
     })).resolves.toEqual({ ok: true, outcome: "sent" });
     expect(sent.filter((command) => command === "#1AbCd\r")).toHaveLength(2);
-    expect(sent).toContain("※ PTTzzz 編輯摘要：AID 修正\r");
+    expect(sent).not.toContain("※ PTTzzz 編輯摘要：AID 修正\r");
   });
 
   it("does not enter the editor when the article identity is stale", async () => {
@@ -3574,7 +3633,6 @@ describe("terminal driver module", () => {
       expectedAuthor: "alice",
       expectedTitle: "[測試] 原標題",
       body: "更新正文",
-      editSummary: "修正",
     });
 
     expect(result).toEqual({
@@ -3609,7 +3667,6 @@ describe("terminal driver module", () => {
       expectedAuthor: "alice",
       expectedTitle: "[測試] 長文章",
       body: "更新正文",
-      editSummary: "修正",
     });
 
     expect(result).toEqual({

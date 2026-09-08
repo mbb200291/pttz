@@ -1,0 +1,57 @@
+# 核心架構
+
+PTTzzz 將規則、實作與呈現分成三層，使同一套 PTT 討論語意可以由不同連線方式與使用者介面重複使用。
+
+本文件是公開且穩定的架構概覽，描述各層責任、套件邊界與依賴方向。特定 repository 的 React hooks、terminal driver workflow、測試配置與工具版本屬於實作細節，不構成本套件的公開契約。
+
+## 三層責任
+
+1. **設計層**：白皮書定義分散推文聚合、嵌套回文、文章與回文推噓、編輯及撤回等語意。Fixture 將規則轉成可跨實作驗證的案例。
+2. **核心實作層**：`@pttzzz/core` 提供領域模型、高階 client、規則解析與 gateway 契約；`@pttzzz/browser` 實作瀏覽器環境的 PTT gateway。
+3. **介面層**：網頁、行動裝置或其他 UI 只使用核心公開 API，不自行解析終端文字，也不直接操作 PTT terminal。
+
+## 套件分工
+
+### `@pttzzz/core`
+
+- 定義文章、回文、投票、編輯、事件、錯誤與操作結果等公開資料契約。
+- 將原始文章事件依白皮書規則轉換成結構化討論。
+- 透過 `PttzzzClient` 提供讀取與寫入操作。
+- 透過 `PttGateway` 定義連線實作必須提供的能力。
+- 不依賴 React、Zustand、DOM、WebSocket 或特定 terminal client。
+
+### `@pttzzz/browser`
+
+- 實作 `PttGateway`，負責瀏覽器 WebSocket 與 PTT terminal workflow。
+- 將 ANSI 畫面、按鍵、提示與原始樓號限制在套件內部。
+- 提供 `createBrowserClient()`，組合 browser gateway 與核心 client。
+- 透過 `@pttzzz/browser/testing` 提供測試用 gateway；一般正式 UI 不應依賴此入口。
+
+### 介面實作
+
+- 從 `@pttzzz/core` 使用公開資料型別與 `PttzzzClient`。
+- 在瀏覽器中從 `@pttzzz/browser` 建立 client。
+- 以穩定的文章識別與 `replyId` 操作內容，不使用原始樓號作為 UI identity。
+- 根據公開事件與 `Result` 更新狀態，不讀取 gateway 或 terminal driver 的內部狀態。
+
+## 依賴方向
+
+```text
+白皮書與 fixture
+        ↓
+@pttzzz/core
+        ↑
+@pttzzz/browser → ptt-client → PTT WebSocket
+        ↑
+介面實作
+```
+
+`@pttzzz/core` 不依賴 browser package；browser package 依賴並實作 core 的 gateway 契約。介面可以替換成其他 UI，gateway 也可以替換成其他環境的實作，兩者不應互相依賴。
+
+## 公開與內部邊界
+
+- 一般 UI 只使用 `@pttzzz/core` 與 `@pttzzz/browser` 的 package root exports。
+- 完整公開型別以[公開契約](./contracts.md)為準。
+- `@pttzzz/core/internal` 只保留給官方 browser adapter 整合，不是 UI API，也不提供相容性保證。
+- Terminal driver、畫面判讀、raw `send()`、ANSI parser 與原始樓號定位屬於 browser 內部實作，不得成為介面層契約。
+- 白皮書定義行為語意；公開契約定義程式介面。兩者衝突時應先釐清並修正實作，不由 UI 建立另一套規則。

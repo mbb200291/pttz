@@ -144,6 +144,27 @@ describe("Article push voting", () => {
     expect(screen.queryByText("作者本人, 使用 → 加註方式")).toBeNull();
   });
 
+  it("renders authoritative article and reply vote totals from the core model", () => {
+    renderArticle({
+      ...article,
+      nativeVotes: { pushCount: 8, booCount: 3, score: 5 },
+      articleVotes: { pushCount: 5, booCount: 2, score: 3, viewerVote: "boo" },
+      pushes: [{
+        ...article.pushes[0],
+        votes: { pushCount: 6, booCount: 4, score: 2, viewerVote: "push" },
+      }],
+    });
+
+    expect(screen.getByText("PTT 原生推").previousElementSibling?.textContent).toBe("8");
+    expect(screen.getByText("PTT 原生噓").previousElementSibling?.textContent).toBe("3");
+    const pushButtons = screen.getAllByRole("button", { name: "推" });
+    const booButtons = screen.getAllByRole("button", { name: "噓" });
+    expect(pushButtons[0].textContent).toContain("5");
+    expect(booButtons[0].textContent).toContain("2");
+    expect(pushButtons[1].textContent).toContain("6");
+    expect(booButtons[1].textContent).toContain("4");
+  });
+
   it("limits the article author composer to neutral replies", () => {
     renderArticle(article, "OP");
 

@@ -11,10 +11,13 @@
 const ANSI_RE = /\x1b\[[0-9;]*[A-Za-z]/g;
 const PUSH_MARKER_PATTERN = "([推噓→])\\s+(\\S{2,12})\\s*:";
 const PUSH_MARKER_RE = new RegExp(PUSH_MARKER_PATTERN, "u");
-// PTT 推文內容區會受作者欄、IP 與時間欄擠壓；約 37 bytes 已會貼近 IP 欄。
-const MIN_FULL_PUSH_BYTES = 37;
-// 內容前綴（推/噓/→ + 作者 + 冒號）也會吃欄寬；48 columns 約剩一個半形 buffer。
-const MIN_FULL_PUSH_ROW_BYTES = 48;
+const RECOMMEND_LAYOUT_COLUMNS = 78;
+const RECOMMEND_LEAD_COLUMNS = 3;
+const RECOMMEND_DATE_COLUMNS = 6;
+const RECOMMEND_DATE_TIME_SPACE_COLUMNS = 1;
+const RECOMMEND_TIME_COLUMNS = 6;
+const IPV4_FIELD_COLUMNS = 15;
+const STRING_TERMINATOR_COLUMNS = 1;
 
 function stripBackspaces(text: string): string {
   const chars: string[] = [];
@@ -54,6 +57,7 @@ export interface RawPush {
   content: string;
   ipAddress?: string;
   time: string;
+  remainingContentColumns?: number;
   isFullWidthLine?: boolean;
 }
 
@@ -109,12 +113,7 @@ export function parsePushLine(line: string): RawPush | null {
   return { type, author, content, time };
 }
 
-function countTrailingSpaces(value: string): number {
-  const match = value.match(/[ \u3000]*$/u);
-  return match?.[0].length ?? 0;
-}
-
-function approximateBytes(value: string): number {
+function terminalColumns(value: string): number {
   let count = 0;
   for (const char of value) {
     count += char.codePointAt(0)! > 127 ? 2 : 1;
@@ -122,34 +121,47 @@ function approximateBytes(value: string): number {
   return count;
 }
 
-function isFullWidthPushRemainder(
-  remainder: string,
-  timeStartIndex: number,
-  marker: string,
+function authorFieldColumns(rawLine: string, author: string): number {
+  const colonIndex = rawLine.indexOf(":");
+  if (colonIndex < 0) return terminalColumns(author);
+
+  const prefix = rawLine.slice(0, colonIndex);
+  const authorStart = prefix.lastIndexOf(author);
+  if (authorStart < 0) return terminalColumns(author);
+
+  return terminalColumns(prefix.slice(authorStart));
+}
+
+function remainingPushContentColumns(
+  rawLine: string,
   author: string,
-): boolean {
-  const beforeTime = remainder.slice(0, timeStartIndex);
-  const ipMatch = beforeTime.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b\s*$/u);
-  const contentField = ipMatch?.index === undefined
-    ? beforeTime
-    : beforeTime.slice(0, ipMatch.index);
-  const content = contentField.trimEnd();
-
-  if (content.length === 0) return false;
-
-  return (
-    countTrailingSpaces(contentField) <= 3 ||
-    approximateBytes(content) >= MIN_FULL_PUSH_BYTES ||
-    approximateBytes(`${marker} ${author}: ${content}`) >=
-      MIN_FULL_PUSH_ROW_BYTES
+  content: string,
+  hasIpAddress: boolean,
+): number {
+  const inputBufferColumns =
+    RECOMMEND_LAYOUT_COLUMNS -
+    RECOMMEND_LEAD_COLUMNS -
+    RECOMMEND_DATE_COLUMNS -
+    RECOMMEND_DATE_TIME_SPACE_COLUMNS -
+    RECOMMEND_TIME_COLUMNS -
+    (hasIpAddress ? IPV4_FIELD_COLUMNS : 0) -
+    authorFieldColumns(rawLine, author);
+  const contentCapacity = Math.max(
+    0,
+    inputBufferColumns - STRING_TERMINATOR_COLUMNS,
   );
+
+  return Math.max(0, contentCapacity - terminalColumns(content));
 }
 
 export function parsePushBuffer(raw: string): RawPush[] {
   const plain = stripAnsi(raw)
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n")
-    .replace(new RegExp(`(?<!\\n)${PUSH_MARKER_PATTERN}`, "gu"), "\n$1 $2:");
+    .replace(
+      new RegExp(`(?<=[^\\n])(?=${PUSH_MARKER_PATTERN})`, "gu"),
+      "\n",
+    );
   const pushes: RawPush[] = [];
   const startRe = new RegExp(`(?:^|\\n)${PUSH_MARKER_PATTERN}`, "gu");
   const starts = Array.from(plain.matchAll(startRe));
@@ -190,15 +202,16 @@ export function parsePushBuffer(raw: string): RawPush[] {
     const normalized = `${marker} ${author}: ${content} ${timeMatch[1]}`;
     const parsed = parsePushLine(normalized);
     if (parsed) {
+      const remainingContentColumns = remainingPushContentColumns(
+        segment.split("\n", 1)[0],
+        author,
+        content,
+        ipAddress !== undefined,
+      );
       pushes.push({
         ...parsed,
         ipAddress,
-        isFullWidthLine: isFullWidthPushRemainder(
-          remainder,
-          timeMatch.index,
-          marker,
-          author,
-        ),
+        remainingContentColumns,
       });
     }
   }
@@ -286,20 +299,6 @@ function isEditMarkerLine(line: string): boolean {
 
 const PTTZZZ_EDIT_SUMMARY_RE =
   /^\s*※\s*PTTzzz\s*編輯摘要\s*[：:]\s*(.*?)\s*$/iu;
-const MAX_EDIT_SUMMARY_LENGTH = 120;
-
-export function formatPttzzzEditSummary(summary: string): string | null {
-  const normalized = stripAnsi(summary)
-    .replace(/[\r\n]+/gu, " ")
-    .replace(/[\x00-\x1F\x7F]/gu, "")
-    .replace(/\s+/gu, " ")
-    .trim()
-    .slice(0, MAX_EDIT_SUMMARY_LENGTH)
-    .trim();
-
-  return normalized ? `※ PTTzzz 編輯摘要：${normalized}` : null;
-}
-
 export function splitArticleEditableContent(body: string): {
   editableBody: string;
   preservedFooter: string;

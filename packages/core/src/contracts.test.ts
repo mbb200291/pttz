@@ -22,11 +22,13 @@ import {
   type PttGateway,
   type CreateArticleInput,
   type EditArticleInput,
+  type EditReplyInput,
   type PttzzzClient,
   type ReplyArticleToBoardInput,
   type ReplyToReplyInput,
   type Result,
   type SearchBoardsInput,
+  type VoteSummary,
 } from "./contracts.js";
 
 describe("core contracts", () => {
@@ -61,11 +63,10 @@ describe("core contracts", () => {
     );
   });
 
-  it("keeps board replies distinct and requires edit metadata", () => {
+  it("keeps board replies distinct without inventing article edit metadata", () => {
     const edit: EditArticleInput = {
       article: { board: "Test", index: 1 },
       content: "body",
-      editSummary: "fix typo",
     };
     const boardReply: Extract<PttCommand, { type: "reply-article-to-board" }> = {
       type: "reply-article-to-board",
@@ -77,13 +78,24 @@ describe("core contracts", () => {
       content: string;
     }>();
     expectTypeOf<PttzzzClient>().toHaveProperty("replyArticleToBoard");
-    expectTypeOf<EditArticleInput>().toHaveProperty("editSummary");
+    expectTypeOf<EditArticleInput>().not.toHaveProperty("editSummary");
     expectTypeOf<Extract<PttCommand, { type: "edit-article" }>>()
-      .toHaveProperty("editSummary");
+      .not.toHaveProperty("editSummary");
     expectTypeOf<Extract<PttCommand, { type: "reply-article-to-board" }>>()
       .toHaveProperty("content");
-    expect(edit.editSummary).toBe("fix typo");
+    expect(edit.content).toBe("body");
     expect(boardReply.type).toBe("reply-article-to-board");
+  });
+
+  it("accepts structured section edits without exposing control strings", () => {
+    const edit: EditReplyInput = {
+      article: { board: "Test", index: 1 },
+      replyId: "reply:12",
+      mode: "section",
+      changes: [{ start: 2, end: 2, replacement: "新增" }],
+    };
+    expect(edit).toMatchObject({ mode: "section", changes: [{ start: 2, end: 2 }] });
+    expectTypeOf(edit).not.toHaveProperty("floor");
   });
 
   it("passes an optional PTT post category through the public and gateway contracts", () => {
@@ -112,6 +124,18 @@ describe("core contracts", () => {
       | { ok: true; value: { key: ArticleKey } }
       | { ok: false; error: unknown }
     >();
+  });
+
+  it("exposes complete vote summaries without requiring voter identities", () => {
+    expectTypeOf<VoteSummary>().toMatchTypeOf<{
+      pushCount: number;
+      booCount: number;
+      score: number;
+      viewerVote?: "push" | "boo";
+    }>();
+    expectTypeOf<Article["nativeVotes"]>().toEqualTypeOf<VoteSummary>();
+    expectTypeOf<Article["articleVotes"]>().toEqualTypeOf<VoteSummary>();
+    expectTypeOf<Article["replies"][number]["votes"]>().toEqualTypeOf<VoteSummary>();
   });
 
   it("keeps action receipts discriminated and adapter article data core-owned", () => {

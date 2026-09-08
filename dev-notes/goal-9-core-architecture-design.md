@@ -144,7 +144,7 @@ UI
 - `CoreEvent` 與訂閱方法
 - 必要的 enum、type guard 與 formatter
 
-公開 client 提供 lifecycle、看板與文章的 list／search／filter/read、文章與回文寫入，以及事件訂閱能力。完整且已由型別與 packed consumer 驗證的介面，以 [`docs/api/contracts.md`](../docs/api/contracts.md) 為唯一 public contract；本設計文件不重複維護 TypeScript 宣告。
+公開 client 提供 lifecycle、看板與文章的 list／search／filter/read、文章與回文寫入，以及事件訂閱能力。完整且已由型別與 packed consumer 驗證的介面，以 [`packages/core/docs/contracts.md`](../packages/core/docs/contracts.md) 為唯一 public contract；本設計文件不重複維護 TypeScript 宣告。
 
 查詢與寫入方法回傳 Promise，適合表示單次操作的最終結果；連線狀態、逐步載入與資料更新使用事件，避免 framework polling，也避免核心綁定任何 store。
 
@@ -152,7 +152,7 @@ UI
 
 公開 `Article` 必須保留結構化的 `articleEdits`、`revisions` 與 PTT 原生推／噓／中立計數；UI 不需重新解析 raw text。Append／Replace 的 `Reply.edits.content` 是該次 command payload，`resultContent` 是套用後內容，兩者不可互相冒充；Withdraw 的兩個欄位則都是正規化後的單一空格 snapshot。陣列順序就是原始 command chronology。完整撤回一個聚合回文時，只以撤回前的 aggregation group 產生一個 `visible: false` reply，保留完整 `sourceFloors` 與單份 edit history；部分撤回則由未撤回的 raw events 重新聚合並取得新的 anchor identity，不另產生可能重疊的 hidden reply。Hidden reply 不得留在可寫入的 reply target map，也不計入可見回覆數。`ReplyMetadata.sourceFloors` 只屬明確 opt-in 的 debug／短期相容資料，不是 UI identity。
 
-文章推文 `replyToArticle` 與 PTT 原生回應到看板 `replyArticleToBoard` 是不同操作。後者建立另一篇文章，必須保留 index/AID identity 完成來源驗證。文章編輯必須攜帶非空 `editSummary`，發文可選擇性攜帶 PTT category。每個 terminal write workflow 必須標出 confirmation boundary；未標註失敗安全視為 `uncertain`，不得推測未送出。
+文章推文 `replyToArticle` 與 PTT 原生回應到看板 `replyArticleToBoard` 是不同操作。後者建立另一篇文章，必須保留 index/AID identity 完成來源驗證。文章編輯只傳送更新正文，編輯紀錄沿用 PTT 原生機制；發文可選擇性攜帶 PTT category。每個 terminal write workflow 必須標出 confirmation boundary；未標註失敗安全視為 `uncertain`，不得推測未送出。
 
 Gateway connect／login／read 的可預期失敗使用 core-owned `GatewayError`；高階 client 保留其欄位正規化成 `CoreError`，只有未知 throw 轉為 `GATEWAY_FAILURE`。`disconnect()` 保持 `Promise<void>`：client 對預期的 cleanup `GatewayError` 仍清除本地狀態並 resolve，未知程式錯誤可 throw。寫入仍只用 `ActionReceipt` 表達是否送出與不確定性。
 
@@ -238,7 +238,7 @@ interface ReplyMetadata {
 
 ## 10. 事件與 partial data
 
-事件用於長生命週期與漸進資料，包括 connection、session，以及帶有 exact `ArticleKey` 與 monotonic revision 的 article partial／updated events。事件的完整 discriminated union 同樣以 [`docs/api/contracts.md`](../docs/api/contracts.md) 為準。
+事件用於長生命週期與漸進資料，包括 connection、session，以及帶有 exact `ArticleKey` 與 monotonic revision 的 article partial／updated events。事件的完整 discriminated union 同樣以 [`packages/core/docs/contracts.md`](../packages/core/docs/contracts.md) 為準。
 
 必要約束：
 
@@ -278,14 +278,14 @@ EDIT-001
 
 ### 11.2 API 文件
 
-`docs/api/contracts.md` 記錄：
+`packages/core/docs/contracts.md` 記錄：
 
 - package exports。
 - lifecycle 與 method contracts。
 - DTO、Result、error code、event 與 gateway contract。
 - stability 標記與 breaking-change 規則。
 
-`docs/api/AI-INTERFACE.md` 是建立 UI 的最短正確路徑，至少包含：
+`packages/core/docs/AI-INTERFACE.md` 是建立 UI 的最短正確路徑，至少包含：
 
 - 安裝 `@pttzzz/core` 與 `@pttzzz/browser`。
 - 建立 client、登入、讀取看板與文章的最小流程。
@@ -306,7 +306,7 @@ EDIT-001
 
 ### 11.3 範例與 fixture
 
-`docs/examples/` 目前只有 `minimal-browser` 是完整、可 typecheck／bundle／執行的 host 範例，涵蓋 lifecycle、thread rendering 與 uncertain-write handling。完整 React reference app 位於 `apps/web`。其他目錄只保留 React store、Vue composable、rendering 與 error handling 的概念性 README snippets；沒有提供可執行的獨立 integration 或 framework package，兩者屬第一版 non-goal。
+`apps/web/docs/examples/` 目前只有 `minimal-browser` 是完整、可 typecheck／bundle／執行的 host 範例，涵蓋 lifecycle、thread rendering 與 uncertain-write handling。完整 React reference app 位於 `apps/web`。其他目錄只保留 React store、Vue composable、rendering 與 error handling 的概念性 README snippets；沒有提供可執行的獨立 integration 或 framework package，兩者屬第一版 non-goal。
 
 白皮書案例另有 machine-readable fixtures。每個 fixture 參照規則編號，至少包含 raw events、options 與預期 normalized／aggregated output。Conformance tests 直接讀取 fixtures，避免文件範例與程式實作漂移。
 

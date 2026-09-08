@@ -29,15 +29,18 @@ apps/web (React 18 + Zustand + Vite)
 | [`apps/web`](../apps/web) | 官方 React 參考 UI |
 | [`docs/whitepaper`](../docs/whitepaper) | 規範性 rule IDs 與核心語意 |
 | [`docs/fixtures`](../docs/fixtures) | machine-readable conformance cases |
-| [`docs/api`](../docs/api) | public contracts 與 AI integration guide |
-| [`docs/examples/minimal-browser`](../docs/examples/minimal-browser) | 可 typecheck、bundle、執行的替代 UI 範例 |
+| [`packages/core/docs`](../packages/core/docs) | public contracts 與 AI integration guide |
+| [`apps/web/docs/examples/minimal-browser`](../apps/web/docs/examples/minimal-browser) | 可 typecheck、bundle、執行的替代 UI 範例 |
 
 Core 不依賴 React、Zustand、DOM、WebSocket、storage 或 `ptt-client`。一般 UI 只使用 `@pttzzz/core` 與 `@pttzzz/browser` package roots；`@pttzzz/core/internal` 僅保留給官方 browser adapter，第三方 UI 不得使用。
 
 ## 資料與操作模型
 
 - 白皮書與 fixtures 固定推文聚合、巢狀回覆、投票、撤回、編輯與 partial semantics。
+- 投票分成提案文章推噓、未經語意排除的 PTT 原生推噓，以及各回文推噓三個資料域；可見嵌套回覆與純回文推噓只從提案文章推噓排除。
 - UI 只以 stable `replyId` 操作回覆。Core 在 private target map／`PttCommand` 中解析 exact source floor/ranges，gateway transport執行目標；原始樓號不作畫面 identity，只能另出現在 opt-in debug metadata。
+- Core 保留任意深度的原始回覆關係；參考 web UI 將第四層以後投影到第三層顯示，但不改寫核心 `replyTo` 或操作目標。
+- 回文區段修改以結構化零起點半開區間傳入；回覆、推噓、撤回與編輯控制文字由 core internal formatter 統一產生，browser 只負責 terminal workflow。
 - `PttzzzClient` 的 read methods 回傳 `Result`，partial/final article 同時以 monotonic revision events 通知。
 - 所有 expected failures 都使用 `CoreError`；write 額外分成 `not-sent`、`sent` 與 `uncertain`，後兩者不得自動重送。
 - Real 與 fake gateway 共用 contract tests。`@pttzzz/browser/testing` 同時支援 reference app 的 Fake PTT runtime mode 與 tests，不污染 core runtime。
@@ -45,7 +48,7 @@ Core 不依賴 React、Zustand、DOM、WebSocket、storage 或 `ptt-client`。�
 
 ## Host 要求
 
-Browser bundler 目前必須提供 `Buffer`。開發、preview 與 production host 都必須提供同源 `/ptt-ws` WebSocket proxy，轉送至 `wss://ws.ptt.cc/bbs` 並注入 `Origin: https://term.ptt.cc`。可複製設定見 [minimal browser example](../docs/examples/minimal-browser)。
+Browser bundler 目前必須提供 `Buffer`。開發、preview 與 production host 都必須提供同源 `/ptt-ws` WebSocket proxy，轉送至 `wss://ws.ptt.cc/bbs` 並注入 `Origin: https://term.ptt.cc`。可複製設定見 [minimal browser example](../apps/web/docs/examples/minimal-browser)。
 
 ## 常用指令
 
@@ -67,14 +70,14 @@ npm run verify    # tests + helper tests + build + lint + pack/example smoke
 - 發文、文章編輯／刪除、文章回覆、回覆某樓、回文投票及其撤回。
 - Stable reply identity、stale generation/revision 防護、exact terminal targeting。
 - `sent`／`uncertain` UI safety lock，避免模糊結果造成重複寫入。
-- imgur／YouTube rich content、回覆排序與 lazy rendering。
+- 任意 HTTPS 直接圖片／imgur／YouTube rich content、回覆排序與 lazy rendering。
 - Fake gateway、共享 gateway contract suite、terminal transcript tests。
 - 可發布 `@pttzzz/core@0.1.0` 與 `@pttzzz/browser@0.1.0`，以及 isolated `npm pack` consumer smoke。
 - 人類／AI API 文件與可執行 minimal browser alternate UI。
 
 ## 目前限制
 
-- 推文聚合仍是依時間、終止符、`||` 與 PTT 行寬判斷的 deterministic heuristic。
+- 推文聚合仍是依時間、終止符、`||` 與 PTT 右側資訊欄剩餘空間判斷的 deterministic heuristic；原始欄距不可用時保守換行。
 - `ptt-client` 與 terminal prompt 可能因真站畫面變動而需更新 transcript/parser。
 - 真站 write 尚未成為 CI smoke；內容可能送出的錯誤必須維持 `sent`／`uncertain` 保守結果。
 - `createArticle()` 成功只回 `void`，不承諾立即取得新文章 identity。
@@ -84,7 +87,7 @@ npm run verify    # tests + helper tests + build + lint + pack/example smoke
 
 ## 驗證狀態
 
-2026-08-23：561 tests 通過（core 206、browser 153、web 191、pack helper 11）；build、lint（0 errors）、package pack、isolated install、ESM/types、deep-import boundary 與 minimal UI execution smoke 通過。
+2026-08-29：684 tests 通過（core 321、browser 155、web 197、pack helper 11）；build、lint（0 errors、3 個既有 Fast Refresh warnings）、package pack、isolated install、ESM/types、deep-import boundary 與 minimal UI execution smoke 通過。
 
 ## 細節文件
 
@@ -92,6 +95,6 @@ npm run verify    # tests + helper tests + build + lint + pack/example smoke
 - [Goal 9 implementation plan](goal-9-implementation-plan.md)
 - [Goal 9 implementation notes](goal-9-implementation-notes.md)
 - [Code architecture guide](code-architecture-guide.md)
-- [Public contracts](../docs/api/contracts.md)
-- [AI interface](../docs/api/AI-INTERFACE.md)
+- [Public contracts](../packages/core/docs/contracts.md)
+- [AI interface](../packages/core/docs/AI-INTERFACE.md)
 - [Core whitepaper](../docs/whitepaper/pttzzz-core.md)

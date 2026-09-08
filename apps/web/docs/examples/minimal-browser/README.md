@@ -1,6 +1,6 @@
 # Minimal browser UI
 
-這是只使用 `@pttzzz/core` 與 `@pttzzz/browser` 公開入口的可執行替代 UI。型別與錯誤細節見 [contracts](../../api/contracts.md)。真實 PTT 連線第一版只保證 browser。
+這是只使用 `@pttzzz/core` 與 `@pttzzz/browser` 公開入口的可執行替代 UI。型別與錯誤細節見 [contracts](../../../../packages/core/docs/contracts.md)。真實 PTT 連線第一版只保證 browser。
 
 `index.html` 與 `main.ts` 展示 connect/login、看板與文章讀取、partial/final revision gate、stale request gate、巢狀回覆 renderer、以 `replyId` 寫入、write outcome，以及 unsubscribe/disconnect lifecycle。
 

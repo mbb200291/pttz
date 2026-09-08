@@ -215,6 +215,8 @@ function LightweightPushList({
 }
 
 function getViewerPushVote(push: AggregatedPush, currentUser?: string): -1 | 0 | 1 {
+  if (push.votes?.viewerVote === "push") return 1;
+  if (push.votes?.viewerVote === "boo") return -1;
   if (!currentUser) return 0;
   if (push.pushVoters.some((author) => samePttId(author, currentUser))) return 1;
   if (push.booVoters.some((author) => samePttId(author, currentUser))) return -1;
@@ -222,6 +224,8 @@ function getViewerPushVote(push: AggregatedPush, currentUser?: string): -1 | 0 |
 }
 
 function getViewerArticleVote(article: ArticleData, currentUser?: string): -1 | 0 | 1 {
+  if (article.articleVotes?.viewerVote === "push") return 1;
+  if (article.articleVotes?.viewerVote === "boo") return -1;
   if (!currentUser) return 0;
   if (article.articlePushVoters?.some((author) => samePttId(author, currentUser))) return 1;
   if (article.articleBooVoters?.some((author) => samePttId(author, currentUser))) return -1;
@@ -437,8 +441,8 @@ export function Article({
     setArticleVote({
       value: getViewerArticleVote(article, currentUser),
       count: {
-        push: article.articlePushVoters?.length ?? 0,
-        boo: article.articleBooVoters?.length ?? 0,
+        push: article.articleVotes?.pushCount ?? article.articlePushVoters?.length ?? 0,
+        boo: article.articleVotes?.booCount ?? article.articleBooVoters?.length ?? 0,
       },
     });
   }, [article, currentUser]);
@@ -495,8 +499,8 @@ export function Article({
     const currentState = pushVotes.get(pushId) ?? {
       value: getViewerPushVote(push, currentUser),
       count: {
-        push: push.pushVoters.length,
-        boo: push.booVoters.length,
+        push: push.votes?.pushCount ?? push.pushVoters.length,
+        boo: push.votes?.booCount ?? push.booVoters.length,
       },
     };
     const currentVote = currentState.value;
@@ -595,6 +599,13 @@ export function Article({
     if (composer?.mode === "edit-push" && composer.replyId) {
       return payload.editMode === "撤回"
         ? writeFingerprint("withdrawReply", { article: articleKey, replyId: composer.replyId })
+        : payload.editMode === "區段"
+          ? writeFingerprint("editReply", {
+              article: articleKey,
+              replyId: composer.replyId,
+              mode: "section",
+              changes: [{ start: payload.sectionStart, end: payload.sectionEnd, replacement: payload.body }],
+            })
         : writeFingerprint("editReply", {
             article: articleKey,
             replyId: composer.replyId,
@@ -630,6 +641,13 @@ export function Article({
         if (composer?.mode === "edit-push" && composer.replyId) {
           result = payload.editMode === "撤回"
             ? await actions.withdrawReply({ article: articleKey, replyId: composer.replyId })
+            : payload.editMode === "區段"
+              ? await actions.editReply({
+                  article: articleKey,
+                  replyId: composer.replyId,
+                  mode: "section",
+                  changes: [{ start: payload.sectionStart, end: payload.sectionEnd, replacement: payload.body }],
+                })
             : await actions.editReply({
                 article: articleKey,
                 replyId: composer.replyId,
@@ -710,8 +728,8 @@ export function Article({
 
   // Compute native article votes and visible aggregated replies for the stats bar.
   const fallbackPushTypes = article?.pushes.map((push) => push.type) ?? [];
-  const pushCount = article?.nativePushCount ?? fallbackPushTypes.filter((type) => type === "push").length;
-  const booCount = article?.nativeBooCount ?? fallbackPushTypes.filter((type) => type === "boo").length;
+  const pushCount = article?.nativeVotes?.pushCount ?? article?.nativePushCount ?? fallbackPushTypes.filter((type) => type === "push").length;
+  const booCount = article?.nativeVotes?.booCount ?? article?.nativeBooCount ?? fallbackPushTypes.filter((type) => type === "boo").length;
   const replyCount = (article?.pushes ?? []).filter((push) =>
     push.type !== "edit" &&
     push.visible !== false
@@ -903,13 +921,13 @@ export function Article({
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <PushTypeBadge type="push" />
                 <span style={{ fontWeight: 700, fontSize: 14, color: "var(--push-fg)", fontFamily: "var(--font-mono)" }}>{pushCount}</span>
-                <span style={{ fontSize: 12, color: "var(--text-dim)" }}>推</span>
+                <span style={{ fontSize: 12, color: "var(--text-dim)" }}>PTT 原生推</span>
               </div>
               {/* boo count */}
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <PushTypeBadge type="boo" />
                 <span style={{ fontWeight: 700, fontSize: 14, color: "var(--boo-fg)", fontFamily: "var(--font-mono)" }}>{booCount}</span>
-                <span style={{ fontSize: 12, color: "var(--text-dim)" }}>噓</span>
+                <span style={{ fontSize: 12, color: "var(--text-dim)" }}>PTT 原生噓</span>
               </div>
               {/* aggregated reply count */}
               <div

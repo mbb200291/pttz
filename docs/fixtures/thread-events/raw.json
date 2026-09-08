@@ -1,0 +1,126 @@
+[
+  {
+    "id": "raw-every-control-event-keeps-a-floor",
+    "primaryRule": "RAW-001.1",
+    "rules": ["RAW-001.1", "RAW-001.6"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "root", "content": "可見內容。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "推", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "撤回我對1樓的推", "time": "01/01 12:02" }
+    ],
+    "expected": {
+      "replies": [{ "author": "root", "content": "可見內容。", "replyToAuthor": null, "score": 0 }],
+      "nativeArticleScore": 0,
+      "articlePushVoters": ["alice"],
+      "articleBooVoters": []
+    },
+    "expectedNormalizedEvents": [
+      { "rawFloor": 1, "author": "root", "content": "可見內容。", "withdrawn": false, "visible": true },
+      { "rawFloor": 2, "author": "alice", "content": "", "withdrawn": false, "visible": false },
+      { "rawFloor": 3, "author": "alice", "content": "", "withdrawn": false, "visible": false }
+    ]
+  },
+  {
+    "id": "raw-targets-use-original-floor",
+    "primaryRule": "RAW-001.2",
+    "rules": ["RAW-001.1", "RAW-001.2", "RAW-001.4", "THREAD-001.1"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "voter", "content": "推", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "root", "content": "第二個原始事件。", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "回2樓：正確目標", "time": "01/01 12:02" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "root", "content": "第二個原始事件。", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "正確目標", "replyToAuthor": "root", "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": ["voter"],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "raw-merged-reply-keeps-all-source-floors",
+    "primaryRule": "RAW-001.3",
+    "rules": ["RAW-001.3", "MERGE-001.1"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "第一段", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "第二段", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [{ "author": "alice", "content": "第一段\n第二段", "replyToAuthor": null, "score": 0 }],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    },
+    "expectedReplyDetails": [
+      { "author": "alice", "content": "第一段\n第二段", "isOP": false, "sourceFloors": [1, 2], "visible": true, "editKinds": [] }
+    ]
+  },
+  {
+    "id": "raw-hidden-events-do-not-renumber-following-targets",
+    "primaryRule": "RAW-001.4",
+    "rules": ["RAW-001.2", "RAW-001.4", "VOTE-001.2"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "voter", "content": "推", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "root", "content": "仍是原始2樓。", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "回2樓：依原始樓號", "time": "01/01 12:02" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "root", "content": "仍是原始2樓。", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "依原始樓號", "replyToAuthor": "root", "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": ["voter"],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "raw-visible-card-order-is-not-a-floor-number",
+    "primaryRule": "RAW-001.5",
+    "rules": ["RAW-001.4", "RAW-001.5"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "voter", "content": "推", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "root", "content": "介面第一張卡，原始2樓。", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [{ "author": "root", "content": "介面第一張卡，原始2樓。", "replyToAuthor": null, "score": 0 }],
+      "nativeArticleScore": 0,
+      "articlePushVoters": ["voter"],
+      "articleBooVoters": []
+    },
+    "expectedReplyDetails": [
+      { "author": "root", "content": "介面第一張卡，原始2樓。", "isOP": false, "sourceFloors": [2], "visible": true, "editKinds": [] }
+    ]
+  },
+  {
+    "id": "raw-control-events-remain-hidden",
+    "primaryRule": "RAW-001.6",
+    "rules": ["RAW-001.1", "RAW-001.6", "VOTE-001.2", "EDIT-004.1"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "原文。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "bob", "content": "噓", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "補充我在1樓發言：補充", "time": "01/01 12:02" },
+      { "type": "neutral", "author": "bob", "content": "撤回我對1樓的噓", "time": "01/01 12:03" }
+    ],
+    "expected": {
+      "replies": [{ "author": "alice", "content": "原文。\n補充", "replyToAuthor": null, "score": 0 }],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": ["bob"]
+    },
+    "expectedNormalizedEvents": [
+      { "rawFloor": 1, "author": "alice", "content": "原文。\n補充", "withdrawn": false, "visible": true },
+      { "rawFloor": 2, "author": "bob", "content": "", "withdrawn": false, "visible": false },
+      { "rawFloor": 3, "author": "alice", "content": "補充", "withdrawn": false, "visible": false },
+      { "rawFloor": 4, "author": "bob", "content": "", "withdrawn": false, "visible": false }
+    ]
+  }
+]

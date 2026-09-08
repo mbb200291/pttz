@@ -35,8 +35,15 @@ interface ParsedPushIntent {
   direction?: VoteDirection;
   visibleContent: string;
   isControl: boolean;
-  editMode?: "append" | "replace" | "withdraw";
+  editMode?: "append" | "replace" | "section" | "withdraw";
+  sectionChanges?: SectionChange[];
   targetEndFloor?: number;
+}
+
+interface SectionChange {
+  start: number;
+  end: number;
+  replacement: string;
 }
 
 type ParsedRawPush = AnchoredRawPush & {
@@ -91,6 +98,9 @@ export interface AggregatedThread {
   pushes: AggregatedPush[];
   withdrawnPushes: AggregatedPush[];
   articleNotes: ArticleEditRecord[];
+  articleScore: number;
+  articlePushCount: number;
+  articleBooCount: number;
   nativeArticleScore: number;
   nativePushCount: number;
   nativeBooCount: number;
@@ -113,29 +123,12 @@ export function detectArticleVote(content: string): "push" | "boo" | null {
   return null;
 }
 
-// PTT 推文內容區會受作者欄、IP 與時間欄擠壓；約 37 bytes 已會貼近 IP 欄。
-const MIN_FULL_PUSH_BYTES = 37;
 // 同作者不連續但允許合併的最大時間間隔（分鐘）
 const TIME_GAP_MINUTES = 5;
-const MAX_NESTED_REPLY_DEPTH = 2; // top-level=0, nested replies can display up to third layer
 const CONTINUATION_MARKER_RE = /\|\|\s*$/u;
 const END_TERMINATOR_RE = /[。.!?！？;；]$/u;
 
 // ─── 工具函式 ─────────────────────────────────────────────────────────────────
-
-/** 計算字串的 Big5 byte 長度（近似：ASCII = 1 byte，非 ASCII = 2 bytes） */
-function approximateBytes(s: string): number {
-  let count = 0;
-  for (const ch of s) {
-    count += ch.codePointAt(0)! > 127 ? 2 : 1;
-  }
-  return count;
-}
-
-/** 判斷此推文內容是否「塞滿」（接近 PTT 推文欄位上限） */
-function isFull(content: string): boolean {
-  return approximateBytes(content) >= MIN_FULL_PUSH_BYTES;
-}
 
 function hasContinuationMarker(content: string): boolean {
   return CONTINUATION_MARKER_RE.test(content.trimEnd());
@@ -146,8 +139,10 @@ function stripContinuationMarker(content: string): string {
 }
 
 function isFullPushLine(push: ParsedRawPush): boolean {
-  const visibleContent = stripContinuationMarker(push.structuralContent);
-  return push.isFullWidthLine ?? isFull(visibleContent);
+  if (push.remainingContentColumns !== undefined) {
+    return push.remainingContentColumns < 2;
+  }
+  return push.isFullWidthLine === true;
 }
 
 function canContinueFromPush(push: ParsedRawPush): boolean {
@@ -180,24 +175,69 @@ function mergeOriginalPushContents(pushes: ParsedRawPush[]): string {
   );
 }
 
-function buildGroupEditHistory(group: PushGroup): PushEditHistoryRecord[] | undefined {
-  const editedPushes = group.pushes.filter((push) => push.editHistory.length > 0);
-  if (editedPushes.length === 0) return undefined;
-  if (group.pushes.length === 1) return group.pushes[0].editHistory;
-
-  const originalContent = mergePushContents(
+function originalGroupContent(group: PushGroup): string {
+  return mergePushContents(
     group.pushes.map((push) => ({
       ...push,
       intent: { ...push.intent, visibleContent: push.structuralContent },
     })),
   );
-  const editRecords = editedPushes
-    .flatMap((push) => push.editHistory.slice(1))
-    .sort((left, right) => left.commandOrder - right.commandOrder)
-    .filter((record, index, records) =>
-      index === 0 || record.commandOrder !== records[index - 1].commandOrder
-    );
-  return [
+}
+
+function applySectionChanges(
+  content: string,
+  changes: readonly SectionChange[],
+): string | null {
+  const ordered = [...changes].sort((left, right) => left.start - right.start);
+  for (let index = 0; index < ordered.length; index += 1) {
+    const change = ordered[index];
+    const previous = ordered[index - 1];
+    if (
+      change.start < 0 ||
+      change.end < change.start ||
+      change.end > content.length ||
+      (previous && change.start < previous.end)
+    ) {
+      return null;
+    }
+  }
+
+  let result = content;
+  for (const change of ordered.reverse()) {
+    result = `${result.slice(0, change.start)}${change.replacement}${result.slice(change.end)}`;
+  }
+  return result;
+}
+
+function groupEditResult(
+  group: PushGroup,
+  parsedPushes: readonly ParsedRawPush[],
+): { content: string; history?: PushEditHistoryRecord[] } {
+  const originalContent = originalGroupContent(group);
+  const sourceFloors = new Set(group.pushes.map((push) => push.rawFloor));
+  const author = normalizePttId(group.pushes[0].author);
+  const commands = parsedPushes.filter((push) =>
+    push.intent.kind === "edit" &&
+    push.intent.editMode !== "withdraw" &&
+    push.intent.targetFloor !== undefined &&
+    sourceFloors.has(push.intent.targetFloor) &&
+    push.commandOrder > group.pushes[0].commandOrder &&
+    normalizePttId(push.author) === author,
+  );
+  if (commands.length === 0) return { content: originalContent };
+
+  const fragmentContents = group.pushes.map((push) => push.structuralContent);
+  const appendedContents: string[] = [];
+  let flattenedContent: string | null = null;
+  const renderFragments = () => {
+    const merged = mergePushContents(group.pushes.map((push, index) => ({
+      ...push,
+      intent: { ...push.intent, visibleContent: fragmentContents[index] },
+    })));
+    return appendedContents.length > 0 ? `${merged}\n${appendedContents.join("\n")}` : merged;
+  };
+  let content = originalContent;
+  const history: PushEditHistoryRecord[] = [
     {
       kind: "original",
       commandOrder: Math.min(...group.pushes.map((push) => push.commandOrder)),
@@ -205,8 +245,66 @@ function buildGroupEditHistory(group: PushGroup): PushEditHistoryRecord[] | unde
       content: originalContent,
       resultContent: originalContent,
     },
-    ...editRecords,
   ];
+
+  for (const command of commands) {
+    const mode = command.intent.editMode;
+    if (mode === "append") {
+      if (flattenedContent !== null) {
+        flattenedContent = flattenedContent
+          ? `${flattenedContent}\n${command.intent.visibleContent}`
+          : command.intent.visibleContent;
+        content = flattenedContent;
+      } else {
+        appendedContents.push(command.intent.visibleContent);
+        content = renderFragments();
+      }
+    } else if (mode === "replace") {
+      if (flattenedContent !== null) {
+        flattenedContent = command.intent.visibleContent;
+        content = flattenedContent;
+      } else {
+        const targetIndex = group.pushes.findIndex(
+          (push) => push.rawFloor === command.intent.targetFloor,
+        );
+        if (targetIndex < 0) continue;
+        fragmentContents[targetIndex] = command.intent.visibleContent;
+        if (group.pushes.length === 1) appendedContents.length = 0;
+        content = renderFragments();
+      }
+    } else if (mode === "section") {
+      const result = applySectionChanges(content, command.intent.sectionChanges ?? []);
+      if (result === null) continue;
+      flattenedContent = result;
+      content = flattenedContent;
+    }
+    history.push({
+      kind: mode === "append" ? "append" : "replace",
+      commandOrder: command.commandOrder,
+      time: command.time,
+      content: command.intent.visibleContent,
+      resultContent: content,
+    });
+  }
+  return { content, history };
+}
+
+function withdrawnGroupEditHistory(group: PushGroup): PushEditHistoryRecord[] | undefined {
+  const records = group.pushes
+    .flatMap((push) => push.editHistory.slice(1))
+    .sort((left, right) => left.commandOrder - right.commandOrder)
+    .filter((record, index, all) =>
+      index === 0 || record.commandOrder !== all[index - 1].commandOrder,
+    );
+  if (records.length === 0) return undefined;
+  const originalContent = originalGroupContent(group);
+  return [{
+    kind: "original",
+    commandOrder: Math.min(...group.pushes.map((push) => push.commandOrder)),
+    time: group.pushes[0].time,
+    content: originalContent,
+    resultContent: originalContent,
+  }, ...records];
 }
 
 const PTT_CALENDARS = [
@@ -278,7 +376,10 @@ interface PushGroup {
 /**
  * 第一步：將原始推文分群（同作者可合併者放在同一群）
  */
-function groupPushes(rawPushes: ParsedRawPush[]): PushGroup[] {
+function groupPushes(
+  rawPushes: ParsedRawPush[],
+  controlOrders: ReadonlySet<number> = new Set(),
+): PushGroup[] {
   const groups: PushGroup[] = [];
 
   for (let i = 0; i < rawPushes.length; i++) {
@@ -349,8 +450,11 @@ function groupPushes(rawPushes: ParsedRawPush[]): PushGroup[] {
     const isConsecutive = prevGlobal.author === cur.author;
     const timeDiff = timeDiffMinutes(lastPush.time, cur.time);
     const timeOk = timeDiff !== null && timeDiff <= TIME_GAP_MINUTES;
+    const hasControlBetween = Array.from(controlOrders).some((order) =>
+      order > lastPush.commandOrder && order < cur.commandOrder,
+    );
 
-    if (canContinueFromPush(lastPush) && (isConsecutive || timeOk)) {
+    if (!hasControlBetween && canContinueFromPush(lastPush) && (isConsecutive || timeOk)) {
       sameGroup.pushes.push(cur);
     } else {
       groups.push({
@@ -497,6 +601,21 @@ export function detectVote(content: string): VoteInfo | null {
   return { targetFloor: vote.targetFloor, direction: vote.direction };
 }
 
+function parseSectionChanges(payload: string): SectionChange[] | null {
+  if (!payload.startsWith("^")) return null;
+  const changes: SectionChange[] = [];
+  for (const part of payload.split(";")) {
+    const match = part.match(/^\^(\d+):(\d+)=(.*)$/su);
+    if (!match) return null;
+    changes.push({
+      start: Number(match[1]),
+      end: Number(match[2]),
+      replacement: match[3],
+    });
+  }
+  return changes;
+}
+
 function parsePushIntent(content: string): ParsedPushIntent {
   const replyVoteWithdrawal = content.match(
     new RegExp(`^\\s*撤回我對\\s*(${FLOOR_NUMBER_SOURCE})\\s*樓的(推|噓)\\s*$`, "u"),
@@ -534,15 +653,34 @@ function parsePushIntent(content: string): ParsedPushIntent {
     }
   }
 
+  const continuationEdit = content.match(
+    new RegExp(`^\\s*續\\s*(${FLOOR_NUMBER_SOURCE})\\s*[fF]\\s*[：:]\\s*([\\s\\S]*)$`, "u"),
+  );
+  if (continuationEdit) {
+    const targetFloor = parseFloorNumber(continuationEdit[1]);
+    if (targetFloor !== null) {
+      return {
+        kind: "edit",
+        editMode: "append",
+        targetFloor,
+        targetEndFloor: targetFloor,
+        visibleContent: continuationEdit[2],
+        isControl: true,
+      };
+    }
+  }
+
   const edit = content.match(
-    new RegExp(`^\\s*(補充|修正|更正(?:一下)?)我在\\s*(${FLOOR_NUMBER_SOURCE})\\s*樓(?:\\s*(?:說的|的說法|的回覆|發言))?\\s*[：:]\\s*([\\s\\S]*)$`, "u"),
+    new RegExp(`^\\s*(補充|修正|更正(?:一下)?)我在\\s*(${FLOOR_NUMBER_SOURCE})\\s*(?:樓|[fF])(?:\\s*(?:說的|的說法|的回覆|發言|的留言))?\\s*[：:]\\s*([\\s\\S]*)$`, "u"),
   );
   if (edit) {
     const targetFloor = parseFloorNumber(edit[2]);
     if (targetFloor !== null) {
+      const sectionChanges = edit[1] === "補充" ? null : parseSectionChanges(edit[3]);
       return {
         kind: "edit",
-        editMode: edit[1] === "補充" ? "append" : "replace",
+        editMode: edit[1] === "補充" ? "append" : sectionChanges ? "section" : "replace",
+        ...(sectionChanges ? { sectionChanges } : {}),
         targetFloor,
         targetEndFloor: targetFloor,
         // Payload is intentionally opaque and never parsed as another command.
@@ -638,6 +776,13 @@ function applyPushEdits(pushes: ParsedRawPush[]): void {
         target.intent.visibleContent = target.intent.visibleContent
           ? `${target.intent.visibleContent}\n${addition}`
           : addition;
+      } else if (command.intent.editMode === "section") {
+        const result = applySectionChanges(
+          target.intent.visibleContent,
+          command.intent.sectionChanges ?? [],
+        );
+        if (result === null) continue;
+        target.intent.visibleContent = result;
       } else {
         target.intent.visibleContent = command.intent.visibleContent;
       }
@@ -696,46 +841,6 @@ function replyIdFromAnchorFloor(floors: readonly number[]): string {
   return `reply:${Math.min(...floors)}`;
 }
 
-function getReplyDepth(
-  push: AggregatedPush,
-  pushById: Map<string, AggregatedPush>,
-): number {
-  let depth = 0;
-  let current = push;
-  const visited = new Set<string>();
-
-  while (current.replyTo) {
-    if (visited.has(current.id)) break;
-    visited.add(current.id);
-    const parent = pushById.get(current.replyTo);
-    if (!parent) break;
-    depth += 1;
-    current = parent;
-  }
-
-  return depth;
-}
-
-function clampReplyTargetDepth(
-  target: AggregatedPush,
-  pushById: Map<string, AggregatedPush>,
-): AggregatedPush {
-  let current = target;
-  let depth = getReplyDepth(current, pushById);
-  const visited = new Set<string>();
-
-  while (depth >= MAX_NESTED_REPLY_DEPTH && current.replyTo) {
-    if (visited.has(current.id)) break;
-    visited.add(current.id);
-    const parent = pushById.get(current.replyTo);
-    if (!parent) break;
-    current = parent;
-    depth -= 1;
-  }
-
-  return current;
-}
-
 // ─── 主要匯出 ─────────────────────────────────────────────────────────────────
 
 export function aggregatePushes(
@@ -746,10 +851,14 @@ export function aggregatePushes(
 ): AggregatedThread {
   const articleAuthorId = normalizePttId(articleAuthor);
   const parsedPushes = parseAndApplyPushEdits(rawPushes);
+  const controlOrders = new Set(
+    parsedPushes.filter((push) => push.intent.isControl).map((push) => push.commandOrder),
+  );
 
   // Step 1：分群
   const groups = groupPushes(
     parsedPushes.filter((push) => !push.withdrawn && !push.intent.isControl),
+    controlOrders,
   );
 
   // Step 2：每群合成一則 AggregatedPush（暫時 replyTo=null, score=0）
@@ -759,7 +868,7 @@ export function aggregatePushes(
     const g = groups[i];
     const rep = g.pushes[0]; // 代表型別與作者取第一則
     const sourceFloors = g.pushes.map((push, index) => push.rawFloor ?? i + index + 1);
-    const mergedContent = mergePushContents(g.pushes);
+    const editedGroup = groupEditResult(g, parsedPushes);
     const lastTime = g.pushes[g.pushes.length - 1].time;
     const ipAddresses = Array.from(
       new Set(g.pushes.map((p) => p.ipAddress).filter(Boolean)),
@@ -769,7 +878,7 @@ export function aggregatePushes(
       id: replyIdFromAnchorFloor(sourceFloors),
       type: rep.type,
       author: rep.author,
-      content: mergedContent,
+      content: editedGroup.content,
       time: lastTime,
       ipAddresses,
       isOP: normalizePttId(rep.author) === articleAuthorId,
@@ -780,7 +889,7 @@ export function aggregatePushes(
       sourceFloors,
       pushVoters: [],
       booVoters: [],
-      editHistory: buildGroupEditHistory(g),
+      editHistory: editedGroup.history,
     });
   }
 
@@ -793,12 +902,19 @@ export function aggregatePushes(
     const intent = rawPush.intent;
     if (
       intent.kind !== "reply-vote" &&
-      intent.kind !== "reply-vote-withdraw"
+      intent.kind !== "reply-vote-withdraw" &&
+      intent.kind !== "reply"
     ) {
       continue;
     }
     const targetFloor = intent.targetFloor;
-    const direction = intent.direction;
+    const direction = intent.kind === "reply"
+      ? rawPush.type === "push"
+        ? "push"
+        : rawPush.type === "boo"
+          ? "boo"
+          : undefined
+      : intent.direction;
     if (targetFloor === undefined || direction === undefined) continue;
     const target = firstLayer.find((candidate) =>
       candidate.sourceFloors.includes(targetFloor),
@@ -854,7 +970,6 @@ export function aggregatePushes(
   // Step 3：偵測嵌套 → 建立 floorNumber 映射（第一層樓號）
   // 先跑一遍，把不是嵌套的推文給 floorNumber
   const topLevel: AggregatedPush[] = [];
-  const pushById = new Map(firstLayer.map((push) => [push.id, push]));
   let floor = 1;
   for (let i = 0; i < firstLayer.length; i += 1) {
     const p = firstLayer[i];
@@ -870,9 +985,8 @@ export function aggregatePushes(
         targetFloor < firstSourceFloor &&
         target.anchorOrder < p.anchorOrder
       ) {
-        const clampedTarget = clampReplyTargetDepth(target, pushById);
-        p.replyTo = clampedTarget.id;
-        p.floorNumber = clampedTarget.floorNumber;
+        p.replyTo = target.id;
+        p.floorNumber = target.floorNumber;
       } else {
         p.replyTo = null;
         p.content = mergeOriginalPushContents(groups[i].pushes);
@@ -955,8 +1069,26 @@ export function aggregatePushes(
   const nativePushCount = rawPushes.filter((push) => push.type === "push").length;
   const nativeBooCount = rawPushes.filter((push) => push.type === "boo").length;
   const nativeNeutralCount = rawPushes.filter((push) => push.type === "neutral").length;
+  const nestedVisibleFloors = new Set(
+    firstLayer
+      .filter((push) => push.replyTo !== null)
+      .flatMap((push) => push.sourceFloors),
+  );
+  const proposalExcludedFloors = new Set([
+    ...nestedVisibleFloors,
+    ...parsedPushes
+      .filter((push) => push.intent.kind === "reply-vote")
+      .flatMap((push) => push.rawFloor === undefined ? [] : [push.rawFloor]),
+  ]);
+  const articlePushCount = parsedPushes.filter((push) =>
+    push.type === "push" && !proposalExcludedFloors.has(push.rawFloor!),
+  ).length;
+  const articleBooCount = parsedPushes.filter((push) =>
+    push.type === "boo" && !proposalExcludedFloors.has(push.rawFloor!),
+  ).length;
   const withdrawnPushes: AggregatedPush[] = groupPushes(
     parsedPushes.filter((push) => !push.intent.isControl),
+    controlOrders,
   )
     .filter((group) => group.pushes.every((push) => push.withdrawn))
     .map((group, index) => {
@@ -979,7 +1111,7 @@ export function aggregatePushes(
         sourceFloors,
         pushVoters: [],
         booVoters: [],
-        editHistory: buildGroupEditHistory(group),
+        editHistory: withdrawnGroupEditHistory(group),
         visible: false,
       };
     });
@@ -988,6 +1120,9 @@ export function aggregatePushes(
     pushes: threadPushes,
     withdrawnPushes,
     articleNotes: articleEditRecords,
+    articleScore: articlePushCount - articleBooCount,
+    articlePushCount,
+    articleBooCount,
     nativeArticleScore: nativePushCount - nativeBooCount,
     nativePushCount,
     nativeBooCount,

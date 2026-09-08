@@ -8,6 +8,7 @@ import {
   normalizeThreadEvents,
   normalizePttId,
 } from "./pushAggregator.js";
+import { parsePushBuffer } from "./parser.js";
 import type { ArticleEditRecord, OpEditedReplySegment, RawPush } from "./parser.js";
 
 const OP = "opUser";
@@ -151,7 +152,7 @@ describe("thread snapshot status", () => {
 });
 
 describe("過深嵌套回文", () => {
-  it("將第四層以後的回文壓到第三層顯示", () => {
+  it("核心保留第四層以後的原始回覆目標", () => {
     const thread = aggregatePushes(
       [
         push("alice", "A", "06/03 21:54", "push", 10, 1),
@@ -172,8 +173,8 @@ describe("過深嵌套回文", () => {
 
     expect(bob.replyTo).toBe(alice.id);
     expect(mary.replyTo).toBe(bob.id);
-    expect(david.replyTo).toBe(bob.id);
-    expect(erin.replyTo).toBe(bob.id);
+    expect(david.replyTo).toBe(mary.id);
+    expect(erin.replyTo).toBe(david.id);
     expect(david.content).toBe("D");
     expect(erin.content).toBe("E");
   });
@@ -191,7 +192,10 @@ describe("連續同作者推文合併", () => {
   });
 
   it("連續同作者且前則塞滿且未用終止符時合併", () => {
-    const raw = [push("alice", full45), push("alice", "接續")];
+    const raw = [
+      { ...push("alice", full45), isFullWidthLine: true },
+      push("alice", "接續"),
+    ];
     const thread = aggregatePushes(raw, OP);
     const alicePushes = thread.pushes.filter((r) => r.author === "alice");
     expect(alicePushes).toHaveLength(1);
@@ -225,6 +229,46 @@ describe("連續同作者推文合併", () => {
 
     expect(neoaPushes).toHaveLength(1);
     expect(neoaPushes[0].content).toBe("短句\n下一句");
+  });
+
+  it("remaining content columns take precedence over the legacy full-line flag", () => {
+    const full = aggregatePushes([
+      {
+        ...push("alice", "前段", "04/11 23:01"),
+        remainingContentColumns: 1,
+        isFullWidthLine: false,
+      },
+      push("alice", "後段", "04/11 23:02"),
+    ], OP);
+    const notFull = aggregatePushes([
+      {
+        ...push("bob", "前段", "04/11 23:01"),
+        remainingContentColumns: 2,
+        isFullWidthLine: true,
+      },
+      push("bob", "後段", "04/11 23:02"),
+    ], OP);
+
+    expect(full.pushes[0].content).toBe("前段後段");
+    expect(notFull.pushes[0].content).toBe("前段\n後段");
+  });
+
+  it("uses parsed PTT content capacity to choose direct or newline concatenation", () => {
+    const aligned = parsePushBuffer([
+      "→ ayufly      : 3W9那是第一次有撐 會再下去第二次代表出大事一定破  08/29 16:55",
+      "→ ayufly      : 接續內容                                             08/29 16:55",
+    ].join("\n"));
+    const unaligned = parsePushBuffer([
+      "推 SouthEast62: 雖然會被拒租是有點誇張，但50歲還需要租房，的確     08/24 13:23",
+      "→ SouthEast62: 會讓人有種「為什麼他到現在還需要租房」的疑問，     08/24 13:23",
+    ].join("\n"));
+
+    expect(aggregatePushes(aligned, OP).pushes[0].content).toBe(
+      "3W9那是第一次有撐 會再下去第二次代表出大事一定破接續內容",
+    );
+    expect(aggregatePushes(unaligned, OP).pushes[0].content).toBe(
+      "雖然會被拒租是有點誇張，但50歲還需要租房，的確\n會讓人有種「為什麼他到現在還需要租房」的疑問，",
+    );
   });
 
   it("連續同作者且前則以串接符號結尾時合併並移除串接符號", () => {
@@ -284,7 +328,7 @@ describe("不連續推文的合併條件", () => {
 
   it("前則塞滿且未用終止符時，下一行直接接續該行", () => {
     const raw = [
-      push("alice", full45, "01/01 12:00"),
+      { ...push("alice", full45, "01/01 12:00"), isFullWidthLine: true },
       push("bob", "插入一句"),
       push("alice", "接續", "01/01 12:03"),
     ];
@@ -701,14 +745,14 @@ describe("推文評分", () => {
     expect(thread.nativeArticleScore).toBe(1);
   });
 
-  it("一般巢狀回覆不影響父回文 score", () => {
+  it("使用 PTT 原生推類別的巢狀回覆會推被回覆者", () => {
     const raw = [
       push("alice", "第一樓"),
       push("bob", "回1樓：同意", "01/01 12:01", "push"),
     ];
     const thread = aggregatePushes(raw, OP);
     const target = thread.pushes.find((item) => item.author === "alice")!;
-    expect(target.score).toBe(0);
+    expect(target.score).toBe(1);
   });
 });
 
@@ -816,7 +860,7 @@ describe("投票者收集", () => {
     expect(target.score).toBe(-1);
   });
 
-  it("混合明確投票與一般巢狀回覆時只計明確投票", () => {
+  it("混合明確投票與原生噓巢狀回覆時兩者都計入", () => {
     const raw = [
       push("alice", "第一樓", "01/01 12:00", "neutral", 10, 1),
       push("bob", "推1樓", "01/01 12:01", "push", 20, 2),
@@ -824,7 +868,7 @@ describe("投票者收集", () => {
     ];
     const thread = aggregatePushes(raw, OP);
     const target = thread.pushes.find((item) => item.author === "alice")!;
-    expect(target.score).toBe(1);
+    expect(target.score).toBe(0);
   });
 
   it("「推X樓」推文使作者出現在目標的 pushVoters", () => {
@@ -1005,8 +1049,11 @@ describe("HTML vote model alignment", () => {
     expect(thread.nativeArticleScore).toBe(1);
     expect(thread.nativePushCount).toBe(2);
     expect(thread.nativeBooCount).toBe(1);
-    expect(target.pushVoters).toEqual(["alice", "bob"]);
-    expect(target.score).toBe(2);
+    expect(thread.articlePushCount).toBe(0);
+    expect(thread.articleBooCount).toBe(0);
+    expect(thread.articleScore).toBe(0);
+    expect(target.pushVoters).toEqual(["alice", "bob", "dave"]);
+    expect(target.score).toBe(3);
   });
 
   it("reduces pure article votes per author and hides their raw events", () => {
@@ -1271,7 +1318,7 @@ describe("HTML vote model alignment", () => {
     expect(carol).toMatchObject({ replyTo: bob.id, sourceFloors: [5, 6] });
   });
 
-  it("promotes fourth-level replies to the third display level", () => {
+  it("keeps fourth-level reply targets for the UI presentation layer", () => {
     const thread = aggregatePushes(
       [
         push("alice", "第一層。", "08/12 22:20", "neutral", 10, 1),
@@ -1286,6 +1333,6 @@ describe("HTML vote model alignment", () => {
     const dave = thread.pushes.find((item) => item.author === "dave")!;
 
     expect(carol.replyTo).toBe(bob.id);
-    expect(dave.replyTo).toBe(bob.id);
+    expect(dave.replyTo).toBe(carol.id);
   });
 });

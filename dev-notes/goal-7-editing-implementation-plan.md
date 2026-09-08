@@ -1,5 +1,7 @@
 # Goal 7 編輯功能 Implementation Plan
 
+> 歷史計畫更正：其中自訂 `editSummary` 與 `※ PTTzzz 編輯摘要` 的新增流程已取消。現行實作只傳送更新正文並沿用 PTT 原生編輯紀錄；舊標記僅保留解析相容性。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 完成可保存摘要的安全文章編輯，以及以新推文表達的補充、更正與撤回流程。

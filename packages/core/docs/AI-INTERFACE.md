@@ -1,6 +1,6 @@
 # AI 建立 PTTzzz UI 的最短正確路徑
 
-此頁描述 repository 內已實作並通過 packed-consumer 驗證的 0.1 API；是否已發布至 npm registry 是另一件事。完整型別見 [public contracts](./contracts.md)，討論串語意見[核心規則白皮書](../whitepaper/pttzzz-core.md)，套件邊界見[核心架構設計](../../dev-notes/goal-9-core-architecture-design.md)。
+此頁描述 repository 內已實作並通過 packed-consumer 驗證的 0.1 API；是否已發布至 npm registry 是另一件事。完整型別見 [public contracts](./contracts.md)，討論串語意見[核心規則白皮書](../../../docs/whitepaper/pttzzz-core.md)，fixture 執行方式見[核心規則 fixture 驗證](./fixture-conformance.md)，套件邊界見[核心架構](./architecture.md)。
 
 ## 1. 安裝
 
@@ -169,7 +169,6 @@ await client.createArticle({
 await client.editArticle({
   article: articleKey,
   content: revisedBody,
-  editSummary: "修正第二段錯字", // 必填且不可為空
 });
 
 // PTT 原生「回應至看板」，會建立另一篇文章；不是推文。

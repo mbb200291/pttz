@@ -135,12 +135,12 @@ try {
 
   const coreManifest = JSON.parse(readFileSync(join(root, "packages/core/package.json"), "utf8"));
   const browserManifest = JSON.parse(readFileSync(join(root, "packages/browser/package.json"), "utf8"));
-  const exampleSource = join(root, "docs/examples/minimal-browser/main.ts");
-  const exampleState = join(root, "docs/examples/minimal-browser/state.ts");
-  const exampleHtml = join(root, "docs/examples/minimal-browser/index.html");
-  const exampleManifest = join(root, "docs/examples/minimal-browser/package.json");
-  const exampleTsconfig = join(root, "docs/examples/minimal-browser/tsconfig.json");
-  const exampleViteConfig = join(root, "docs/examples/minimal-browser/vite.config.ts");
+  const exampleSource = join(root, "apps/web/docs/examples/minimal-browser/main.ts");
+  const exampleState = join(root, "apps/web/docs/examples/minimal-browser/state.ts");
+  const exampleHtml = join(root, "apps/web/docs/examples/minimal-browser/index.html");
+  const exampleManifest = join(root, "apps/web/docs/examples/minimal-browser/package.json");
+  const exampleTsconfig = join(root, "apps/web/docs/examples/minimal-browser/tsconfig.json");
+  const exampleViteConfig = join(root, "apps/web/docs/examples/minimal-browser/vite.config.ts");
   const exampleDirectory = join(consumer, "example");
   mkdirSync(exampleDirectory);
   copyFileSync(exampleSource, join(exampleDirectory, "main.ts"));
@@ -215,12 +215,12 @@ try {
   }
   dom.window.close();
 
-  const documentation = [join(root, "docs/api"), join(root, "docs/examples")]
+  const documentation = [join(root, "packages/core/docs"), join(root, "apps/web/docs/examples")]
     .flatMap((directory) => readTree(directory)).join("\n");
   if (/TODO|TBD|待確認/u.test(documentation)) {
     throw new Error("public integration documentation contains unresolved markers");
   }
-  const documentedImports = [join(root, "docs/api"), join(root, "docs/examples")]
+  const documentedImports = [join(root, "packages/core/docs"), join(root, "apps/web/docs/examples")]
     .flatMap((directory) => filesIn(directory))
     .flatMap((path) => {
       const source = readFileSync(path, "utf8");
@@ -232,7 +232,7 @@ try {
   )) {
     throw new Error(`public documentation demonstrates a deep package import: ${documentedImports.join(", ")}`);
   }
-  const minimalCodeFiles = filesIn(join(root, "docs/examples/minimal-browser"))
+  const minimalCodeFiles = filesIn(join(root, "apps/web/docs/examples/minimal-browser"))
     .filter((path) => /\.[cm]?[jt]sx?$/iu.test(path));
   const exampleText = minimalCodeFiles.map((path) => readFileSync(path, "utf8")).join("\n");
   const exampleHtmlText = readFileSync(exampleHtml, "utf8");

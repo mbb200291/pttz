@@ -37,6 +37,7 @@ import {
   type Session,
   type Unsubscribe,
   type VoteArticleInput,
+  type VoteDirection,
   type VoteReplyInput,
   type WithdrawArticleVoteInput,
   type WithdrawReplyInput,
@@ -45,8 +46,10 @@ import {
 import {
   approximatePttBytes,
   formatEditPushCommand,
+  formatSectionEditCommand,
   formatReplyPush,
   MAX_PTT_PUSH_BYTES,
+  validateSectionChanges,
 } from "./pushWire.js";
 import { extractArticleThreadEvents, parsePushBuffer, splitArticleBody, stripAnsi } from "./parser.js";
 import {
@@ -134,18 +137,18 @@ function isOperationEdit(
 function replyTree(pushes: readonly AggregatedPush[], debug: boolean, viewerId?: string): Reply[] {
   const children = new Map<string, Reply[]>();
   const pushById = new Map(pushes.map((push) => [push.id, push]));
-  const depthOf = (push: AggregatedPush): 1 | 2 | 3 => {
+  const depthOf = (push: AggregatedPush): number => {
     let depth = 1;
     let current = push;
     const seen = new Set<string>();
-    while (current.replyTo && depth < 3 && !seen.has(current.id)) {
+    while (current.replyTo && !seen.has(current.id)) {
       seen.add(current.id);
       const parent = pushById.get(current.replyTo);
       if (!parent) break;
       depth += 1;
       current = parent;
     }
-    return depth as 1 | 2 | 3;
+    return depth;
   };
   const replies = pushes.map((push): Reply => ({
     replyId: push.id,
@@ -155,6 +158,12 @@ function replyTree(pushes: readonly AggregatedPush[], debug: boolean, viewerId?:
     ...(push.time ? { createdAt: push.time } : {}),
     ...(push.replyTo ? { replyTo: push.replyTo } : {}),
     depth: depthOf(push),
+    votes: {
+      pushCount: push.pushVoters.length,
+      booCount: push.booVoters.length,
+      score: push.score,
+      ...viewerVote(viewerId, push.pushVoters, push.booVoters),
+    },
     score: push.score,
     ...viewerVote(viewerId, push.pushVoters, push.booVoters),
     isOp: push.isOP,
@@ -190,7 +199,11 @@ function projectSource(
   revision: number,
   debug: boolean,
   viewerId?: string,
-): { article: PartialArticle | Article; replyFloors: Map<string, readonly number[]> } {
+): {
+  article: PartialArticle | Article;
+  replyFloors: Map<string, readonly number[]>;
+  replyViewerVotes: Map<string, VoteDirection>;
+} {
   const header = parseHeader(source.rawText);
   const split = splitArticleBody(source.rawText);
   const events = extractArticleThreadEvents(source.rawText);
@@ -212,6 +225,17 @@ function projectSource(
     nativePushCount: thread.nativePushCount,
     nativeBooCount: thread.nativeBooCount,
     nativeNeutralCount: thread.nativeNeutralCount,
+    nativeVotes: {
+      pushCount: thread.nativePushCount,
+      booCount: thread.nativeBooCount,
+      score: thread.nativeArticleScore,
+    },
+    articleVotes: {
+      pushCount: thread.articlePushCount,
+      booCount: thread.articleBooCount,
+      score: thread.articleScore,
+      ...viewerVote(viewerId, thread.articlePushVoters, thread.articleBooVoters),
+    },
   };
   const replyFloors = new Map(thread.pushes.flatMap((push) => {
     const floors = [...new Set(push.sourceFloors)]
@@ -219,13 +243,17 @@ function projectSource(
       .sort((left, right) => left - right);
     return floors.length ? [[push.id, floors] as const] : [];
   }));
+  const replyViewerVotes = new Map(thread.pushes.flatMap((push) => {
+    const direction = viewerDirection(viewerId, push.pushVoters, push.booVoters);
+    return direction ? [[push.id, direction] as const] : [];
+  }));
   if (source.completeness === "incomplete") {
     return { article: {
       ...common,
       completeness: "incomplete",
       ...(header.title ? { title: header.title } : {}),
       ...(header.author ? { author: header.author } : {}),
-    }, replyFloors };
+    }, replyFloors, replyViewerVotes };
   }
   return { article: {
     ...common,
@@ -236,7 +264,7 @@ function projectSource(
     nativeScore: thread.nativeArticleScore,
     ...viewerVote(viewerId, thread.articlePushVoters, thread.articleBooVoters),
     ...(debug ? { metadata: { raw: source.rawText } } : {}),
-  }, replyFloors };
+  }, replyFloors, replyViewerVotes };
 }
 
 function withdrawalRanges(floors: readonly number[]): readonly { start: number; end: number }[] {
@@ -261,6 +289,7 @@ export class PttzzzClient {
   private readonly revisions = new Map<string, number>();
   private readonly generations = new Map<string, number>();
   private readonly replyTargets = new Map<string, Map<string, readonly number[]>>();
+  private readonly replyViewerVotes = new Map<string, Map<string, VoteDirection>>();
   private connection: ConnectionStatus = "disconnected";
   private session: Session | null = null;
   private gatewayUnsubscribe?: Unsubscribe;
@@ -328,6 +357,7 @@ export class PttzzzClient {
       this.revisions.clear();
       this.generations.clear();
       this.replyTargets.clear();
+      this.replyViewerVotes.clear();
       if (this.connection !== "disconnected") {
         this.connection = "disconnected";
         this.emit({ type: "connection.changed", status: "disconnected" });
@@ -345,6 +375,7 @@ export class PttzzzClient {
     const generation = (this.generations.get(id) ?? 0) + 1;
     this.generations.set(id, generation);
     this.replyTargets.delete(id);
+    this.replyViewerVotes.delete(id);
     let sourceRevision = -Infinity;
     let final: Article | undefined;
     try {
@@ -367,7 +398,10 @@ export class PttzzzClient {
           if (current) this.emit({ type: "article.partial", articleKey: input.article, revision, article });
         } else {
           final = article;
-          if (current) this.replyTargets.set(id, projection.replyFloors);
+          if (current) {
+            this.replyTargets.set(id, projection.replyFloors);
+            this.replyViewerVotes.set(id, projection.replyViewerVotes);
+          }
           if (current) this.emit({ type: "article.updated", articleKey: input.article, revision, article });
           break;
         }
@@ -429,11 +463,20 @@ export class PttzzzClient {
     const target = this.replyTarget(input.article, input.replyId);
     if (!target.ok) return target;
     const floor = target.value[0];
-    const invalid = invalidPushContent(formatEditPushCommand(
-      floor,
-      input.mode,
-      input.content,
-    ));
+    if (input.mode === "section") {
+      const message = validateSectionChanges(input.changes);
+      if (message) return fail({ code: "INVALID_INPUT", message, retryable: false, outcome: "not-sent" });
+      const invalid = invalidPushContent(formatSectionEditCommand(floor, input.changes));
+      if (invalid) return invalid;
+      return this.write({
+        type: "edit-floor",
+        article: input.article,
+        floor,
+        mode: "section",
+        changes: input.changes,
+      });
+    }
+    const invalid = invalidPushContent(formatEditPushCommand(floor, input.mode, input.content));
     if (invalid) return invalid;
     return this.write({
       type: "edit-floor",
@@ -457,23 +500,36 @@ export class PttzzzClient {
   async voteReply(input: VoteReplyInput): Promise<Result<void>> {
     const target = this.replyTarget(input.article, input.replyId);
     if (!target.ok) return target;
-    return this.write({
+    const articleId = articleKeyId(input.article);
+    const votes = this.replyViewerVotes.get(articleId) ?? new Map<string, VoteDirection>();
+    if (votes.get(input.replyId) === input.direction) return ok(undefined);
+    const previous = votes.get(input.replyId);
+    votes.set(input.replyId, input.direction);
+    this.replyViewerVotes.set(articleId, votes);
+    const result = await this.write({
       type: "vote-floor",
       article: input.article,
       floor: target.value[0],
       direction: input.direction,
     });
+    if (!result.ok) {
+      if (previous) votes.set(input.replyId, previous);
+      else votes.delete(input.replyId);
+    }
+    return result;
   }
 
   async withdrawReplyVote(input: WithdrawReplyVoteInput): Promise<Result<void>> {
     const target = this.replyTarget(input.article, input.replyId);
     if (!target.ok) return target;
-    return this.write({
+    const result = await this.write({
       type: "withdraw-floor-vote",
       article: input.article,
       floor: target.value[0],
       direction: input.direction,
     });
+    if (result.ok) this.replyViewerVotes.get(articleKeyId(input.article))?.delete(input.replyId);
+    return result;
   }
 
   private replyTarget(article: ArticleKey, replyId: string): Result<readonly number[]> {
@@ -525,6 +581,7 @@ export class PttzzzClient {
   private setSession(session: Session | null): void {
     if (this.session?.userId === session?.userId) return;
     this.session = session;
+    this.replyViewerVotes.clear();
     this.emit({ type: "session.changed", session });
   }
 }

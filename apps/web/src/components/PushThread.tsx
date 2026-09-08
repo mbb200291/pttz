@@ -46,6 +46,8 @@ const REPLY_RENDER_BATCH_SIZE = 30;
 const REFRESH_ANIMATION_MIN_MS = 350;
 const REFRESH_HIGHLIGHT_MS = 220;
 function getViewerVote(push: AggregatedPush, currentUser?: string): -1 | 0 | 1 {
+  if (push.votes?.viewerVote === "push") return 1;
+  if (push.votes?.viewerVote === "boo") return -1;
   if (!currentUser) return 0;
   if (push.pushVoters.some((author) => samePttId(author, currentUser))) return 1;
   if (push.booVoters.some((author) => samePttId(author, currentUser))) return -1;
@@ -56,8 +58,8 @@ function getPushVoteState(push: AggregatedPush, currentUser?: string) {
   return {
     value: getViewerVote(push, currentUser),
     count: {
-      push: push.pushVoters.length,
-      boo: push.booVoters.length,
+      push: push.votes?.pushCount ?? push.pushVoters.length,
+      boo: push.votes?.booCount ?? push.booVoters.length,
     },
   };
 }
@@ -609,18 +611,21 @@ export function PushThread({
   const childrenMap = useMemo(() => {
     const nextMap = new Map<string, AggregatedPush[]>();
     for (const push of visiblePushes) {
-      if (push.replyTo) {
-        const list = nextMap.get(push.replyTo) ?? [];
+      const parentId = push.displayReplyTo === undefined ? push.replyTo : push.displayReplyTo;
+      if (parentId) {
+        const list = nextMap.get(parentId) ?? [];
         list.push(push);
         list.sort((a, b) => a.anchorOrder - b.anchorOrder);
-        nextMap.set(push.replyTo, list);
+        nextMap.set(parentId, list);
       }
     }
     return nextMap;
   }, [visiblePushes]);
 
   const topLevel = useMemo(
-    () => visiblePushes.filter((push) => push.replyTo === null),
+    () => visiblePushes.filter((push) =>
+      (push.displayReplyTo === undefined ? push.replyTo : push.displayReplyTo) === null,
+    ),
     [visiblePushes],
   );
   const sortedTopLevel = useMemo(

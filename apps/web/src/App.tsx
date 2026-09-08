@@ -420,7 +420,6 @@ export default function App() {
           isSubmitLocked={(payload) => lockedEditFingerprints.has(writeFingerprint("editArticle", {
             article: articleKey(view.board, view.articleIndex),
             content: payload.body,
-            editSummary: payload.editSummary,
           }))}
           submitError={editSubmitError}
           onCancel={() =>
@@ -436,7 +435,6 @@ export default function App() {
             const fingerprint = writeFingerprint("editArticle", {
               article: articleKey(view.board, view.articleIndex),
               content: payload.body,
-              editSummary: payload.editSummary,
             });
             if (editSubmittingRef.current || lockedEditFingerprints.has(fingerprint)) return;
             editSubmittingRef.current = true;
@@ -446,7 +444,6 @@ export default function App() {
               .editArticle({
                 article: articleKey(view.board, view.articleIndex),
                 content: payload.body,
-                editSummary: payload.editSummary,
               })
               .then((result) => {
                 if (!result.ok) {

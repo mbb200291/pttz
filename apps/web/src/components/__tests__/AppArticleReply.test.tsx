@@ -56,11 +56,11 @@ vi.mock("../ComposeScreen", () => ({
     initial?: { title?: string };
     submitError?: string | null;
     onCancel: () => void;
-    isSubmitLocked?: (payload: { board: string; category: string; title: string; body: string; editSummary: string }) => boolean;
-    onSubmit: (payload: { board: string; category: string; title: string; body: string; editSummary: string }) => void;
+    isSubmitLocked?: (payload: { board: string; category: string; title: string; body: string }) => boolean;
+    onSubmit: (payload: { board: string; category: string; title: string; body: string }) => void;
   }) => {
     const payload = (body: string) => ({
-      board: "Gossiping", category: "", title: props.initial?.title ?? "", body, editSummary: "",
+      board: "Gossiping", category: "", title: props.initial?.title ?? "", body,
     });
     return (
     <div>

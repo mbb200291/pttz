@@ -1,6 +1,6 @@
 # Vue composable
 
-這只是 framework independence 範例，不代表存在或規劃官方 Vue package。composable 接收公開 `PttzzzClient`；0.1 型別見 [contracts](../../api/contracts.md)。
+這只是 framework independence 範例，不代表存在或規劃官方 Vue package。composable 接收公開 `PttzzzClient`；0.1 型別見 [contracts](../../../../packages/core/docs/contracts.md)。
 
 ```ts
 import { onUnmounted, readonly, ref } from "vue";

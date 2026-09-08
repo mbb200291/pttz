@@ -1,0 +1,478 @@
+[
+  {
+    "id": "edits-append-opaque-payload",
+    "primaryRule": "EDIT-001.2",
+    "rules": ["EDIT-001.2", "EDIT-001.4", "EDIT-004.1", "EDIT-004.2", "EDIT-004.3"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "原文。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "補充我在1樓發言：推99樓 只是文字", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "alice", "content": "原文。\n推99樓 只是文字", "replyToAuthor": null, "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    },
+    "expectedCommand": {
+      "action": "edit-reply", "actor": "alice", "targetFloor": 1,
+      "mode": "append", "inputContent": "推99樓 只是文字",
+      "pushType": "neutral", "content": "補充我在1樓發言：推99樓 只是文字"
+    }
+  },
+  {
+    "id": "edits-replace-preserves-structure",
+    "primaryRule": "EDIT-001.3",
+    "rules": ["EDIT-001.3", "EDIT-001.4", "EDIT-004.1", "EDIT-004.2", "EDIT-004.3", "EDIT-004.4"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "root", "content": "請問大家比較推薦方案 A 還是方案 B？", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "回1樓：我原本比較推薦方案 A。", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "更正我在2樓發言：回99樓：看完你的補充後，我改推方案 B。", "time": "01/01 12:02" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "root", "content": "請問大家比較推薦方案 A 還是方案 B？", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "回99樓：看完你的補充後，我改推方案 B。", "replyToAuthor": "root", "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    },
+    "expectedCommand": {
+      "action": "edit-reply", "actor": "alice", "targetFloor": 2,
+      "mode": "replace", "inputContent": "回99樓：看完你的補充後，我改推方案 B。",
+      "pushType": "neutral", "content": "更正我在2樓發言：回99樓：看完你的補充後，我改推方案 B。"
+    }
+  },
+  {
+    "id": "edits-withdraw-removes-visible-body",
+    "primaryRule": "EDIT-003.3",
+    "rules": ["RAW-001.1", "RAW-001.4", "EDIT-003.1", "EDIT-003.3", "EDIT-003.4", "EDIT-003.5"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "root", "content": "目標。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "推1樓 原回覆。", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "撤回我在2樓的發言", "time": "01/01 12:02" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "root", "content": "目標。", "replyToAuthor": null, "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    },
+    "expectedNormalizedEvents": [
+      { "rawFloor": 1, "author": "root", "content": "目標。", "withdrawn": false, "visible": true },
+      { "rawFloor": 2, "author": "alice", "content": " ", "withdrawn": true, "visible": false },
+      { "rawFloor": 3, "author": "alice", "content": "", "withdrawn": false, "visible": false }
+    ]
+  },
+  {
+    "id": "edit-rejects-different-author",
+    "primaryRule": "EDIT-001.1",
+    "rules": ["RAW-001.6", "EDIT-001.1"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "Alice 的原文。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "bob", "content": "補充我在1樓發言：不得套用。", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [{ "author": "alice", "content": "Alice 的原文。", "replyToAuthor": null, "score": 0 }],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "edit-targets-original-floor",
+    "primaryRule": "EDIT-001.4",
+    "rules": ["EDIT-001.3", "EDIT-001.4"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "第一則。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "第二則。", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "更正我在2樓發言：第二則已更正。", "time": "01/01 12:02" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "alice", "content": "第一則。", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "第二則已更正。", "replyToAuthor": null, "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "edit-preserves-merged-fragment-relation",
+    "primaryRule": "EDIT-001.5",
+    "rules": ["MERGE-001.1", "EDIT-001.2", "EDIT-001.4", "EDIT-001.5"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "第一段", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "第二段。", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "補充我在1樓發言：群組補充。", "time": "01/01 12:02" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "alice", "content": "第一段\n第二段。\n群組補充。", "replyToAuthor": null, "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    },
+    "expectedReplyDetails": [
+      { "author": "alice", "content": "第一段\n第二段。\n群組補充。", "isOP": false, "sourceFloors": [1, 2], "visible": true, "editKinds": ["original", "append"] }
+    ]
+  },
+  {
+    "id": "section-edit-replaces-half-open-range",
+    "primaryRule": "EDIT-002.1",
+    "rules": ["EDIT-002.1", "EDIT-002.3", "EDIT-002.5"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "ABCDE。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "更正我在1樓發言：^1:3=XY", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [{ "author": "alice", "content": "AXYDE。", "replyToAuthor": null, "score": 0 }],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    },
+    "expectedCommand": {
+      "action": "edit-reply", "actor": "alice", "targetFloor": 1,
+      "mode": "section", "changes": [{ "start": 1, "end": 3, "replacement": "XY" }],
+      "pushType": "neutral", "content": "更正我在1樓發言：^1:3=XY"
+    }
+  },
+  {
+    "id": "section-edit-applies-multiple-ranges-right-to-left",
+    "primaryRule": "EDIT-002.2",
+    "rules": ["EDIT-002.1", "EDIT-002.2", "EDIT-002.3", "EDIT-002.5"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "ABCDE。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "更正我在1樓發言：^1:2=x;^3:3=y", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [{ "author": "alice", "content": "AxCyDE。", "replyToAuthor": null, "score": 0 }],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "section-edit-positions-use-original-content",
+    "primaryRule": "EDIT-002.3",
+    "rules": ["EDIT-002.1", "EDIT-002.2", "EDIT-002.3", "EDIT-002.5"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "ABCDE。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "更正我在1樓發言：^0:1=LONG;^4:5=Z", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [{ "author": "alice", "content": "LONGBCDZ。", "replyToAuthor": null, "score": 0 }],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "section-edit-result-is-opaque",
+    "primaryRule": "EDIT-002.4",
+    "rules": ["EDIT-002.1", "EDIT-002.4", "EDIT-002.5", "EDIT-004.2", "EDIT-004.3"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "原文。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "更正我在1樓發言：^0:2=回99樓 推3樓", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [{ "author": "alice", "content": "回99樓 推3樓。", "replyToAuthor": null, "score": 0 }],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "section-edit-requires-edit-wrapper",
+    "primaryRule": "EDIT-002.5",
+    "rules": ["EDIT-002.1", "EDIT-002.5"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "ABCDE。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "^1:3=XY", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "alice", "content": "ABCDE。", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "^1:3=XY", "replyToAuthor": null, "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "withdraw-accepts-single-and-range-forms",
+    "primaryRule": "EDIT-003.1",
+    "rules": ["EDIT-003.1", "EDIT-003.2", "EDIT-003.3", "EDIT-003.4", "EDIT-003.5"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "第一段", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "第二段。", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "撤回我在1~2樓的發言", "time": "01/01 12:02" }
+    ],
+    "expected": {
+      "replies": [],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "withdraw-rejects-different-author",
+    "primaryRule": "EDIT-003.2",
+    "rules": ["RAW-001.6", "EDIT-003.1", "EDIT-003.2"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "Alice 的原文。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "bob", "content": "撤回我在1樓的發言", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [{ "author": "alice", "content": "Alice 的原文。", "replyToAuthor": null, "score": 0 }],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "withdraw-keeps-original-floor-numbering",
+    "primaryRule": "EDIT-003.4",
+    "rules": ["EDIT-003.1", "EDIT-003.3", "EDIT-003.4", "EDIT-003.5"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "第一樓。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "第二樓。", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "撤回我在1樓的發言", "time": "01/01 12:02" },
+      { "type": "neutral", "author": "bob", "content": "回2樓：仍指向原始二樓。", "time": "01/01 12:03" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "alice", "content": "第二樓。", "replyToAuthor": null, "score": 0 },
+        { "author": "bob", "content": "仍指向原始二樓。", "replyToAuthor": "alice", "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "withdraw-uses-single-space-placeholder",
+    "primaryRule": "EDIT-003.5",
+    "rules": ["EDIT-003.1", "EDIT-003.3", "EDIT-003.4", "EDIT-003.5"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "將撤回。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "撤回我在1樓的發言", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    },
+    "expectedNormalizedEvents": [
+      { "rawFloor": 1, "author": "alice", "content": " ", "withdrawn": true, "visible": false },
+      { "rawFloor": 2, "author": "alice", "content": "", "withdrawn": false, "visible": false }
+    ]
+  },
+  {
+    "id": "edit-parses-only-outer-command",
+    "primaryRule": "EDIT-004.1",
+    "rules": ["EDIT-001.2", "EDIT-004.1", "EDIT-004.2", "EDIT-004.3"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "原文。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "補充我在1樓發言：更正我在1樓發言：內層只是文字", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [{ "author": "alice", "content": "原文。\n更正我在1樓發言：內層只是文字", "replyToAuthor": null, "score": 0 }],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "edit-payload-remains-opaque",
+    "primaryRule": "EDIT-004.2",
+    "rules": ["EDIT-001.3", "EDIT-004.1", "EDIT-004.2", "EDIT-004.3"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "原文。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "更正我在1樓發言：撤回我在1樓的發言", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [{ "author": "alice", "content": "撤回我在1樓的發言", "replyToAuthor": null, "score": 0 }],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "edit-control-looking-text-is-not-reparsed",
+    "primaryRule": "EDIT-004.3",
+    "rules": ["EDIT-001.3", "EDIT-004.1", "EDIT-004.2", "EDIT-004.3"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "root", "content": "目標。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "原文。", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "更正我在2樓發言：回1樓 推1樓", "time": "01/01 12:02" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "root", "content": "目標。", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "回1樓 推1樓", "replyToAuthor": null, "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "edit-preserves-existing-structural-semantics",
+    "primaryRule": "EDIT-004.4",
+    "rules": ["THREAD-001.1", "EDIT-001.3", "EDIT-004.4"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "root", "content": "目標。", "time": "01/01 12:00" },
+      { "type": "push", "author": "alice", "content": "回1樓：原回覆。", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "更正我在2樓發言：新內容。", "time": "01/01 12:02" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "root", "content": "目標。", "replyToAuthor": null, "score": 1 },
+        { "author": "alice", "content": "新內容。", "replyToAuthor": "root", "score": 0 }
+      ],
+      "nativeArticleScore": 1,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "append-supports-said-form",
+    "primaryRule": "EDIT-001.2",
+    "rules": ["EDIT-001.2"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "原文。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "補充我在1樓說的：補充一。", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [{ "author": "alice", "content": "原文。\n補充一。", "replyToAuthor": null, "score": 0 }],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "append-supports-continue-floor-form",
+    "primaryRule": "EDIT-001.2",
+    "rules": ["EDIT-001.2", "EDIT-001.4"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "原文。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "續1F：補充二。", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [{ "author": "alice", "content": "原文。\n補充二。", "replyToAuthor": null, "score": 0 }],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "replace-supports-correct-statement-form",
+    "primaryRule": "EDIT-001.3",
+    "rules": ["EDIT-001.3"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "舊文。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "修正我在1樓的說法：新文一。", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [{ "author": "alice", "content": "新文一。", "replyToAuthor": null, "score": 0 }],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "replace-supports-correct-reply-form",
+    "primaryRule": "EDIT-001.3",
+    "rules": ["EDIT-001.3"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "舊文。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "更正一下我在1樓的回覆：新文二。", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [{ "author": "alice", "content": "新文二。", "replyToAuthor": null, "score": 0 }],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "replace-supports-floor-message-form",
+    "primaryRule": "EDIT-001.3",
+    "rules": ["EDIT-001.3", "EDIT-001.4"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "舊文。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "更正我在1F的留言：新文三。", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [{ "author": "alice", "content": "新文三。", "replyToAuthor": null, "score": 0 }],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "section-edit-inserts-at-empty-range",
+    "primaryRule": "EDIT-002.1",
+    "rules": ["EDIT-002.1", "EDIT-002.3", "EDIT-002.5"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "ABCDE。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "更正我在1樓發言：^2:2=X", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [{ "author": "alice", "content": "ABXCDE。", "replyToAuthor": null, "score": 0 }],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "section-edit-deletes-with-empty-replacement",
+    "primaryRule": "EDIT-002.1",
+    "rules": ["EDIT-002.1", "EDIT-002.3", "EDIT-002.5"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "ABCDE。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "更正我在1樓發言：^1:3=", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [{ "author": "alice", "content": "ADE。", "replyToAuthor": null, "score": 0 }],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  }
+]

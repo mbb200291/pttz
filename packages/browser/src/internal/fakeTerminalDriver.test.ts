@@ -123,7 +123,7 @@ describe("fake PTT adapter", () => {
     expect(article?.score).toBe(before?.score);
   });
 
-  it("persists article body edits and structured revisions for the author", async () => {
+  it("persists article body edits without requiring a custom summary", async () => {
     const adapter = createFakePttAdapter();
     await adapter.login("opUser", "pw");
 
@@ -134,15 +134,12 @@ describe("fake PTT adapter", () => {
         expectedAuthor: "opUser",
         expectedTitle: "[測試] Fake PTT 多帳號互動測試",
         body: "更新後的正文",
-        editSummary: "修正測試說明",
       }),
     ).resolves.toEqual({ ok: true });
 
     const article = await adapter.getArticle("test", 1001);
     expect(article?.body).toBe("更新後的正文");
-    expect(article?.revisions).toEqual([
-      expect.objectContaining({ summary: "修正測試說明" }),
-    ]);
+    expect(article?.revisions).toEqual([]);
   });
 
   it("preserves the existing signature and native edit footer", async () => {
@@ -160,7 +157,6 @@ describe("fake PTT adapter", () => {
       expectedAuthor: "opUser",
       expectedTitle: "[測試] Fake PTT 多帳號互動測試",
       body: "更新正文",
-      editSummary: "保留 footer",
     });
 
     expect((await adapter.getArticle("test", 1001))?.body).toBe(
@@ -190,7 +186,6 @@ describe("fake PTT adapter", () => {
       expectedAuthor: "opUser",
       expectedTitle: "[測試] Fake PTT 多帳號互動測試",
       body: "更新正文",
-      editSummary: "第三次",
     });
 
     const updated = JSON.parse(localStorage.getItem(FAKE_PTT_STORE_KEY) ?? "null")
@@ -198,7 +193,7 @@ describe("fake PTT adapter", () => {
     expect(updated.indexOf("編輯摘要：第一次")).toBeLessThan(updated.indexOf("07/15/2026"));
     expect(updated.indexOf("07/15/2026")).toBeLessThan(updated.indexOf("編輯摘要：第二次"));
     expect(updated.indexOf("編輯摘要：第二次")).toBeLessThan(updated.indexOf("07/16/2026"));
-    expect(updated.indexOf("07/16/2026")).toBeLessThan(updated.indexOf("編輯摘要：第三次"));
+    expect(updated).not.toContain("編輯摘要：第三次");
     expect(updated.match(/編輯摘要：第一次/gu)).toHaveLength(1);
     expect(updated.match(/編輯摘要：第二次/gu)).toHaveLength(1);
   });
@@ -213,7 +208,6 @@ describe("fake PTT adapter", () => {
       expectedAuthor: "opUser",
       expectedTitle: "[測試] Fake PTT 多帳號互動測試",
       body: "不應寫入",
-      editSummary: "未授權編輯",
     });
 
     expect(result).toEqual({ ok: false, reason: "只有文章作者可以編輯文章" });
@@ -230,7 +224,6 @@ describe("fake PTT adapter", () => {
       expectedAuthor: "opUser",
       expectedTitle: "錯誤標題",
       body: "不應寫入",
-      editSummary: "過期快照",
     });
 
     expect(result).toEqual({ ok: false, reason: "文章身分已變更，請重新載入" });

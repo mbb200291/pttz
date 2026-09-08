@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PTTzzz 核心規則完整案例集</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #090b0e;
+      --surface: #12151a;
+      --surface-2: #171b21;
+      --border: #2d333c;
+      --text: #edf1f6;
+      --muted: #929ba9;
+      --dim: #84909f;
+      --push: #68dca3;
+      --push-bg: #142a22;
+      --boo: #ff7d83;
+      --boo-bg: #321d22;
+      --neutral: #aab2be;
+      --floor: #e6c857;
+      --accent: #7898ff;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.6;
+    }
+
+    code, .ptt, .score, .floor, .vote-pair { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+    a { color: inherit; }
+    .page { width: min(1440px, calc(100% - 48px)); margin: 0 auto; padding: 64px 0 96px; }
+
+    header { max-width: 920px; margin-bottom: 26px; }
+    .eyebrow { color: var(--accent); font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+    h1 { margin: 8px 0 12px; font-size: clamp(30px, 5vw, 54px); line-height: 1.12; letter-spacing: -.035em; }
+    .lead { margin: 0; color: var(--muted); font-size: 16px; max-width: 760px; }
+    .definitions { display: flex; gap: 28px; margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--border); }
+    .definition { max-width: 360px; color: var(--muted); font-size: 13px; }
+    .definition strong { display: block; color: var(--text); font-size: 14px; margin-bottom: 3px; }
+
+    nav { position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 0; background: var(--bg); }
+    nav a { text-decoration: none; color: var(--muted); border: 1px solid var(--border); border-radius: 8px; padding: 7px 11px; font-size: 12px; }
+    nav a:hover { color: var(--text); border-color: #4a5360; }
+
+    .group { margin-top: 66px; scroll-margin-top: 76px; }
+    .group-heading { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; }
+    .group-number { color: var(--accent); font: 800 12px "SFMono-Regular", monospace; }
+    h2 { margin: 0; font-size: 24px; letter-spacing: -.02em; }
+    .group-note { margin: 0 0 28px 34px; color: var(--muted); font-size: 13px; }
+
+    .case { padding: 30px 0 34px; border-top: 1px solid var(--border); }
+    .case:last-child { border-bottom: 1px solid var(--border); }
+    .case-title { display: flex; gap: 12px; align-items: baseline; margin-bottom: 18px; }
+    .case-id { color: var(--dim); font: 700 11px "SFMono-Regular", monospace; }
+    h3 { margin: 0; font-size: 17px; }
+    .comparison { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.22fr); gap: 28px; align-items: start; }
+    .comparison > * { min-width: 0; }
+    .column-label { margin-bottom: 9px; color: var(--dim); font-size: 11px; font-weight: 800; letter-spacing: .12em; }
+
+    .ptt {
+      min-height: 148px;
+      padding: 18px;
+      background: #000;
+      color: #d9d9d9;
+      font-size: 13px;
+      line-height: 1.85;
+      overflow-x: auto;
+      white-space: nowrap;
+      border: 1px solid #181818;
+    }
+    .ptt .push { color: var(--push); font-weight: 800; }
+    .ptt .boo { color: var(--boo); font-weight: 800; }
+    .ptt .neutral { color: var(--neutral); font-weight: 800; }
+    .ptt .faint { color: #777; }
+
+    .ui {
+      min-height: 148px;
+      padding: 18px;
+      background: #0e1115;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+    .ui-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; margin-bottom: 14px; color: var(--muted); font-size: 12px; }
+    .native-score { margin-left: auto; color: var(--muted); }
+    .native-score strong { color: var(--text); }
+    .native-score .positive { color: var(--push); }
+    .native-score .negative { color: var(--boo); }
+
+    .reply-card { padding: 15px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+    .reply-card + .reply-card { margin-top: 9px; }
+    .reply-head { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+    .avatar { display: inline-flex; align-items: center; justify-content: center; width: 27px; height: 27px; border-radius: 7px; background: #006c68; color: #d5fffb; font-size: 10px; font-weight: 800; }
+    .author { font-weight: 800; }
+    .floor { color: var(--floor); }
+    .reply-score { color: var(--push); font-weight: 800; }
+    .reply-score.negative { color: var(--boo); }
+    .reply-score.zero { color: var(--muted); }
+    .reply-body { margin: 11px 0 0 36px; font-size: 15px; }
+    .nested { margin: 10px 0 0 36px; padding: 11px 13px; background: var(--surface-2); border-left: 2px solid #3b4350; border-radius: 0 8px 8px 0; }
+    .nested .reply-body { margin-left: 0; font-size: 14px; }
+    .unchanged { color: var(--dim); font-size: 12px; margin-top: 12px; }
+
+    .article-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+    .vote-pair { display: inline-flex; gap: 2px; padding: 2px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+    .vote { display: inline-flex; align-items: center; gap: 6px; padding: 7px 11px; border-radius: 7px; color: var(--muted); font-weight: 800; }
+    .vote.active-push { color: var(--push); background: var(--push-bg); }
+    .vote.active-boo { color: var(--boo); background: var(--boo-bg); }
+    .thumb { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .thread-summary { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; }
+
+    .explanation { margin: 17px 0 0; color: #b6bec9; font-size: 13px; }
+    .explanation code { padding: 2px 5px; border-radius: 4px; background: #191d23; color: var(--text); }
+    .delta-push { color: var(--push); }
+    .delta-boo { color: var(--boo); }
+
+    footer { margin-top: 60px; color: var(--dim); font-size: 12px; }
+    footer strong { color: var(--muted); }
+
+    @media (max-width: 820px) {
+      .page { width: min(100% - 28px, 680px); padding-top: 36px; }
+      .definitions { display: grid; gap: 14px; }
+      .comparison { grid-template-columns: 1fr; gap: 18px; }
+      .group { margin-top: 52px; scroll-margin-top: 132px; }
+      .group-note { margin-left: 0; }
+      .native-score { width: 100%; margin-left: 0; }
+      .nested { margin-left: 12px; }
+      .reply-body { margin-left: 12px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body>
+  <svg width="0" height="0" aria-hidden="true" style="position:absolute">
+    <symbol id="thumb-up" viewBox="0 0 24 24"><path d="M7 10v12M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H7M7 10H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h3M7 10c0-3 1-7 4-7h1a2 2 0 0 1 2 2v3"/></symbol>
+    <symbol id="thumb-down" viewBox="0 0 24 24"><path d="M17 14V2M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H17M17 14h3a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3M17 14c0 3-1 7-4 7h-1a2 2 0 0 1-2-2v-3"/></symbol>
+  </svg>
+
+  <main class="page">
+    <header>
+      <a href="./pttzzz-core.md">← 返回 PTT 現代討論核心白皮書</a>
+      <div class="eyebrow">PTTzzz Core Rules · Visual Examples</div>
+      <h1>PTTzzz 核心規則完整案例集</h1>
+      <p class="lead">左側呈現 PTT 原始事件，右側呈現 PTTzzz 解析後的局部 UI</p>
+      <div class="definitions">
+        <div class="definition"><strong>文章推噓</strong>依 PTT 原始「推／噓」類別計算，但排除已歸入某則回文的嵌套回覆與純回文推噓。</div>
+        <div class="definition"><strong>文章原生分數</strong>每一筆 PTT「推」類別加 1、「噓」類別減 1、「→」不計分，不受內容 pattern 影響。</div>
+        <div class="definition"><strong>回文評分</strong>行首的「推x樓／x樓推一個／噓x樓」決定目標與方向，忽略該行的 PTT 類別；同一帳號對同一樓只保留最後方向。pattern 後沒有 body 時是隱藏投票，有 body 時是可見的「投票＋回覆」。</div>
+      </div>
+    </header>
+
+    <nav aria-label="案例分類">
+      <a href="#aggregation">分散推文合併</a>
+      <a href="#nested-replies">嵌套回文</a>
+      <a href="#votes">文章與回文推噓</a>
+      <a href="#editing">回文編輯與撤回</a>
+      <a href="#boundaries">更多解析邊界</a>
+    </nav>
+
+    <section class="group" id="aggregation">
+      <div class="group-heading"><span class="group-number">01</span><h2>分散推文合併</h2></div>
+      <p class="group-note">同作者、同目標的片段依時間與終止符合併；末尾 || 可強制續接。</p>
+
+      <article class="case">
+        <div class="case-title"><span class="case-id">CASE 16</span><h3>同作者推文合併、終止符與強制續接</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="neutral">→</span> alice: 第一段還沒說完　　　　　 08/12 22:30<br><span class="neutral">→</span> alice: 接著把內容說完。　　　　 08/12 22:31<br><span class="neutral">→</span> alice: 這是新的主題　　　　　　 08/12 22:32<br><span class="neutral">→</span> bob: 這句有句號但要續接。||　　 08/12 22:33<br><span class="neutral">→</span> bob: 強制續接的下一行　　　　 08/12 22:34</div></div>
+          <div><div class="column-label">PTTzzz 局部 UI</div><div class="ui">
+            <div class="ui-bar">5 則原始推文 → 3 張回文卡片<span class="native-score">文章原生分數 <strong>0</strong></span></div>
+            <div class="reply-card"><div class="reply-head"><span class="avatar">AL</span><span class="author">alice</span><span class="floor">1–2F</span></div><p class="reply-body">第一段還沒說完<br>接著把內容說完。</p></div>
+            <div class="reply-card"><div class="reply-head"><span class="avatar">AL</span><span class="author">alice</span><span class="floor">3F</span></div><p class="reply-body">這是新的主題</p></div>
+            <div class="reply-card"><div class="reply-head"><span class="avatar">BO</span><span class="author">bob</span><span class="floor">4–5F</span></div><p class="reply-body">這句有句號但要續接。<br>強制續接的下一行</p></div>
+          </div></div>
+        </div>
+        <p class="explanation">Alice 的 1F 沒有終止符，所以與 2F 合併；2F 以句號結束，3F 因此另開卡片。Bob 的 4F 雖有句號，但尾端 `||` 會被移除並強制與 5F 合併。</p>
+      </article>
+
+      <article class="case">
+        <div class="case-title"><span class="case-id">CASE 19</span><h3>巢狀回覆的續行合併</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="neutral">→</span> carol: 這是第十二樓的內容　　　 08/12 22:40<br><span class="neutral">→</span> alice: 推12樓 我先說第一點　　　 08/12 22:41<br><span class="neutral">→</span> alice: 接著補充第二點。　　　　 08/12 22:42<br><span class="neutral">→</span> alice: 回8樓：這是另一個目標　　 08/12 22:43</div></div>
+          <div><div class="column-label">PTTzzz 局部 UI</div><div class="ui">
+            <div class="ui-bar">同作者、同一目標才能合併<span class="native-score">文章原生分數 <strong>0</strong></span></div>
+            <div class="reply-card"><div class="reply-head"><span class="avatar">CA</span><span class="author">carol</span><span class="floor">12F</span><span class="reply-score">推 +1</span></div><p class="reply-body">這是第十二樓的內容</p><div class="nested"><div class="reply-head"><span class="author">alice</span><span class="floor">13–14F</span></div><p class="reply-body">我先說第一點<br>接著補充第二點。</p></div></div>
+            <div class="unchanged">15F 另掛到原始 8F，不會併入 12F 的回覆</div>
+          </div></div>
+        </div>
+        <p class="explanation">13F 先建立「投票＋回覆」，14F 是同作者、時限內且前句未終止的續行，因此只合併可見 body，12F 仍只收到 Alice 一票。15F 明確改回 8F，結構目標不同，即使作者與時間相同也必須切開。</p>
+      </article>
+
+      <article class="case">
+        <div class="case-title"><span class="case-id">CASE 24</span><h3>三層回覆各自合併</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="neutral">→</span> alice: 第一層內容還沒說完　　　　 08/12 22:50<br><span class="neutral">→</span> alice: 第一層接續完成。　　　　　 08/12 22:51<br><span class="neutral">→</span> bob: 回1樓：第二層先說前半段　　 08/12 22:52<br><span class="neutral">→</span> bob: 第二層再補完。　　　　　　 08/12 22:53<br><span class="neutral">→</span> carol: 回4樓：第三層先回一部分　 08/12 22:54<br><span class="neutral">→</span> carol: 第三層接著回完。　　　　 08/12 22:55</div></div>
+          <div><div class="column-label">PTTzzz 局部 UI</div><div class="ui">
+            <div class="ui-bar">6 則原始推文 → 3 張合併卡片<span class="native-score">文章原生分數 <strong>0</strong></span></div>
+            <div class="reply-card"><div class="reply-head"><span class="avatar">AL</span><span class="author">alice</span><span class="floor">1–2F</span><span class="reply-score zero">推 0</span></div><p class="reply-body">第一層內容還沒說完<br>第一層接續完成。</p>
+              <div class="nested"><div class="reply-head"><span class="author">bob</span><span class="floor">3–4F</span></div><p class="reply-body">第二層先說前半段<br>第二層再補完。</p>
+                <div class="nested"><div class="reply-head"><span class="author">carol</span><span class="floor">5–6F</span></div><p class="reply-body">第三層先回一部分<br>第三層接著回完。</p></div>
+              </div>
+            </div>
+          </div></div>
+        </div>
+        <p class="explanation">每一層都先依相同作者、時間與終止符規則合併，再把整張合併卡片掛到目標回覆下。Bob 的卡片包含原始 3–4F；Carol 雖然寫「回4樓」，回覆到合併卡片內任一原始樓號都會指向 Bob 的同一張卡片，因此 5–6F 整段成為 Bob 下方的第三層回覆。</p>
+      </article>
+
+      <article class="case">
+        <div class="case-title"><span class="case-id">CASE 25</span><h3>多位作者交錯回覆與合併</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="neutral">→</span> alice: 主題第一段還沒結束　　　　 08/12 22:50<br><span class="neutral">→</span> bob: 回1樓：我先回應 Alice　　　 08/12 22:51<br><span class="neutral">→</span> alice: 主題第二段補完。　　　　 08/12 22:52<br><span class="neutral">→</span> carol: 回2樓：我先回 Bob　　　　 08/12 22:53<br><span class="neutral">→</span> bob: 延續我對 Alice 的回覆。　　 08/12 22:54<br><span class="neutral">→</span> dave: 回3樓：我補充 Alice。　　　 08/12 22:55<br><span class="neutral">→</span> carol: 接著把回覆說完。　　　　 08/12 22:56<br><span class="neutral">→</span> erin: 回5樓：我從另一角度回 Bob。 08/12 22:57</div></div>
+          <div><div class="column-label">PTTzzz 局部 UI</div><div class="ui">
+            <div class="ui-bar">8 則原始推文 → 5 張合併卡片<span class="native-score">文章原生分數 <strong>0</strong></span></div>
+            <div class="reply-card"><div class="reply-head"><span class="avatar">AL</span><span class="author">alice</span><span class="floor">1、3F</span><span class="reply-score zero">推 0</span></div><p class="reply-body">主題第一段還沒結束<br>主題第二段補完。</p>
+              <div class="nested"><div class="reply-head"><span class="author">bob</span><span class="floor">2、5F</span></div><p class="reply-body">我先回應 Alice<br>延續我對 Alice 的回覆。</p>
+                <div class="nested"><div class="reply-head"><span class="author">carol</span><span class="floor">4、7F</span></div><p class="reply-body">我先回 Bob<br>接著把回覆說完。</p></div>
+                <div class="nested"><div class="reply-head"><span class="author">erin</span><span class="floor">8F</span></div><p class="reply-body">我從另一角度回 Bob。</p></div>
+              </div>
+              <div class="nested"><div class="reply-head"><span class="author">dave</span><span class="floor">6F</span></div><p class="reply-body">我補充 Alice。</p></div>
+            </div>
+          </div></div>
+        </div>
+        <p class="explanation">所有交錯片段都在 k 分鐘內，且各自前一段沒有終止符，所以 Alice 的 1、3F、Bob 的 2、5F、Carol 的 4、7F 分別合併。Bob 回 1F，因此掛到 Alice；Carol 回 2F、Erin 回 5F，而 2F 與 5F 都屬於 Bob 的合併卡，所以兩人成為 Bob 下方的同層分支。Dave 回 3F，3F 屬於 Alice 的合併卡，因此 Dave 與 Bob 同層。兄弟節點依首次出現的原始樓號排序。</p>
+      </article>
+    </section>
+
+    <section class="group" id="nested-replies">
+      <div class="group-heading"><span class="group-number">02</span><h2>嵌套回文</h2></div>
+      <p class="group-note">行首回覆 pattern 指向原始樓號所屬的合併卡，形成嵌套討論。</p>
+
+      <article class="case">
+        <div class="case-title"><span class="case-id">CASE 03</span><h3>使用「→」回覆 12 樓</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="neutral">→</span> carol: 這是第十二樓的內容　　　 08/12 22:06<br><span class="neutral">→</span> bob: 回12樓：同意你的看法　　　 08/12 22:07</div></div>
+          <div><div class="column-label">PTTzzz 局部 UI</div><div class="ui">
+            <div class="ui-bar">討論串 1 則第一層回覆<span class="native-score">文章原生分數 <strong>0</strong></span></div>
+            <div class="reply-card"><div class="reply-head"><span class="avatar">CA</span><span class="author">carol</span><span class="floor">12F</span><span class="reply-score zero">推 0</span></div><p class="reply-body">這是第十二樓的內容</p><div class="nested"><div class="reply-head"><span class="author">bob</span></div><p class="reply-body">同意你的看法</p></div></div>
+          </div></div>
+        </div>
+        <p class="explanation">Bob 的內容掛到原始 PTT 12F 下方；使用中立類別，因此文章原生分數不變。「回12樓」只建立巢狀關係，不是回文投票。</p>
+      </article>
+
+      <article class="case">
+        <div class="case-title"><span class="case-id">CASE 04</span><h3>使用「推」回覆 12 樓</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="neutral">→</span> carol: 這是第十二樓的內容　　　 08/12 22:06<br><span class="push">推</span> bob: 回12樓：同意你的看法　　　 08/12 22:07</div></div>
+          <div><div class="column-label">PTTzzz 局部 UI</div><div class="ui">
+            <div class="ui-bar">討論串 1 則第一層回覆<span class="native-score">文章推噓 <strong>0</strong> · PTT 原生 <strong class="positive">+1</strong></span></div>
+            <div class="reply-card"><div class="reply-head"><span class="avatar">CA</span><span class="author">carol</span><span class="floor">12F</span><span class="reply-score">推 +1</span></div><p class="reply-body">這是第十二樓的內容</p><div class="nested"><div class="reply-head"><span class="author">bob</span></div><p class="reply-body">同意你的看法</p></div></div>
+          </div></div>
+        </div>
+        <p class="explanation">Bob 的內容掛到 12F 下方，因此不計入提案的文章推噓；PTT 原生分數仍為 +1。嵌套回覆使用原生推類別，會把一票推計到被回覆的 12F。</p>
+      </article>
+
+      <article class="case">
+        <div class="case-title"><span class="case-id">CASE 15</span><h3>四層輸入與最大巢狀深度</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="neutral">→</span> alice: 第一層：原始討論　　　　　 08/12 22:20<br><span class="neutral">→</span> bob: 回1樓：第二層回覆　　　　 08/12 22:21<br><span class="neutral">→</span> carol: 回2樓：第三層回覆　　　 08/12 22:22<br><span class="neutral">→</span> dave: 回3樓：嘗試第四層　　　 08/12 22:23<br><span class="neutral">→</span> erin: 推3樓　　　　　　　　 08/12 22:24</div></div>
+          <div><div class="column-label">PTTzzz 局部 UI</div><div class="ui">
+            <div class="ui-bar">討論串 1 則第一層回覆<span class="native-score">文章原生分數 <strong>0</strong></span></div>
+            <div class="reply-card"><div class="reply-head"><span class="avatar">AL</span><span class="author">alice</span><span class="floor">1F</span><span class="reply-score zero">推 0</span></div><p class="reply-body">第一層：原始討論</p>
+              <div class="nested"><div class="reply-head"><span class="author">bob</span><span class="floor">2F</span></div><p class="reply-body">第二層回覆</p>
+                <div class="nested"><div class="reply-head"><span class="author">carol</span><span class="floor">3F</span><span class="reply-score">推 +1</span></div><p class="reply-body">第三層回覆</p></div>
+                <div class="nested"><div class="reply-head"><span class="author">dave</span><span class="floor">4F</span></div><p class="reply-body">嘗試第四層</p></div>
+              </div>
+            </div>
+          </div></div>
+        </div>
+        <p class="explanation">原始 4F 的確回覆 3F，但 UI 最多顯示三層，所以第四層會提升為 3F 的同層節點並共同掛在 2F 下方。`推3樓` 仍使用原始 PTT 樓號，讓 Carol 的 3F 回文評分 +1；控制指令本身隱藏。</p>
+      </article>
+    </section>
+
+    <section class="group" id="votes">
+      <div class="group-heading"><span class="group-number">03</span><h2>文章單純推噓和回文推噓</h2></div>
+      <p class="group-note">文章票由 PTT 類別計分；回文票由內容 pattern 決定，兩者分開處理。</p>
+
+      <article class="case">
+        <div class="case-title"><span class="case-id">CASE 05</span><h3>對文章按推</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="push">推</span> alice: 推　　　　　　　　　　 08/12 22:08</div></div>
+          <div><div class="column-label">PTTzzz 局部 UI</div><div class="ui">
+            <div class="ui-bar">文章操作<span class="native-score">文章原生分數 <strong class="positive">+1</strong></span></div>
+            <div class="article-actions"><div class="vote-pair"><span class="vote active-push"><svg class="thumb"><use href="#thumb-up"/></svg>1</span><span class="vote"><svg class="thumb"><use href="#thumb-down"/></svg>0</span></div></div>
+            <div class="thread-summary">討論串沒有新增回文卡片</div>
+          </div></div>
+        </div>
+        <p class="explanation">這是純文章投票；事件隱藏，PTT 推類別讓文章原生分數與文章推按鈕人數各增加 1。</p>
+      </article>
+
+      <article class="case">
+        <div class="case-title"><span class="case-id">CASE 06</span><h3>對文章按噓</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="boo">噓</span> alice: 噓　　　　　　　　　　 08/12 22:08</div></div>
+          <div><div class="column-label">PTTzzz 局部 UI</div><div class="ui">
+            <div class="ui-bar">文章操作<span class="native-score">文章原生分數 <strong class="negative">−1</strong></span></div>
+            <div class="article-actions"><div class="vote-pair"><span class="vote"><svg class="thumb"><use href="#thumb-up"/></svg>0</span><span class="vote active-boo"><svg class="thumb"><use href="#thumb-down"/></svg>1</span></div></div>
+            <div class="thread-summary">討論串沒有新增回文卡片</div>
+          </div></div>
+        </div>
+        <p class="explanation">這是純文章投票；事件隱藏，PTT 噓類別讓文章原生分數減 1，文章噓按鈕人數增加 1。</p>
+      </article>
+
+      <article class="case">
+        <div class="case-title"><span class="case-id">CASE 07</span><h3>有效的回文加分</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="neutral">→</span> carol: 這是第十二樓的內容　　　 08/12 22:06<br><span class="neutral">→</span> alice: 推12樓　　　　　　　 08/12 22:07</div></div>
+          <div><div class="column-label">PTTzzz 局部 UI</div><div class="ui">
+            <div class="ui-bar">討論串 1 則</div>
+            <div class="reply-card"><div class="reply-head"><span class="avatar">CA</span><span class="author">carol</span><span class="floor">12F</span><span class="reply-score">推 +1</span></div><p class="reply-body">這是第十二樓的內容</p></div>
+          </div></div>
+        </div>
+        <p class="explanation">內容是純「推12樓」，所以指令隱藏並讓 <code>12F 回文評分 +1</code>。PTTzzz 使用「→」送出，因此文章原生分數不變。</p>
+      </article>
+
+      <article class="case">
+        <div class="case-title"><span class="case-id">CASE 08</span><h3>有效的回文扣分</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="neutral">→</span> carol: 這是第十二樓的內容　　　 08/12 22:06<br><span class="neutral">→</span> alice: 噓12樓　　　　　　　 08/12 22:07</div></div>
+          <div><div class="column-label">PTTzzz 局部 UI</div><div class="ui">
+            <div class="ui-bar">討論串 1 則</div>
+            <div class="reply-card"><div class="reply-head"><span class="avatar">CA</span><span class="author">carol</span><span class="floor">12F</span><span class="reply-score negative">噓 −1</span></div><p class="reply-body">這是第十二樓的內容</p></div>
+          </div></div>
+        </div>
+        <p class="explanation">內容是純「噓12樓」，所以指令隱藏並讓 <code>12F 回文評分 −1</code>。PTTzzz 使用「→」送出，因此文章原生分數不變。</p>
+      </article>
+
+      <article class="case">
+        <div class="case-title"><span class="case-id">CASE 09</span><h3>同一帳號先推、後噓同一樓</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="neutral">→</span> carol: 這是第十二樓的內容　　　 08/12 22:06<br><span class="neutral">→</span> alice: 推12樓　　　　　　　 08/12 22:07<br><span class="neutral">→</span> alice: 噓12樓　　　　　　　 08/12 22:08</div></div>
+          <div><div class="column-label">PTTzzz 局部 UI</div><div class="ui">
+            <div class="ui-bar">討論串 1 則</div>
+            <div class="reply-card"><div class="reply-head"><span class="avatar">CA</span><span class="author">carol</span><span class="floor">12F</span><span class="reply-score negative">噓 −1</span></div><p class="reply-body">這是第十二樓的內容</p></div>
+          </div></div>
+        </div>
+        <p class="explanation">兩筆箭頭事件都不影響文章；12F 對 Alice 只保留最後方向，因此最終是一票噓，回文評分為 −1。</p>
+      </article>
+
+      <article class="case">
+        <div class="case-title"><span class="case-id">CASE 10</span><h3>同一帳號重複推同一樓</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="neutral">→</span> carol: 這是第十二樓的內容　　　 08/12 22:06<br><span class="neutral">→</span> alice: 推12樓　　　　　　　 08/12 22:07<br><span class="neutral">→</span> alice: 推12樓　　　　　　　 08/12 22:08</div></div>
+          <div><div class="column-label">PTTzzz 局部 UI</div><div class="ui">
+            <div class="ui-bar">討論串 1 則</div>
+            <div class="reply-card"><div class="reply-head"><span class="avatar">CA</span><span class="author">carol</span><span class="floor">12F</span><span class="reply-score">推 +1</span></div><p class="reply-body">這是第十二樓的內容</p></div>
+          </div></div>
+        </div>
+        <p class="explanation">兩筆箭頭事件都不影響文章；12F 對 Alice 只保留一票，所以回文評分為 +1。PTTzzz 自己會在送出端阻止這種重複操作。</p>
+      </article>
+
+      <article class="case">
+        <div class="case-title"><span class="case-id">CASE 11</span><h3>其他客戶端使用「推」送出回文加分</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="neutral">→</span> carol: 這是第十二樓的內容　　　 08/12 22:06<br><span class="push">推</span> alice: 推12樓　　　　　　　 08/12 22:07</div></div>
+          <div><div class="column-label">PTTzzz 局部 UI</div><div class="ui">
+            <div class="ui-bar">討論串 1 則<span class="native-score">文章推噓 <strong>0</strong> · PTT 原生 <strong class="positive">+1</strong></span></div>
+            <div class="reply-card"><div class="reply-head"><span class="avatar">CA</span><span class="author">carol</span><span class="floor">12F</span><span class="reply-score">推 +1</span></div><p class="reply-body">這是第十二樓的內容</p></div>
+            <div class="unchanged">控制指令本身不顯示</div>
+          </div></div>
+        </div>
+        <p class="explanation">內容 pattern 讓 12F 得到一票推；純回文推噓不計入提案的文章推噓。原始事件使用 PTT 推類別，因此 PTT 原生分數仍為 +1。</p>
+      </article>
+
+      <article class="case">
+        <div class="case-title"><span class="case-id">CASE 12</span><h3>PTT 類別與回文投票方向不同</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="neutral">→</span> carol: 這是第十二樓的內容　　　 08/12 22:06<br><span class="boo">噓</span> alice: 推12樓　　　　　　　 08/12 22:07</div></div>
+          <div><div class="column-label">PTTzzz 局部 UI</div><div class="ui">
+            <div class="ui-bar">討論串 1 則<span class="native-score">文章推噓 <strong>0</strong> · PTT 原生 <strong class="negative">−1</strong></span></div>
+            <div class="reply-card"><div class="reply-head"><span class="avatar">CA</span><span class="author">carol</span><span class="floor">12F</span><span class="reply-score">推 +1</span></div><p class="reply-body">這是第十二樓的內容</p></div>
+            <div class="unchanged">控制指令本身不顯示</div>
+          </div></div>
+        </div>
+        <p class="explanation">內容「推12樓」仍讓 12F 回文評分 +1，但純回文推噓不計入提案的文章推噓。原始事件使用 PTT 噓類別，因此 PTT 原生分數為 −1。</p>
+      </article>
+
+      <article class="case">
+        <div class="case-title"><span class="case-id">CASE 14</span><h3>撤回文章投票與回文投票</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="neutral">→</span> carol: 這是第十二樓的內容　　　 08/12 22:06<br><span class="push">推</span> alice: 推　　　　　　　　　　 08/12 22:07<br><span class="boo">噓</span> alice: 噓　　　　　　　　　　 08/12 22:08<br><span class="neutral">→</span> alice: 推12樓　　　　　　　 08/12 22:09<br><span class="neutral">→</span> alice: 撤回我對12樓的推　　　　 08/12 22:10</div></div>
+          <div><div class="column-label">PTTzzz 局部 UI</div><div class="ui">
+            <div class="ui-bar">文章操作<span class="native-score">文章原生分數 <strong>0</strong></span></div>
+            <div class="article-actions"><div class="vote-pair"><span class="vote"><svg class="thumb"><use href="#thumb-up"/></svg>0</span><span class="vote"><svg class="thumb"><use href="#thumb-down"/></svg>0</span></div></div>
+            <div class="reply-card" style="margin-top:14px"><div class="reply-head"><span class="avatar">CA</span><span class="author">carol</span><span class="floor">12F</span><span class="reply-score zero">推 0</span></div><p class="reply-body">這是第十二樓的內容</p></div>
+          </div></div>
+        </div>
+        <p class="explanation">撤回文章推時，PTTzzz 使用「噓」類別送出純「噓」，讓文章原生分數由 +1 抵銷回 0；撤回回文投票仍使用「→」，只取消 12F 的應用層投票。兩種撤回事件都隱藏。</p>
+      </article>
+
+      <article class="case">
+        <div class="case-title"><span class="case-id">CASE 17</span><h3>「推x樓＋文字」同時投票與回覆</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="neutral">→</span> carol: 這是第十二樓的內容　　　 08/12 22:40<br><span class="neutral">→</span> alice: 推12樓 我同意這個觀點　　 08/12 22:41</div></div>
+          <div><div class="column-label">PTTzzz 局部 UI</div><div class="ui">
+            <div class="ui-bar">討論串 1 則第一層回覆<span class="native-score">文章原生分數 <strong>0</strong></span></div>
+            <div class="reply-card"><div class="reply-head"><span class="avatar">CA</span><span class="author">carol</span><span class="floor">12F</span><span class="reply-score">推 +1</span></div><p class="reply-body">這是第十二樓的內容</p><div class="nested"><div class="reply-head"><span class="author">alice</span><span class="floor">13F</span></div><p class="reply-body">我同意這個觀點</p></div></div>
+          </div></div>
+        </div>
+        <p class="explanation">這是一筆明確的複合事件：行首 pattern 讓 12F 得到一票推，pattern 後的 body 則顯示為 12F 的巢狀回覆。使用「→」所以文章原生分數不變；body 不會再遞迴解析。</p>
+      </article>
+
+      <article class="case">
+        <div class="case-title"><span class="case-id">CASE 18</span><h3>樓號後沒有分隔符，不視為 pattern</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="neutral">→</span> carol: 這是第十二樓的內容　　　 08/12 22:40<br><span class="neutral">→</span> alice: 推12樓主的整理很清楚　　 08/12 22:41</div></div>
+          <div><div class="column-label">PTTzzz 局部 UI</div><div class="ui">
+            <div class="ui-bar">討論串 2 則<span class="native-score">文章原生分數 <strong>0</strong></span></div>
+            <div class="reply-card"><div class="reply-head"><span class="avatar">CA</span><span class="author">carol</span><span class="floor">12F</span><span class="reply-score zero">推 0</span></div><p class="reply-body">這是第十二樓的內容</p></div>
+            <div class="reply-card"><div class="reply-head"><span class="avatar">AL</span><span class="author">alice</span><span class="floor">13F</span><span class="reply-score zero">推 0</span></div><p class="reply-body">推12樓主的整理很清楚</p></div>
+          </div></div>
+        </div>
+        <p class="explanation">「樓」後直接接「主」，不符合結束、空白或冒號邊界，因此整句是一般可見留言，不投票也不掛到 12F。這可避免「推12樓主」之類自然語句被前綴誤判。</p>
+      </article>
+
+      <article class="case">
+        <div class="case-title"><span class="case-id">CASE 20</span><h3>純投票不吞掉下一則一般留言</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="neutral">→</span> carol: 這是第十二樓的內容　　　 08/12 22:40<br><span class="neutral">→</span> alice: 推12樓　　　　　　　　 08/12 22:41<br><span class="neutral">→</span> alice: 我另外補充一件事　　　　 08/12 22:42</div></div>
+          <div><div class="column-label">PTTzzz 局部 UI</div><div class="ui">
+            <div class="ui-bar">討論串 2 則<span class="native-score">文章原生分數 <strong>0</strong></span></div>
+            <div class="reply-card"><div class="reply-head"><span class="avatar">CA</span><span class="author">carol</span><span class="floor">12F</span><span class="reply-score">推 +1</span></div><p class="reply-body">這是第十二樓的內容</p></div>
+            <div class="reply-card"><div class="reply-head"><span class="avatar">AL</span><span class="author">alice</span><span class="floor">14F</span><span class="reply-score zero">推 0</span></div><p class="reply-body">我另外補充一件事</p></div>
+          </div></div>
+        </div>
+        <p class="explanation">13F 是無 body 的純控制事件，先被辨識並隱藏，不參與可見回文合併，因此不會吃掉下一則一般留言。14F 仍是獨立的第一層回文；所有樓號保持原始 PTT 樓號。</p>
+      </article>
+
+      <article class="case">
+        <div class="case-title"><span class="case-id">CASE 21</span><h3>改票只更新狀態，不刪除先前回覆</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="neutral">→</span> carol: 這是第十二樓的內容　　　 08/12 22:40<br><span class="neutral">→</span> alice: 推12樓 我同意第一點　　　 08/12 22:41<br><span class="neutral">→</span> alice: 噓12樓 但不同意第二點　　 08/12 22:44</div></div>
+          <div><div class="column-label">PTTzzz 局部 UI</div><div class="ui">
+            <div class="ui-bar">討論串 1 則第一層回覆<span class="native-score">文章原生分數 <strong>0</strong></span></div>
+            <div class="reply-card"><div class="reply-head"><span class="avatar">CA</span><span class="author">carol</span><span class="floor">12F</span><span class="reply-score negative">噓 −1</span></div><p class="reply-body">這是第十二樓的內容</p><div class="nested"><div class="reply-head"><span class="author">alice</span><span class="floor">13F</span></div><p class="reply-body">我同意第一點</p></div><div class="nested"><div class="reply-head"><span class="author">alice</span><span class="floor">14F</span></div><p class="reply-body">但不同意第二點</p></div></div>
+          </div></div>
+        </div>
+        <p class="explanation">Alice 對 12F 的投票狀態採最後方向，所以由推改為噓；兩次複合事件的 body 都是已發表內容，舊的可見回覆仍保留。改票不能反向刪除歷史發言。</p>
+      </article>
+
+      <article class="case">
+        <div class="case-title"><span class="case-id">CASE 22</span><h3>只撤回複合事件的投票</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="neutral">→</span> carol: 這是第十二樓的內容　　　 08/12 22:40<br><span class="neutral">→</span> alice: 推12樓 我同意這個觀點　　 08/12 22:41<br><span class="neutral">→</span> alice: 撤回我對12樓的推　　　　 08/12 22:42</div></div>
+          <div><div class="column-label">PTTzzz 局部 UI</div><div class="ui">
+            <div class="ui-bar">討論串 1 則第一層回覆<span class="native-score">文章原生分數 <strong>0</strong></span></div>
+            <div class="reply-card"><div class="reply-head"><span class="avatar">CA</span><span class="author">carol</span><span class="floor">12F</span><span class="reply-score zero">推 0</span></div><p class="reply-body">這是第十二樓的內容</p><div class="nested"><div class="reply-head"><span class="author">alice</span><span class="floor">13F</span></div><p class="reply-body">我同意這個觀點</p></div></div>
+          </div></div>
+        </div>
+        <p class="explanation">「撤回我對12樓的推」只撤回投票，不撤回可見 body；12F 回到 0，但 Alice 的回覆仍保留。若要刪除文字，必須另用針對原始樓號的發言撤回。</p>
+      </article>
+    </section>
+
+    <section class="group" id="editing">
+      <div class="group-heading"><span class="group-number">04</span><h2>回文編輯與撤回</h2></div>
+      <p class="group-note">編輯與撤回依原始樓號定位；只解析外層指令，不重解 payload。</p>
+
+      <article class="case">
+        <div class="case-title"><span class="case-id">CASE 13</span><h3>Replace 的更新內文不重新解析</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="neutral">→</span> carol: 這是第十二樓的內容　　　 08/12 22:06<br><span class="boo">噓</span> alice: 推12樓 我不同意　　　　 08/12 22:07<br><span class="neutral">→</span> alice: 更正我在13樓發言：回99樓：我改過的文字　08/12 22:08</div></div>
+          <div><div class="column-label">PTTzzz 局部 UI</div><div class="ui">
+            <div class="ui-bar">討論串 1 則第一層回覆<span class="native-score">文章推噓 <strong>0</strong> · PTT 原生 <strong class="negative">−1</strong></span></div>
+            <div class="reply-card"><div class="reply-head"><span class="avatar">CA</span><span class="author">carol</span><span class="floor">12F</span><span class="reply-score">推 +1</span></div><p class="reply-body">這是第十二樓的內容</p><div class="nested"><div class="reply-head"><span class="author">alice</span><span class="floor">13F</span></div><p class="reply-body">回99樓：我改過的文字</p></div></div>
+          </div></div>
+        </div>
+        <p class="explanation">原始 13F 是「投票＋回覆」：掛在 12F 並投一票推，所以不計入提案的文章推噓；PTT 噓類別仍使原生分數為 −1。Replace 只換 body；更新內文是 opaque payload，所以「回99樓」只作為顯示文字，原始目標與投票方向不變。13F 仍在 12F 下方，12F 仍為 +1。</p>
+      </article>
+
+      <article class="case">
+        <div class="case-title"><span class="case-id">CASE 23</span><h3>撤回複合事件的整則發言</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="neutral">→</span> carol: 這是第十二樓的內容　　　 08/12 22:40<br><span class="neutral">→</span> alice: 推12樓 我同意這個觀點　　 08/12 22:41<br><span class="neutral">→</span> alice: 撤回我在13樓的發言　　　 08/12 22:42</div></div>
+          <div><div class="column-label">PTTzzz 局部 UI</div><div class="ui">
+            <div class="ui-bar">討論串 1 則<span class="native-score">文章原生分數 <strong>0</strong></span></div>
+            <div class="reply-card"><div class="reply-head"><span class="avatar">CA</span><span class="author">carol</span><span class="floor">12F</span><span class="reply-score zero">推 0</span></div><p class="reply-body">這是第十二樓的內容</p></div>
+            <div class="unchanged">13F 的 body 與該事件帶來的一票都已撤回</div>
+          </div></div>
+        </div>
+        <p class="explanation">發言撤回以原始樓號鎖定事件，會把整筆複合事件一併撤回：body 不再顯示，這筆事件帶來的投票也不再有效。這與只撤回「對 12F 的推」是兩種不同操作。</p>
+      </article>
+    </section>
+
+    <section class="group" id="boundaries">
+      <div class="group-heading"><span class="group-number">05</span><h2>更多解析邊界</h2></div>
+      <p class="group-note">一般留言與未命中 pattern 的文字維持可見，並保留原始事件語意。</p>
+
+      <article class="case">
+        <div class="case-title"><span class="case-id">CASE 01</span><h3>使用「推」發表一般留言</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="push">推</span> alice: 好文，整理得很清楚　　　 08/12 22:01</div></div>
+          <div><div class="column-label">PTTzzz 局部 UI</div><div class="ui">
+            <div class="ui-bar">討論串 1 則<span class="native-score">文章原生分數 <strong class="positive">+1</strong></span></div>
+            <div class="reply-card"><div class="reply-head"><span class="avatar">AL</span><span class="author">alice</span><span class="floor">1F</span><span class="reply-score zero">推 0</span></div><p class="reply-body">好文，整理得很清楚</p></div>
+          </div></div>
+        </div>
+        <p class="explanation">這是一般可見留言；因 PTT 類別為推，<code>文章原生分數 +1</code>，但 1F 自己的回文評分仍是 0。</p>
+      </article>
+
+      <article class="case">
+        <div class="case-title"><span class="case-id">CASE 02</span><h3>使用「→」發表一般留言</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="neutral">→</span> alice: 我補充一個例子　　　　 08/12 22:02</div></div>
+          <div><div class="column-label">PTTzzz 局部 UI</div><div class="ui">
+            <div class="ui-bar">討論串 1 則<span class="native-score">文章原生分數 <strong>0</strong></span></div>
+            <div class="reply-card"><div class="reply-head"><span class="avatar">AL</span><span class="author">alice</span><span class="floor">1F</span><span class="reply-score zero">推 0</span></div><p class="reply-body">我補充一個例子</p></div>
+          </div></div>
+        </div>
+        <p class="explanation">中立類別的一般留言照常顯示，文章原生分數與回文評分都不變。</p>
+      </article>
+    </section>
+
+    <footer><strong>樓號規則：</strong>所有「x樓」都指原始 PTT 推文樓號；即使投票指令在 PTTzzz 中被隱藏，也不重新編排後續目標樓號。</footer>
+  </main>
+</body>
+</html>

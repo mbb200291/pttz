@@ -8,6 +8,7 @@ import {
   sortTopLevelPushes,
 } from "../PushThread";
 import type { AggregatedPush } from "../../lib/ptt/uiTypes";
+import { projectThreadForDisplay } from "../../lib/ptt/uiTypes";
 
 function push(overrides: Partial<AggregatedPush>): AggregatedPush {
   return {
@@ -115,6 +116,48 @@ describe("PushThread", () => {
     expect(html).toContain("Ok?");
     expect(html).toContain("OK");
     expect(html).toContain("sure?");
+  });
+
+  it("preserves line breaks between aggregated push fragments", () => {
+    const html = renderToStaticMarkup(
+      <PushThread
+        score={0}
+        pushes={[
+          push({
+            id: "push-0",
+            author: "excercang",
+            content: "第一段未滿行\n第二段未滿行",
+            anchorOrder: 10,
+            sourceFloors: [1, 2],
+          }),
+        ]}
+      />,
+    );
+
+    expect(html).toContain("white-space:pre-wrap");
+    expect(html).toContain("第一段未滿行\n第二段未滿行");
+  });
+
+  it("promotes deeper structural replies only in the UI display tree", () => {
+    const projected = projectThreadForDisplay([
+      push({ id: "a", structuralDepth: 1, replyTo: null }),
+      push({ id: "b", structuralDepth: 2, replyTo: "a" }),
+      push({ id: "c", structuralDepth: 3, replyTo: "b" }),
+      push({ id: "d", structuralDepth: 4, replyTo: "c" }),
+      push({ id: "e", structuralDepth: 5, replyTo: "d" }),
+    ]);
+
+    expect(projected.map(({ id, replyTo, displayReplyTo }) => ({
+      id,
+      replyTo,
+      displayReplyTo,
+    }))).toEqual([
+      { id: "a", replyTo: null, displayReplyTo: null },
+      { id: "b", replyTo: "a", displayReplyTo: "a" },
+      { id: "c", replyTo: "b", displayReplyTo: "b" },
+      { id: "d", replyTo: "c", displayReplyTo: "b" },
+      { id: "e", replyTo: "d", displayReplyTo: "b" },
+    ]);
   });
 
   it("keeps the raw push badge without duplicating the reply score", () => {

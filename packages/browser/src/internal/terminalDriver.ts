@@ -23,8 +23,10 @@ import {
   type AggregatedPush,
   extractArticleThreadEvents,
   formatEditPushCommand,
+  formatReplyVoteCommand,
+  formatReplyVoteWithdrawalCommand,
+  formatSectionEditCommand,
   formatReplyPush,
-  formatPttzzzEditSummary,
   parsePushBuffer,
   splitArticleBody,
   splitArticleEditableContent,
@@ -160,7 +162,6 @@ export interface EditArticleRequest {
   expectedAuthor: string;
   expectedTitle: string;
   body: string;
-  editSummary: string;
 }
 
 export interface DeleteArticleRequest {
@@ -1095,7 +1096,6 @@ class PttClientTerminalDriver implements TerminalDriver {
           ? submitArticleEditFromBot(this.bot, {
               ...request,
               body: command.content,
-              editSummary: command.editSummary,
             })
           : command.type === "delete-article"
             ? submitArticleDeleteFromBot(this.bot, request)
@@ -1150,12 +1150,14 @@ class PttClientTerminalDriver implements TerminalDriver {
             content = command.direction === "push" ? "噓" : "推";
             pushType = command.direction === "push" ? "boo" : "push"; break;
           case "vote-floor":
-            content = formatVoteForFloor(command.floor, command.direction); pushType = "neutral"; break;
+            content = formatReplyVoteCommand(command.floor, command.direction); pushType = "neutral"; break;
           case "withdraw-floor-vote":
-            content = `撤回我對${command.floor}樓的${command.direction === "push" ? "推" : "噓"}`;
+            content = formatReplyVoteWithdrawalCommand(command.floor, command.direction);
             pushType = "neutral"; break;
           case "edit-floor":
-            content = formatEditPushCommand(command.floor, command.mode, command.content);
+            content = command.mode === "section"
+              ? formatSectionEditCommand(command.floor, command.changes)
+              : formatEditPushCommand(command.floor, command.mode, command.content);
             pushType = "neutral"; break;
           case "withdraw-floor": {
             const range = command.ranges[0];
@@ -2409,9 +2411,7 @@ export async function submitArticleEditFromBot(
   }
 
   const cleanBody = sanitizePostBody(request.body).trimEnd();
-  const summaryMarker = formatPttzzzEditSummary(request.editSummary);
   if (!cleanBody) return actionNotSent("文章正文不可為空");
-  if (!summaryMarker) return actionNotSent("編輯摘要不可為空");
 
   const aid = request.articleAid?.trim().replace(/^#/u, "") ?? "";
   if (request.articleIndex <= 0 && !aid) {
@@ -2447,7 +2447,6 @@ export async function submitArticleEditFromBot(
   const replacement = [
     cleanBody,
     preservedFooter,
-    summaryMarker,
   ]
     .filter(Boolean)
     .join("\n");

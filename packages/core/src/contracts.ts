@@ -53,6 +53,13 @@ export type VoteDirection = "push" | "boo";
 export type PushType = "push" | "boo" | "neutral";
 export type ArticleCompleteness = "incomplete" | "final";
 
+export interface VoteSummary {
+  pushCount: number;
+  booCount: number;
+  score: number;
+  viewerVote?: VoteDirection;
+}
+
 export interface Board {
   name: string;
   title: string;
@@ -129,8 +136,11 @@ export interface Reply {
   pushType: PushType;
   createdAt?: string;
   replyTo?: ReplyId;
-  depth: 1 | 2 | 3;
+  depth: number;
+  votes: VoteSummary;
+  /** @deprecated Use votes.score. */
   score: number;
+  /** @deprecated Use votes.viewerVote. */
   viewerVote?: VoteDirection;
   isOp: boolean;
   visible: boolean;
@@ -149,6 +159,9 @@ export interface Article extends ArticleSummary {
   nativePushCount: number;
   nativeBooCount: number;
   nativeNeutralCount: number;
+  nativeVotes: VoteSummary;
+  articleVotes: VoteSummary;
+  /** @deprecated Use articleVotes.viewerVote. */
   viewerVote?: VoteDirection;
   metadata?: { raw?: unknown };
 }
@@ -166,6 +179,8 @@ export interface PartialArticle {
   nativePushCount?: number;
   nativeBooCount?: number;
   nativeNeutralCount?: number;
+  nativeVotes?: VoteSummary;
+  articleVotes?: VoteSummary;
 }
 
 export type ConnectionStatus = "disconnected" | "connecting" | "connected";
@@ -226,12 +241,15 @@ export interface SearchArticlesInput { board: string; query: string; cursor?: st
 export interface FilterArticlesInput { board: string; author?: string; keyword?: string; minimumNativeScore?: number; cursor?: string; limit?: number }
 export interface GetArticleInput { article: ArticleKey; includeDebugMetadata?: boolean }
 export interface CreateArticleInput { board: string; category?: string; title: string; content: string }
-export interface EditArticleInput { article: ArticleKey; content: string; editSummary: string }
+export interface EditArticleInput { article: ArticleKey; content: string }
 export interface DeleteArticleInput { article: ArticleKey }
 export interface ReplyToArticleInput { article: ArticleKey; content: string; pushType: PushType }
 export interface ReplyArticleToBoardInput { article: ArticleKey; content: string }
 export interface ReplyToReplyInput { article: ArticleKey; replyId: ReplyId; content: string; pushType: PushType }
-export interface EditReplyInput { article: ArticleKey; replyId: ReplyId; mode: "append" | "replace"; content: string }
+export interface SectionChange { start: number; end: number; replacement: string }
+export type EditReplyInput =
+  | { article: ArticleKey; replyId: ReplyId; mode: "append" | "replace"; content: string }
+  | { article: ArticleKey; replyId: ReplyId; mode: "section"; changes: readonly SectionChange[] };
 export interface WithdrawReplyInput { article: ArticleKey; replyId: ReplyId }
 export interface VoteArticleInput { article: ArticleKey; direction: VoteDirection }
 export interface WithdrawArticleVoteInput { article: ArticleKey; direction: VoteDirection }
@@ -252,12 +270,13 @@ export type GatewayEvent =
 
 export type PttCommand =
   | { type: "create-article"; board: string; category?: string; title: string; content: string }
-  | { type: "edit-article"; article: ArticleKey; content: string; editSummary: string }
+  | { type: "edit-article"; article: ArticleKey; content: string }
   | { type: "delete-article"; article: ArticleKey }
   | { type: "reply-article"; article: ArticleKey; content: string; pushType: PushType }
   | { type: "reply-article-to-board"; article: ArticleKey; content: string }
   | { type: "reply-floor"; article: ArticleKey; floor: number; content: string; pushType: PushType }
   | { type: "edit-floor"; article: ArticleKey; floor: number; mode: "append" | "replace"; content: string }
+  | { type: "edit-floor"; article: ArticleKey; floor: number; mode: "section"; changes: readonly SectionChange[] }
   | { type: "withdraw-floor"; article: ArticleKey; ranges: readonly { start: number; end: number }[] }
   | { type: "vote-article"; article: ArticleKey; direction: VoteDirection }
   | { type: "withdraw-article-vote"; article: ArticleKey; direction: VoteDirection }

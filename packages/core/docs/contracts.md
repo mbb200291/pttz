@@ -1,6 +1,14 @@
 # PTTzzz 0.1 public contracts
 
-本文件描述 repository 內已實作並由 TypeScript、gateway contract tests 與 packed consumer 驗證的公開契約；npm registry 發布狀態不在此保證。語意規則以[核心規則白皮書](../whitepaper/pttzzz-core.md)為準，分層決策見[核心架構設計](../../dev-notes/goal-9-core-architecture-design.md)。
+本文件描述 repository 內已實作並由 TypeScript、gateway contract tests 與 packed consumer 驗證的公開契約；npm registry 發布狀態不在此保證。語意規則以[核心規則白皮書](../../../docs/whitepaper/pttzzz-core.md)為準，套件分層見[核心架構](./architecture.md)。
+
+## 漸進讀取狀態
+
+| 規則編號 | 說明 |
+| --- | --- |
+| [PARTIAL-001](#漸進讀取狀態) | 文章讀取中的 `incomplete` 與完整後的 `final` 狀態 |
+
+文章尚未讀完時，核心可輸出 `incomplete` 與目前結果；後續事件仍可能續接卡片、改票、編輯或撤回，消費端不可視為不可變結果。來源確認完整後輸出 `final`，以完整事件序列計算最終狀態；`final` 只代表目前來源已完整，不承諾其他產品行為。
 
 ## Export 層級
 
@@ -238,7 +246,7 @@ export interface FilterArticlesInput { board: string; author?: string; keyword?:
 export interface GetArticleInput { article: ArticleKey; includeDebugMetadata?: boolean }
 
 export interface CreateArticleInput { board: string; category?: string; title: string; content: string }
-export interface EditArticleInput { article: ArticleKey; content: string; editSummary: string }
+export interface EditArticleInput { article: ArticleKey; content: string }
 export interface DeleteArticleInput { article: ArticleKey }
 export interface ReplyToArticleInput { article: ArticleKey; content: string; pushType: PushType }
 export interface ReplyArticleToBoardInput { article: ArticleKey; content: string }
@@ -339,7 +347,7 @@ export type GatewayEvent =
 
 export type PttCommand =
   | { type: "create-article"; board: string; category?: string; title: string; content: string }
-  | { type: "edit-article"; article: ArticleKey; content: string; editSummary: string }
+  | { type: "edit-article"; article: ArticleKey; content: string }
   | { type: "delete-article"; article: ArticleKey }
   | { type: "reply-article"; article: ArticleKey; content: string; pushType: PushType }
   | { type: "reply-article-to-board"; article: ArticleKey; content: string }
@@ -396,7 +404,7 @@ Gateway 可在 `PttCommand` 使用 raw floor，因為它負責 terminal transpor
 
 `edit-floor.floor` 必須是單一正整數 anchor。`withdraw-floor.ranges` 必須是非空、正整數且各自連續的閉區間；不連續樓號必須拆成不同 range，例如 2 樓與 4 樓是 `[{ start: 2, end: 2 }, { start: 4, end: 4 }]`，不得格式化成 `2~4`。Gateway 逐 range 送出並保留部分成功的安全 outcome。
 
-`reply-article` 是 PTT 推文／註解操作；`reply-article-to-board` 是 PTT 原生「回應至看板」並建立另一篇文章，兩者不得互相代替。`edit-article` 必須攜帶非空 `editSummary`；index 與 AID article key 都必須保持原表示完成定位。`create-article.category` 可省略，表示使用看板無分類／預設分類流程；若指定則必須原樣傳給 PTT 分類選擇。
+`reply-article` 是 PTT 推文／註解操作；`reply-article-to-board` 是 PTT 原生「回應至看板」並建立另一篇文章，兩者不得互相代替。`edit-article` 只攜帶更新後的正文；編輯紀錄沿用 PTT 原生機制。index 與 AID article key 都必須保持原表示完成定位。`create-article.category` 可省略，表示使用看板無分類／預設分類流程；若指定則必須原樣傳給 PTT 分類選擇。
 
 每個 terminal write workflow 都必須標出不可逆邊界：確認鍵送出前的失敗為 `not-sent`；送出 save/delete/content confirmation 後但無法確認結果為 `uncertain`；未標註的 legacy/未知失敗一律安全降級為 `uncertain`，不得推測成 `not-sent` 或自動重送。`not-sent` 預設也不可重試，只有 driver 明確標示為安全、暫時性的 pre-send failure（例如尚未取得推文輸入 prompt）才可設 `retryable: true`；輸入錯誤、找不到文章、身分過期與權限拒絕一律為 false。事件 listener 的例外逐 listener 隔離，不得阻止後續 listener、terminal progress 或 gateway operation。
 

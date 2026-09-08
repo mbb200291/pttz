@@ -73,17 +73,22 @@ describe("ComposeScreen", () => {
     expect(btn.disabled).toBe(true);
   });
 
-  it("submit button disabled when editSummary is empty (edit-article mode with title+body filled)", () => {
+  it("submits an article edit without requiring a custom summary", async () => {
+    const onSubmit = vi.fn();
     render(
       <ComposeScreen
         {...defaultEditProps}
         initial={{ title: "some title", body: "some body" }}
+        onSubmit={onSubmit}
       />,
     );
     const btn = screen.getByRole("button", {
       name: "更新",
     }) as HTMLButtonElement;
-    expect(btn.disabled).toBe(true);
+    expect(btn.disabled).toBe(false);
+    expect(screen.queryByText("修訂說明")).toBeNull();
+    await userEvent.click(btn);
+    expect(onSubmit).toHaveBeenCalledWith(expect.not.objectContaining({ editSummary: expect.anything() }));
   });
 
   it("submit button enabled when all required fields filled (post mode)", () => {
