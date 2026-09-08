@@ -1,7 +1,7 @@
 # pttzzz
 
 <p align="center">
-  <strong>讓我們一同打造新生的 PTT。</strong>
+  <strong>一起推進PTTZ計畫。</strong>
 </p>
 
 <p align="center">
@@ -11,15 +11,15 @@
   <img alt="Status" src="https://img.shields.io/badge/status-active_development-orange">
 </p>
 
-> 我們提案重新解析終端頁面，讓 PTT 在保有原始文化的同時，往現代化社群論壇推進。合併分散推文、建立嵌套回文、加入回文推噓與回文編輯 —— 這些只是開始。
->
-> 我們不只想讓 PTT 繼續存在，更要推動它重生，成為下一個世代依然充滿生命力的社群。
->
-> 這場改造，沒有終點。
+> 共同打造新生的PTT社群，透過終端頁面重新解析，讓PTT能轉型成更現代化的社群論壇。合併分散回文、回文嵌套回覆、純推噓、回文編輯收回⋯，我們的野心沒有終點
 
-pttzzz 是一個提案，能從讓現有的 PTT 終端內容，將文章、推文與操作紀錄，重新解讀成更棒的樣子。
+## 關於
 
-除了提案外，另外包含一套對於這個提案的核心實作，以及一套網頁介面實作。
+pttzzz 是一個實作 PTT 客戶端介面的提案，核心訴求在於提供一套對回文的解析規則，讓現有 PTT 的文章、推文與操作紀錄能夠被重新解析、排版成現代論壇。
+
+這個提案，也包含對規則集的客戶端核心層的實作，與以此核心層為底的網頁介面層實作。
+
+我相信在AI coding的時代，任何人能都能基於這套規則集，來做出符合自己喜好的 PTT 客戶端。
 
 ## 核心提案
 
@@ -29,11 +29,11 @@ PTT 的單行長度限制經常把一段完整發言拆成多筆推文。我們�
 
 ### 🌲 嵌套回文
 
-PTT 的推文依時間排列，卻難以直接看出一句話正在回應誰。我們提案辨識推文中的回覆意圖，把線性事件還原成具有上下文的嵌套討論，讓讀者能沿著對話關係理解爭論、補充與延伸，而不必在樓號之間來回尋找。
+PTT 的推文依時間排列，卻難以直接看出一句話正在回應誰。我們提案辨識推文中的回覆意圖，把扁平的回文序列還原成具有嵌套結構討論串，讓讀者能沿著對話關係理解爭論、補充與延伸，而不必在樓號之間來回尋找。
 
 ### 👍 文章推噓與回文推噓
 
-PTT 原生推噓只能直接表達對整篇文章的態度，無法清楚評價討論中的某一則觀點。我們提案區分文章推噓與回文推噓，保留文章整體評價，也讓參與者能對具體回文表示贊同或反對。
+PTT 原生推噓只能直接表達對整篇文章的態度，無法清楚評價討論中的某一則觀點。我們提案區分文章推噓與回文推噓，保留文章整體評價，也讓參與者能對個別回文表示贊同或反對。
 
 此外我們容許對文章的一鍵推或噓，降低社群的互動門檻。
 
@@ -90,16 +90,18 @@ flowchart TD
 
 目前專案庫的對應如下：
 
-| 層級 | 位置 | 用途 |
-| --- | --- | --- |
-| 規則層 | [`docs/whitepaper/`](docs/whitepaper/) | 白皮書與完整畫面案例 |
-| 核心實作層 | [`packages/core/`](packages/core/) | 平台無關的資料契約、解析規則與 `PttzzzClient` |
-| 核心實作層的瀏覽器接入 | [`packages/browser/`](packages/browser/) | 透過 `ptt-client` 與 PTT WebSocket 連線，實作瀏覽器閘道器 |
-| 介面層範例 | [`apps/web/`](apps/web/) | React 網頁介面，示範如何使用核心實作 |
+| 層級 | 目前版本 | 位置 | 用途 |
+| --- | --- | --- | --- |
+| 規則層 | 規則 `0.1.0` | [`docs/whitepaper/`](docs/whitepaper/) | 白皮書與完整畫面案例 |
+| 核心實作層 | `@pttzzz/core` `0.1.0` | [`packages/core/`](packages/core/) | 平台無關的資料契約、解析規則與 `PttzzzClient` |
+| 核心實作層的瀏覽器接入 | `@pttzzz/browser` `0.1.0` | [`packages/browser/`](packages/browser/) | 透過 `ptt-client` 與 PTT WebSocket 連線，實作瀏覽器閘道器 |
+| 介面層範例 | `@pttzzz/web-example` `0.1.0` | [`apps/web/`](apps/web/) | React 網頁介面，示範如何使用核心實作 |
 
-`@pttzzz/core` 不依賴 React、瀏覽器或 `ptt-client`；其他介面可以直接依照公開契約建立自己的呈現方式。更完整的套件邊界請見[核心架構](packages/core/docs/architecture.md)與 [AI 介面指南](packages/core/docs/AI-INTERFACE.md)。
+`@pttzzz/core` 不依賴 React、瀏覽器或 `ptt-client`；其他介面可以直接依照公開契約建立自己的呈現方式。更完整的套件邊界請見[核心架構](packages/core/docs/README.md)與 [UI 開發指南](packages/core/docs/DEVELOPMENT_GUIDE.md)。
 
-## 開始使用
+規則、核心套件與介面各自採語意化版本。實作會在 package metadata 的 `pttzzz` 欄位宣告所支援的 core、browser 與規則版本；目前三層相容於規則 `0.1.x`。
+
+## 使用基於 pttzzz 規則實作的客戶端
 
 需求：Node.js 20 以上版本。
 
@@ -109,6 +111,22 @@ npm run dev
 ```
 
 開發伺服器會同時提供網頁與 `/ptt-ws` WebSocket 代理。瀏覽器仍是直接連線到 PTT；代理只負責加入 PTT WebSocket 所需的 `Origin` 標頭。
+
+## 開發指引
+
+可依照三層責任選擇需參閱之文件：
+
+- **從核心層實作**：請參閱[提案白皮書](docs/whitepaper/pttzzz-core.md)，再使用[規則案例契約](docs/fixtures/thread-events/README.md)與 `manifest.json`。每個 fixture 都是與語言及框架無關的輸入／預期結果；實作方應先驗證 JSON 契約與 Rule ID，再逐欄比較解析結果。現有核心的驗證命令如下：
+
+  ```bash
+  npm test -w @pttzzz/core -- --run src/whitepaperFixtures.test.ts
+  ```
+
+  自行實作其他核心時，請使用 fixture 驗證，將 `rawPushes`、`articleBody` 與其他輸入轉成自己的模型，再把輸出轉成 fixture 定義的比較格式；不要先替 fixture 套用規則，也不要為了符合既有程式而修改 `expected`。
+
+- **從介面層實作**：使用 `@pttzzz/core` 與適合的 gateway（目前瀏覽器版本為 `@pttzzz/browser`），只消費公開 DTO 與事件，不自行解析 PTT 終端文字、不自行產生控制格式。請先閱讀[核心套件契約](packages/core/docs/contracts.md)與[UI 開發指南](packages/core/docs/DEVELOPMENT_GUIDE.md)；後者包含連線、訂閱、文章讀取、寫入、錯誤處理與 cleanup 的最小整合方式。
+
+- **目前 Web 介面範例**：呈現深度、UI 取捨與開發預覽工具集中在[Web 介面層實作說明](apps/web/docs/README.md)。這些內容只約束此 Web 範例，不會改變白皮書或核心資料語意。
 
 常用指令：
 
@@ -120,12 +138,11 @@ npm run lint      # 執行 ESLint
 npm run verify    # 測試、建置、lint 與套件 smoke test
 ```
 
-不登入 PTT 也可以使用預覽模式檢視介面：
+### 驗證白皮書 fixture
 
-- `?preview=home`
-- `?preview=board`
-- `?preview=article`
-- `?preview=login`
+`docs/fixtures/thread-events/` 是與實作無關的規則案例集。自行實作核心解析器時，先依 `schema.json` 驗證 JSON 形狀與 Rule ID，再把原始輸入交給自己的實作，逐欄比較 `expected` 與其他可選期望欄位；不要預先替 fixture 套用規則，也不要為了符合既有程式而修改 `expected`。
+
+本 repository 的驗證命令、覆蓋檢查與結果判讀集中在[核心實作 README](packages/core/docs/README.md#fixture-符合性驗證)。
 
 ## 文件導覽
 
@@ -133,8 +150,8 @@ npm run verify    # 測試、建置、lint 與套件 smoke test
 - [核心規則案例集](docs/whitepaper/core-rules-examples.html)：原始 PTT 事件與解析結果的視覺對照。
 - [規則案例契約](docs/fixtures/thread-events/README.md)：可供不同核心實作驗證的 fixtures。
 - [核心套件契約](packages/core/docs/contracts.md)：公開資料與操作介面。
-- [核心實作符合性](packages/core/docs/fixture-conformance.md)：如何比較實作與白皮書 fixture。
-- [AI 介面指南](packages/core/docs/AI-INTERFACE.md)：協助 AI 或開發者建立其他 UI 實作。
+- [UI 開發指南](packages/core/docs/DEVELOPMENT_GUIDE.md)：協助開發者與 AI 使用現有核心建立客製介面。
+- [Web 介面層實作說明](apps/web/docs/README.md)：目前 UI 的呈現取捨與開發細節。
 
 ## 專案狀態
 

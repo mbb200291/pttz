@@ -1,6 +1,6 @@
 # pttzzz 程式架構與技術指南
 
-這是 pttzzz repository 的內部實作與讀碼指南，描述 Goal 9 完成後的程式結構。讀程式碼時先把「領域規則」、「PTT terminal transport」與「React UI」分開。公開且穩定的套件分層以[核心架構](../packages/core/docs/architecture.md)與[公開契約](../packages/core/docs/contracts.md)為準；本文件進一步記錄目前 repository 的技術選型、資料流與實作限制。
+這是 pttzzz repository 的內部實作與讀碼指南，描述 Goal 9 完成後的程式結構。讀程式碼時先把「領域規則」、「PTT terminal transport」與「React UI」分開。套件分層以[核心實作說明](../packages/core/docs/README.md)與[公開契約](../packages/core/docs/contracts.md)為準；本文件進一步記錄目前 repository 的技術選型、資料流與實作限制。
 
 ## 1. 依賴方向
 

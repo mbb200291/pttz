@@ -23,6 +23,7 @@
         }
       },
       "articleAuthor": { "type": "string", "minLength": 1 },
+      "articleBody": { "type": "string" },
       "rawPushes": {
         "type": "array",
         "items": { "$ref": "#/$defs/rawPush" }
@@ -36,6 +37,10 @@
       "expectedReplyDetails": {
         "type": "array",
         "items": { "$ref": "#/$defs/replyDetail" }
+      },
+      "expectedArticleEdits": {
+        "type": "array",
+        "items": { "$ref": "#/$defs/articleEdit" }
       },
       "expectedCommand": { "$ref": "#/$defs/expectedCommand" },
       "expectedNormalizedEvents": {
@@ -104,6 +109,16 @@
           "type": "array",
           "items": { "type": "string" }
         }
+      }
+    },
+    "articleEdit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["marker", "content", "sequence"],
+      "properties": {
+        "marker": { "type": "string", "minLength": 1 },
+        "content": { "type": "string" },
+        "sequence": { "type": "integer", "minimum": 0 }
       }
     },
     "expectedCommand": {

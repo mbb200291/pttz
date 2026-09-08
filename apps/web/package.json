@@ -1,7 +1,12 @@
 {
   "name": "@pttzzz/web-example",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "pttzzz": {
+    "browser": "^0.1.0",
+    "core": "^0.1.0",
+    "rules": "0.1.x"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",

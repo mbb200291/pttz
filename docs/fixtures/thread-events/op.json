@@ -173,5 +173,26 @@
       "articlePushVoters": [],
       "articleBooVoters": []
     }
+  },
+  {
+    "id": "op-article-body-edit-history-is-separate-from-body",
+    "primaryRule": "OP-003.1",
+    "rules": ["OP-003.1"],
+    "articleAuthor": "op",
+    "articleBody": "這是更新後的文章正文。\n※ 編輯: op (127.0.0.1), 01/01/2026 12:03:00",
+    "rawPushes": [],
+    "expected": {
+      "replies": [],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    },
+    "expectedArticleEdits": [
+      {
+        "marker": "※ 編輯:",
+        "content": "op (127.0.0.1), 01/01/2026 12:03:00",
+        "sequence": 0
+      }
+    ]
   }
 ]

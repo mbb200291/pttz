@@ -42,6 +42,7 @@ interface FixtureCase {
   primaryRule: string;
   rules: string[];
   articleAuthor: string;
+  articleBody?: string;
   rawPushes: RawPush[];
   opEditedReplies?: OpEditedReplySegment[];
   expected: {
@@ -71,6 +72,11 @@ interface FixtureCase {
     sourceFloors: number[];
     visible: boolean;
     editKinds: string[];
+  }>;
+  expectedArticleEdits?: Array<{
+    marker: string;
+    content: string;
+    sequence: number;
   }>;
   expectedCommand?: {
     action: "vote-reply" | "withdraw-reply-vote" | "withdraw-article-vote" | "edit-reply";
@@ -124,7 +130,7 @@ function fixtureArticle(fixture: FixtureCase): string {
     "標題  fixture",
     "時間  Sat Aug 22 10:00:00 2026",
     "───────────────────────────────────────",
-    "fixture body",
+    fixture.articleBody ?? "fixture body",
     ...fixture.rawPushes.map((push) =>
       `${marker[push.type]} ${push.author}: ${push.content} ${push.time}`),
   ].join("\n");
@@ -235,6 +241,7 @@ function validateFixtureCases(value: unknown): FixtureCase[] {
       "primaryRule",
       "rules",
       "articleAuthor",
+      "articleBody",
       "rawPushes",
       "opEditedReplies",
       "expected",
@@ -242,6 +249,7 @@ function validateFixtureCases(value: unknown): FixtureCase[] {
       "stages",
       "expectedNormalizedEvents",
       "expectedReplyDetails",
+      "expectedArticleEdits",
       "expectedCommand",
     ]);
     assertNonEmptyString(fixture.id, `${path}.id`);
@@ -263,6 +271,7 @@ function validateFixtureCases(value: unknown): FixtureCase[] {
       throw new Error(`${path}.primaryRule must be included in rules`);
     }
     assertNonEmptyString(fixture.articleAuthor, `${path}.articleAuthor`);
+    if (fixture.articleBody !== undefined) assertString(fixture.articleBody, `${path}.articleBody`);
     if (!Array.isArray(fixture.rawPushes)) throw new Error(`${path}.rawPushes must be an array`);
     fixture.rawPushes.forEach((push, pushIndex) => {
       const pushPath = `${path}.rawPushes[${pushIndex}]`;
@@ -388,6 +397,18 @@ function validateFixtureCases(value: unknown): FixtureCase[] {
           assertIntegerAtLeast(floor, 1, `${replyPath}.sourceFloors[${floorIndex}]`));
         if (typeof reply.visible !== "boolean") throw new Error(`${replyPath}.visible must be a boolean`);
         assertStringArray(reply.editKinds, `${replyPath}.editKinds`);
+      });
+    }
+    if (fixture.expectedArticleEdits !== undefined) {
+      if (!Array.isArray(fixture.expectedArticleEdits)) {
+        throw new Error(`${path}.expectedArticleEdits must be an array`);
+      }
+      fixture.expectedArticleEdits.forEach((edit, editIndex) => {
+        const editPath = `${path}.expectedArticleEdits[${editIndex}]`;
+        assertRecord(edit, editPath, ["marker", "content", "sequence"]);
+        assertNonEmptyString(edit.marker, `${editPath}.marker`);
+        assertString(edit.content, `${editPath}.content`);
+        assertIntegerAtLeast(edit.sequence, 0, `${editPath}.sequence`);
       });
     }
     if (fixture.expectedCommand !== undefined) {
@@ -757,6 +778,18 @@ describe("whitepaper conformance fixtures", () => {
       expect.objectContaining({ kind: "replace", content: "回99樓：看完你的補充後，我改推方案 B。" }),
     ]);
   });
+
+  it.each(cases.filter((fixture) => fixture.expectedArticleEdits))(
+    "publishes article edit history separately for $id",
+    async (fixture) => {
+      const gateway = new FixtureCommandGateway();
+      gateway.source = fixtureArticle(fixture);
+      const result = await new PttzzzClient(gateway).getArticle({ article: fixtureArticleKey });
+      if (!result.ok) throw new Error(`${fixture.id}: fixture article did not load`);
+
+      expect(result.value.articleEdits).toEqual(fixture.expectedArticleEdits);
+    },
+  );
 
   it.each(cases.filter((fixture) => fixture.expectedCommand))(
     "executes the declared sender command for $id",

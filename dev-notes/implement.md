@@ -96,5 +96,5 @@ npm run verify    # tests + helper tests + build + lint + pack/example smoke
 - [Goal 9 implementation notes](goal-9-implementation-notes.md)
 - [Code architecture guide](code-architecture-guide.md)
 - [Public contracts](../packages/core/docs/contracts.md)
-- [AI interface](../packages/core/docs/AI-INTERFACE.md)
+- [Core development guide](../packages/core/docs/DEVELOPMENT_GUIDE.md)
 - [Core whitepaper](../docs/whitepaper/pttzzz-core.md)

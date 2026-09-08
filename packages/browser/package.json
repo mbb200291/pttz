@@ -1,6 +1,10 @@
 {
   "name": "@pttzzz/browser",
   "version": "0.1.0",
+  "pttzzz": {
+    "core": "^0.1.0",
+    "rules": "0.1.x"
+  },
   "description": "Official browser gateway for @pttzzz/core",
   "license": "MIT",
   "repository": {

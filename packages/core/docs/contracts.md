@@ -1,6 +1,6 @@
 # pttzzz 0.1 public contracts
 
-本文件描述 repository 內已實作並由 TypeScript、gateway contract tests 與 packed consumer 驗證的公開契約；npm registry 發布狀態不在此保證。語意規則以[核心規則白皮書](../../../docs/whitepaper/pttzzz-core.md)為準，套件分層見[核心架構](./architecture.md)。
+本文件描述 repository 內已實作並由 TypeScript、gateway contract tests 與 packed consumer 驗證的公開契約；npm registry 發布狀態不在此保證。語意規則以[核心規則白皮書](../../../docs/whitepaper/pttzzz-core.md)為準，套件分層見[核心架構](./README.md)。
 
 ## 漸進讀取狀態
 
@@ -315,7 +315,7 @@ export interface PttzzzClient {
 | `filterArticles` | board + filters + paging | `ArticlePage` | `INVALID_INPUT`, `BOARD_NOT_FOUND`, `PERMISSION_DENIED`, `NOT_CONNECTED`, `CONNECTION_LOST`, `TIMEOUT`, `GATEWAY_FAILURE` | no | no |
 | `getArticle` | `ArticleKey`, debug opt-in | final `Article`; `value.key` preserves the input representation | `INVALID_INPUT`, `ARTICLE_NOT_FOUND`, `PERMISSION_DENIED`, `NOT_CONNECTED`, `CONNECTION_LOST`, `TIMEOUT`, `GATEWAY_FAILURE` | no | yes; partial/updated keys preserve the same input representation |
 | `createArticle` | board, optional PTT category, title, content | `void`；目前 gateway 無法可靠取得新文章 identity | `INVALID_INPUT`, `BOARD_NOT_FOUND`, `PERMISSION_DENIED`, `RATE_LIMITED`, `REJECTED`, `NOT_CONNECTED`, `CONNECTION_LOST`, `TIMEOUT`, `GATEWAY_FAILURE` | yes | no |
-| `editArticle` | article, content, required nonempty edit summary | `void` | `INVALID_INPUT`, `ARTICLE_NOT_FOUND`, `PERMISSION_DENIED`, `REJECTED`, `NOT_CONNECTED`, `CONNECTION_LOST`, `TIMEOUT`, `GATEWAY_FAILURE` | yes | updated event may follow reload |
+| `editArticle` | article, content（不要求編輯摘要） | `void` | `INVALID_INPUT`, `ARTICLE_NOT_FOUND`, `PERMISSION_DENIED`, `REJECTED`, `NOT_CONNECTED`, `CONNECTION_LOST`, `TIMEOUT`, `GATEWAY_FAILURE` | yes | updated event may follow reload |
 | `deleteArticle` | article | `void` | `INVALID_INPUT`, `ARTICLE_NOT_FOUND`, `PERMISSION_DENIED`, `REJECTED`, `NOT_CONNECTED`, `CONNECTION_LOST`, `TIMEOUT`, `GATEWAY_FAILURE` | yes | no |
 | `replyToArticle` | article, content, push type | `void` | `INVALID_INPUT`, `ARTICLE_NOT_FOUND`, `PERMISSION_DENIED`, `RATE_LIMITED`, `REJECTED`, `NOT_CONNECTED`, `CONNECTION_LOST`, `TIMEOUT`, `GATEWAY_FAILURE` | yes | updated event may follow reload |
 | `replyArticleToBoard` | article, board-post body | `void` | `INVALID_INPUT`, `ARTICLE_NOT_FOUND`, `PERMISSION_DENIED`, `REJECTED`, `NOT_CONNECTED`, `CONNECTION_LOST`, `TIMEOUT`, `GATEWAY_FAILURE` | yes | no |
