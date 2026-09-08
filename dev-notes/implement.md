@@ -89,7 +89,14 @@ npm run verify    # tests + helper tests + build + lint + pack/example smoke
 
 2026-08-29：684 tests 通過（core 321、browser 155、web 197、pack helper 11）；build、lint（0 errors、3 個既有 Fast Refresh warnings）、package pack、isolated install、ESM/types、deep-import boundary 與 minimal UI execution smoke 通過。
 
-## 細節文件
+## Goal 13：獨立極簡閱讀器
+
+- `apps/minimal` 使用 vanilla TypeScript／Vite 與 core/browser 0.1.0 公開 API，提供 ASCII-like 等寬字、語意 HTML、看板分頁及漸進文章／聚合回覆／分離投票統計／編輯紀錄；不提供任何 PTT 寫入控制。
+- `npm run dev:minimal` 開啟 5183；`?preview=1` 只用公開 fake gateway。根目錄 build/test/verify 包含 minimal，原本 dev 預設不變。
+- 導覽／登出／session generation 防護阻擋晚到資料；client 延至登入才建立，duplicate prompt 明確保留／中斷，連線結束後要求重新載入，配合現有 singleton transport 限制。
+- 正文保留空白與焦點，水平捲動限制在文字區塊；視覺縮排最多三級，不改寫核心回覆關係。詳見 [Goal 13 plan](goal-13-implementation-plan.md) 與 [Goal 13 notes](goal-13-implementation-notes.md)。
+
+## 架構細節文件
 
 - [Goal 9 architecture design](goal-9-core-architecture-design.md)
 - [Goal 9 implementation plan](goal-9-implementation-plan.md)

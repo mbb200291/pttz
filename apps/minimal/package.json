@@ -1,0 +1,14 @@
+{
+  "name": "@pttzzz/minimal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "pttzzz": { "core": "^0.1.0", "rules": "0.1.x" },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": { "@pttzzz/core": "0.1.0", "@pttzzz/browser": "0.1.0" }
+}
