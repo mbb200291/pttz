@@ -1,6 +1,6 @@
-# PTTzzz 程式架構與技術指南
+# pttzzz 程式架構與技術指南
 
-這是 PTTzzz repository 的內部實作與讀碼指南，描述 Goal 9 完成後的程式結構。讀程式碼時先把「領域規則」、「PTT terminal transport」與「React UI」分開。公開且穩定的套件分層以[核心架構](../packages/core/docs/architecture.md)與[公開契約](../packages/core/docs/contracts.md)為準；本文件進一步記錄目前 repository 的技術選型、資料流與實作限制。
+這是 pttzzz repository 的內部實作與讀碼指南，描述 Goal 9 完成後的程式結構。讀程式碼時先把「領域規則」、「PTT terminal transport」與「React UI」分開。公開且穩定的套件分層以[核心架構](../packages/core/docs/architecture.md)與[公開契約](../packages/core/docs/contracts.md)為準；本文件進一步記錄目前 repository 的技術選型、資料流與實作限制。
 
 ## 1. 依賴方向
 
@@ -97,7 +97,7 @@ UI 送 `replyId`，不能送 floor，也不能 import formatter。Core 的 final
 
 `usePttSocket` 持有 public `PttzzzClient` singleton，訂閱 connection/session events，再映射到 Zustand。Effect cleanup 必須取消訂閱並用 generation guard 忽略晚到 connect/login。`@pttzzz/browser/testing` 支援 Fake PTT runtime mode 與 tests；fake 與 real runtime 分開，切換 mode 不可沿用錯誤 singleton。
 
-作者本人對文章的 PTT 原生推／噓限制是 gateway/session語意；PTTzzz 對某則回覆的應用層操作仍由 public reply methods 表達，不要在 component 重新推導 terminal 規則。
+作者本人對文章的 PTT 原生推／噓限制是 gateway/session語意；pttzzz 對某則回覆的應用層操作仍由 public reply methods 表達，不要在 component 重新推導 terminal 規則。
 
 ## 8. 測試位置
 

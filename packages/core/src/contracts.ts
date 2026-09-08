@@ -66,6 +66,8 @@ export interface Board {
   category?: string;
   description?: string;
   favorite?: boolean;
+  onlineUsers?: number;
+  popularityLabel?: string;
 }
 
 export type BoardListEntry =

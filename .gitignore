@@ -50,3 +50,5 @@ coverage/
 __pycache__/
 
 .claude/
+
+design/

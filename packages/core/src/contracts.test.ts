@@ -201,6 +201,18 @@ describe("core contracts", () => {
     expect(categorySearchPage.items).toHaveLength(1);
   });
 
+  it("exposes optional popularity metadata without making it a UI concern", () => {
+    const board: Board = {
+      name: "Gossiping",
+      title: "八卦板",
+      onlineUsers: 4027,
+      popularityLabel: "4027",
+    };
+
+    expect(board.onlineUsers).toBe(4027);
+    expect(board.popularityLabel).toBe("4027");
+  });
+
   it("uses prefix board search and requires at least one board filter", () => {
     const search: SearchBoardsInput = { prefix: "Gossip" };
     const favorites: FilterBoardsInput = { favorite: true };

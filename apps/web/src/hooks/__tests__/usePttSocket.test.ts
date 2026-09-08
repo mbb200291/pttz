@@ -38,6 +38,7 @@ vi.mock("@pttzzz/core", async (importOriginal) => ({
 }));
 
 import {
+  submitDuplicateLoginDecision,
   submitLogin,
   useFavoriteBoards,
   usePttSocket,
@@ -186,15 +187,56 @@ describe("public PttzzzClient socket bridge", () => {
       password: "password",
       disconnectExistingSession: false,
     });
+    expect(usePttSocketStore.getState()).toMatchObject({
+      pttState: "ready",
+      credentials: { username: "user", password: "password" },
+    });
   });
 
-  it("kicks other PTT sessions only when explicitly requested", async () => {
+  it("keeps credentials and asks for a decision when PTT reports a duplicate login", async () => {
+    login.mockResolvedValueOnce({
+      ok: false,
+      error: {
+        code: "LOGIN_FAILED",
+        message: "duplicate_login",
+        retryable: false,
+      },
+    });
     usePttSocketStore.getState().setClient(client);
-    await submitLogin("user", "password", true);
-    expect(login).toHaveBeenCalledWith({
+
+    await submitLogin("user", "password");
+
+    expect(usePttSocketStore.getState()).toMatchObject({
+      pttState: "duplicate_login",
+      credentials: { username: "user", password: "password" },
+    });
+
+    login.mockResolvedValueOnce({ ok: true, value: { userId: "user" } });
+    await submitDuplicateLoginDecision(true);
+    expect(login).toHaveBeenLastCalledWith({
       username: "user",
       password: "password",
       disconnectExistingSession: true,
+    });
+  });
+
+  it("preserves an existing PTT session when the user declines the duplicate decision", async () => {
+    usePttSocketStore.setState({
+      client,
+      credentials: { username: "user", password: "password" },
+      pttState: "duplicate_login",
+    });
+
+    await submitDuplicateLoginDecision(false);
+
+    expect(login).toHaveBeenCalledWith({
+      username: "user",
+      password: "password",
+      disconnectExistingSession: false,
+    });
+    expect(usePttSocketStore.getState()).toMatchObject({
+      pttState: "ready",
+      credentials: { username: "user", password: "password" },
     });
   });
 

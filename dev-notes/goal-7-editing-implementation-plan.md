@@ -1,12 +1,12 @@
 # Goal 7 編輯功能 Implementation Plan
 
-> 歷史計畫更正：其中自訂 `editSummary` 與 `※ PTTzzz 編輯摘要` 的新增流程已取消。現行實作只傳送更新正文並沿用 PTT 原生編輯紀錄；舊標記僅保留解析相容性。
+> 歷史計畫更正：其中自訂 `editSummary` 與 `※ pttzzz 編輯摘要` 的新增流程已取消。現行實作只傳送更新正文並沿用 PTT 原生編輯紀錄；舊標記僅保留解析相容性。
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 完成可保存摘要的安全文章編輯，以及以新推文表達的補充、更正與撤回流程。
 
-**Architecture:** parser 負責把 `※ PTTzzz 編輯摘要：` 從正文抽離成 revision；adapter 接收完整文章識別資料並以可驗證的終端狀態機執行編輯；React view 只在 adapter 確認成功後離開或 reload。Fake adapter 實際更新儲存資料，避免 preview 假成功。
+**Architecture:** parser 負責把 `※ pttzzz 編輯摘要：` 從正文抽離成 revision；adapter 接收完整文章識別資料並以可驗證的終端狀態機執行編輯；React view 只在 adapter 確認成功後離開或 reload。Fake adapter 實際更新儲存資料，避免 preview 假成功。
 
 **Tech Stack:** TypeScript、React、Zustand、ptt-client、Vitest、Testing Library、Vite
 
@@ -23,7 +23,7 @@
 - `src/components/Article.tsx`、`src/components/Composer.tsx`：回文編輯送出及錯誤保留
 - `src/components/ArticleRevisions.tsx`：正文末端、回文上方的獨立 revision UI
 
-### Task 1：解析及格式化 PTTzzz 編輯摘要
+### Task 1：解析及格式化 pttzzz 編輯摘要
 
 **Files:**
 - Modify: `src/lib/ptt/parser.ts`
@@ -34,8 +34,8 @@
 加入測試，要求 parser 從正文移除 marker 並保留順序：
 
 ```ts
-it("extracts PTTzzz edit summaries from the article body", () => {
-  const parsed = splitArticleBody("原始正文\n※ PTTzzz 編輯摘要：修正來源\n※ 編輯: alice (1.2.3.4), 07/16/2026 10:30:00");
+it("extracts pttzzz edit summaries from the article body", () => {
+  const parsed = splitArticleBody("原始正文\n※ pttzzz 編輯摘要：修正來源\n※ 編輯: alice (1.2.3.4), 07/16/2026 10:30:00");
   expect(parsed.body).toBe("原始正文");
   expect(parsed.revisions).toMatchObject([
     { summary: "修正來源" },

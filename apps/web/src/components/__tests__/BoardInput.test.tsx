@@ -1,12 +1,13 @@
 /* @vitest-environment jsdom */
 
-import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { BoardInput } from "../BoardInput";
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
 });
 
 describe("BoardInput", () => {
@@ -153,5 +154,63 @@ describe("BoardInput", () => {
     expect(html).not.toContain("28,420");
     expect(html).not.toContain("12,880");
     expect(html).toContain("即時人數待同步");
+  });
+
+  it("updates the collapsed board count when the grid width changes", () => {
+    let resize: (width: number) => void = () => {};
+    class ResizeObserverMock {
+      constructor(callback: ResizeObserverCallback) {
+        resize = (width) => callback([
+          { contentRect: { width } } as ResizeObserverEntry,
+        ], this as unknown as ResizeObserver);
+      }
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+    }
+    vi.stubGlobal("ResizeObserver", ResizeObserverMock);
+
+    render(
+      <BoardInput
+        pttState="ready"
+        wsStatus="connected"
+        onEnter={() => {}}
+        popularBoards={Array.from({ length: 10 }, (_, index) => ({
+          name: `Board${index + 1}`,
+        }))}
+      />,
+    );
+
+    act(() => resize(1040));
+    expect(screen.getByText("Board8")).toBeTruthy();
+    expect(screen.queryByText("Board9")).toBeNull();
+
+    act(() => resize(540));
+    expect(screen.getByText("Board4")).toBeTruthy();
+    expect(screen.queryByText("Board5")).toBeNull();
+  });
+
+  it("searches PTT boards outside the loaded hot-board list", async () => {
+    const searchBoards = vi.fn(async () => [
+      { name: "ColdBoard", zh: "不在熱門清單內" },
+    ]);
+
+    render(
+      <BoardInput
+        pttState="ready"
+        wsStatus="connected"
+        onEnter={() => {}}
+        popularBoards={[{ name: "Gossiping", zh: "八卦" }]}
+        onSearchBoards={searchBoards}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText(/輸入看板名稱/), {
+      target: { value: "Cold" },
+    });
+
+    await waitFor(() => expect(searchBoards).toHaveBeenCalledWith("Cold"));
+    expect(await screen.findByText("ColdBoard")).toBeTruthy();
+    expect(screen.getByText("不在熱門清單內")).toBeTruthy();
   });
 });

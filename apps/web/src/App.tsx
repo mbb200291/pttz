@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   useFavoriteBoards,
   useHotBoards,
@@ -196,7 +196,7 @@ const MOCK_ARTICLE: ArticleData = {
 
 export default function App() {
   const isPreview = previewMode !== null;
-  const { wsStatus, pttState } = usePttSocket();
+  const { wsStatus, pttState, client } = usePttSocket();
   const { boards: hotBoards, loading: hotBoardsLoading } = useHotBoards(!isPreview);
   const { boards: favoriteBoards, loading: favoriteBoardsLoading } =
     useFavoriteBoards(!isPreview);
@@ -232,10 +232,20 @@ export default function App() {
       hotBoards?.map((board) => ({
         name: board.name,
         zh: board.title,
-        online: undefined,
+        online: board.onlineUsers ?? board.popularityLabel,
       })),
     [hotBoards],
   );
+  const searchBoards = useCallback(async (prefix: string) => {
+    if (!client) return [];
+    const result = await client.searchBoards({ prefix });
+    if (!result.ok) throw new Error(result.error.message);
+    return result.value.items.map((board) => ({
+      name: board.name,
+      zh: board.title,
+      online: board.onlineUsers ?? board.popularityLabel,
+    }));
+  }, [client]);
   const effectiveFavoriteBoards = isPreview
     ? MOCK_FAVORITE_BOARDS
     : favoriteBoards ?? (effectivePttState === "ready" ? [] : undefined);
@@ -257,6 +267,7 @@ export default function App() {
           wsStatus={effectiveWsStatus}
           popularBoards={isPreview ? undefined : popularBoards}
           popularBoardsLoading={!isPreview && hotBoardsLoading}
+          onSearchBoards={isPreview ? undefined : searchBoards}
           favoriteBoards={effectiveFavoriteBoards}
           favoriteBoardsLoading={!isPreview && favoriteBoardsLoading}
           recentBoards={isPreview ? undefined : recentBoards}

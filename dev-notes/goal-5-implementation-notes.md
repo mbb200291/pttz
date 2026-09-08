@@ -14,7 +14,7 @@
 
 ### 方案描述
 
-在 PTT 個人名片中放入約定格式的頭像 URL（如 `avatar: https://i.imgur.com/xxx.jpg`），PTTzzz 讀取名片並解析 URL 顯示頭像。
+在 PTT 個人名片中放入約定格式的頭像 URL（如 `avatar: https://i.imgur.com/xxx.jpg`），pttzzz 讀取名片並解析 URL 顯示頭像。
 
 ### 為什麼放棄
 
@@ -41,7 +41,7 @@
 
 資料存放於 Cloudflare KV，以 PTT ID 為 key，頭像 URL 為 value。
 
-PTTzzz client 查頭像時直接打這個 API，速度 < 100ms，完全解決名片方案的速度問題。
+pttzzz client 查頭像時直接打這個 API，速度 < 100ms，完全解決名片方案的速度問題。
 
 ### 為什麼選這個方案
 

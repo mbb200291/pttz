@@ -1,8 +1,8 @@
-# Human-Readable PTTzzz Core Whitepaper Implementation Plan
+# Human-Readable pttzzz Core Whitepaper Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Rewrite the PTTzzz core whitepaper as a concise, human-readable vision and architecture document, with four core rule groups, five representative examples, and a self-contained visual casebook under `docs/whitepaper/`.
+**Goal:** Rewrite the pttzzz core whitepaper as a concise, human-readable vision and architecture document, with four core rule groups, five representative examples, and a self-contained visual casebook under `docs/whitepaper/`.
 
 **Architecture:** Keep the whitepaper narrative short and approachable, while retaining every existing rule ID and precise boundary in a technical appendix so fixtures and implementations do not change semantics. Copy the existing 25-case HTML into the whitepaper directory, rebrand and regroup it as a visual companion, and remove every reader-facing dependency on `dev-notes`.
 
@@ -33,17 +33,17 @@ Expected: the first command finds the old implementation-oriented introduction a
 Use `apply_patch` to make the document begin with this structure and approved wording:
 
 ```markdown
-# PTTzzz 核心白皮書
+# pttzzz 核心白皮書
 
 ## 讓 PTT 再次進化
 
 > 我們要共同打造一個新生的 PTT 社群。
 >
-> PTTzzz 重新解析終端頁面，讓 PTT 在保有原始文化與資料的同時，轉型為現代化社群論壇。聚合分散推文、建立嵌套回文、加入回文推噓與編輯紀錄——這些只是開始。
+> pttzzz 重新解析終端頁面，讓 PTT 在保有原始文化與資料的同時，轉型為現代化社群論壇。聚合分散推文、建立嵌套回文、加入回文推噓與編輯紀錄——這些只是開始。
 >
 > 我們不只想讓 PTT 繼續存在，更要推動它再次進化，成為下一個世代依然充滿生命力的社群。這場改造沒有終點，只有不斷向前。
 
-本白皮書介紹 PTTzzz 的目標、三層架構與核心解析規則。正文提供人類可讀的概念與代表案例；精確邊界與 rule IDs 收錄於技術附錄，完整視覺案例另見 [PTTzzz 核心規則完整案例集](./core-rules-examples.html)。
+本白皮書介紹 pttzzz 的目標、三層架構與核心解析規則。正文提供人類可讀的概念與代表案例；精確邊界與 rule IDs 收錄於技術附錄，完整視覺案例另見 [pttzzz 核心規則完整案例集](./core-rules-examples.html)。
 
 ## 三層架構
 
@@ -89,7 +89,7 @@ Add `## 代表案例` with five compact subsections. Each must contain exactly t
 
 ```markdown
 **PTT 原始畫面**
-**PTTzzz 結果**
+**pttzzz 結果**
 **說明**
 ```
 
@@ -101,7 +101,7 @@ Cover:
 4. `推12樓 我同意` producing both `+1` and a visible nested reply.
 5. Replace payload containing `回12樓`/`推12樓` without reparsing, followed by Withdraw retaining the position.
 
-Use short text-mode PTT inputs and short PTTzzz outcomes; do not reproduce the HTML decision tables.
+Use short text-mode PTT inputs and short pttzzz outcomes; do not reproduce the HTML decision tables.
 
 - [x] **Step 5: Preserve precise semantics in a technical appendix**
 
@@ -136,7 +136,7 @@ Run:
 ```bash
 rg -n "dev-notes" docs/whitepaper/pttzzz-core.md
 for id in RAW-001 THREAD-001 THREAD-002 THREAD-003 THREAD-004 THREAD-005 THREAD-006 THREAD-007 VOTE-001 VOTE-002 VOTE-003 VOTE-004 VOTE-005 VOTE-006 EDIT-001 EDIT-002 EDIT-003 PARTIAL-001; do test "$(rg -o "$id" docs/whitepaper/pttzzz-core.md | wc -l | tr -d ' ')" = 1 || exit 1; done
-rg -n "三層架構|分散推文聚合|嵌套回文|文章單純推噓和回文推噓|回文編輯與撤回|PTT 原始畫面|PTTzzz 結果|技術附錄" docs/whitepaper/pttzzz-core.md
+rg -n "三層架構|分散推文聚合|嵌套回文|文章單純推噓和回文推噓|回文編輯與撤回|PTT 原始畫面|pttzzz 結果|技術附錄" docs/whitepaper/pttzzz-core.md
 npm test -w @pttzzz/core
 git diff --check
 ```
@@ -147,7 +147,7 @@ Commit:
 
 ```bash
 git add docs/whitepaper/pttzzz-core.md
-git commit -m "docs: rewrite PTTzzz core whitepaper"
+git commit -m "docs: rewrite pttzzz core whitepaper"
 ```
 
 ### Task 2: Create the self-contained visual casebook
@@ -178,12 +178,12 @@ Expected: PASS with 25 case title blocks before editorial changes.
 Use `apply_patch` to replace the old review header with:
 
 ```html
-<title>PTTzzz 核心規則完整案例集</title>
+<title>pttzzz 核心規則完整案例集</title>
 ...
-<div class="eyebrow">PTTzzz Core Rules · Visual Examples</div>
-<h1>PTTzzz 核心規則完整案例集</h1>
-<p class="lead">左側呈現 PTT 原始事件，右側呈現 PTTzzz 解析後的局部 UI。</p>
-<p class="backlink"><a href="./pttzzz-core.md">← 返回 PTTzzz 核心白皮書</a></p>
+<div class="eyebrow">pttzzz Core Rules · Visual Examples</div>
+<h1>pttzzz 核心規則完整案例集</h1>
+<p class="lead">左側呈現 PTT 原始事件，右側呈現 pttzzz 解析後的局部 UI。</p>
+<p class="backlink"><a href="./pttzzz-core.md">← 返回 pttzzz 核心白皮書</a></p>
 ```
 
 Remove `Goal 7`, `Review Artifact`, and reader-facing development-history language.
@@ -229,7 +229,7 @@ Expected: the first command has no output; backlink and five anchors are present
 
 ```bash
 git add docs/whitepaper/core-rules-examples.html docs/whitepaper/pttzzz-core.md
-git commit -m "docs: add PTTzzz core visual casebook"
+git commit -m "docs: add pttzzz core visual casebook"
 ```
 
 ### Task 3: Final semantic and link verification

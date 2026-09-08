@@ -1,4 +1,25 @@
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+
+function readRealPttFixture(name: string): string {
+  const local = resolve(process.cwd(), "src/internal/__fixtures__/real-ptt", name);
+  const fromRepositoryRoot = resolve(
+    process.cwd(),
+    "packages/browser/src/internal/__fixtures__/real-ptt",
+    name,
+  );
+  return readFileSync(existsSync(local) ? local : fromRepositoryRoot, "utf8");
+}
+
+function fixtureSection(source: string, heading: string): string {
+  const marker = `=== ${heading} ===`;
+  const start = source.indexOf(marker);
+  if (start < 0) throw new Error(`Missing fixture section: ${heading}`);
+  const bodyStart = start + marker.length;
+  const next = source.indexOf("\n=== ", bodyStart);
+  return source.slice(bodyStart, next < 0 ? undefined : next).trim();
+}
 
 function buildBoardLine(params: {
   index?: number | string;
@@ -225,6 +246,75 @@ describe("terminal driver module", () => {
     expect(sent.indexOf("X")).toBeGreaterThan(sent.lastIndexOf("42\r\r"));
     expect(sent).toContain("安全送出\r");
     expect(sent.at(-1)).toBe("q");
+  });
+
+  it("writes to a title-search result by its captured AID instead of its relative index", async () => {
+    const mod = await import("./terminalDriver.js");
+    const sent: string[] = [];
+    const filteredRows = [
+      "系列《Test》",
+      buildBoardLine({ index: 1, date: "08/31", author: "alice", title: "搜尋結果" }),
+    ];
+    const normalRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 672, date: "08/31", author: "alice", title: "搜尋結果" }),
+    ];
+    const articleRows = [
+      "作者  alice 看板 Test",
+      "標題  搜尋結果",
+      "時間  Mon Aug 31 23:41:01 2026",
+      "───────────────────────────────────────",
+      "內容",
+      ...Array.from({ length: 18 }, () => ""),
+      "瀏覽 第 1/1 頁 (100%)",
+    ];
+    const infoRows = ["文章代碼(AID): #canonicalAid (Test)"];
+    let mode: "filtered" | "normal" | "article" | "info" | "push-menu" | "push-input" | "confirm" = "filtered";
+    const rows = () => mode === "filtered" ? filteredRows
+      : mode === "normal" ? normalRows
+        : mode === "info" ? infoRows
+          : mode === "push-menu" ? ["1.值得推薦 2.給它噓聲 3.只加註解"]
+            : mode === "push-input" ? ["請輸入推文內容:"]
+              : mode === "confirm" ? ["確定送出推文嗎"]
+                : articleRows;
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      getLine(index: number) { return { str: rows()[index] ?? "" }; },
+      async getLines() { return rows(); },
+      async enterIndex() { mode = "normal"; return true; },
+      async enterBoardByName() { mode = "normal"; return true; },
+      async send(value: string) {
+        sent.push(value);
+        if (value === "1\r\r" && mode === "filtered") mode = "article";
+        else if (value === "#canonicalAid\r") mode = "article";
+        else if (value === "Q" && mode === "article") mode = "info";
+        else if (value === "q" && mode === "info") mode = "article";
+        else if (value === "q" && mode === "article") mode = "filtered";
+        else if (value === "X" && mode === "article") mode = "push-menu";
+        else if (value === "3" && mode === "push-menu") mode = "push-input";
+        else if (value === "安全回覆\r" && mode === "push-input") mode = "confirm";
+        else if (value === "y\r" && mode === "confirm") mode = "article";
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+
+    await driver.readArticleSource(
+      { board: "Test", index: 1 },
+      () => undefined,
+    );
+    await expect(driver.executeArticleCommand({
+      type: "reply-article",
+      article: { board: "Test", index: 1 },
+      content: "安全回覆",
+      pushType: "neutral",
+    })).resolves.toEqual({ ok: true, outcome: "sent" });
+
+    expect(sent).toContain("#canonicalAid\r");
+    expect(sent).toContain("安全回覆\r");
+    expect(sent).not.toContain("q安全回覆\r");
   });
 
   it("emits each reply vote and edit control command exactly once", async () => {
@@ -911,6 +1001,162 @@ describe("terminal driver module", () => {
     expect(sent).toEqual(["user\r", "password\r"]);
   });
 
+  it("reports a duplicate login without answering PTT's prompt", async () => {
+    const mod = await import("./terminalDriver.js");
+    const sent: string[] = [];
+    let screen = "請輸入代號，或以 guest 參觀";
+
+    const result = await mod.loginThroughTerminal(
+      {
+        send: async (message: string) => {
+          sent.push(message);
+          if (message === "user\r") {
+            screen = "請輸入您的密碼:";
+          } else if (message === "password\r") {
+            screen = "您想刪除其他重複登入的連線嗎？[Y/n]";
+          }
+          return true;
+        },
+      },
+      {
+        username: "user",
+        password: "password",
+        kickOthers: false,
+        readSnapshot: () => screen,
+        markLoggedIn: () => undefined,
+        timeouts: {
+          promptMs: 20,
+          passwordPromptMs: 20,
+          loginMs: 20,
+          pollMs: 1,
+          postSendMs: 0,
+        },
+      },
+    );
+
+    expect(result).toEqual({ ok: false, reason: "duplicate_login" });
+    expect(sent).toEqual(["user\r", "password\r"]);
+  });
+
+  it("recognizes the captured duplicate-session prompt without sending a decision", async () => {
+    const mod = await import("./terminalDriver.js");
+    const sent: string[] = [];
+    const duplicatePrompt = fixtureSection(
+      readRealPttFixture("login.txt"),
+      "duplicate session",
+    );
+    let screen = "請輸入代號，或以 guest 參觀";
+
+    const result = await mod.loginThroughTerminal(
+      {
+        send: async (message: string) => {
+          sent.push(message);
+          if (message === "user\r") screen = "請輸入您的密碼:";
+          if (message === "password\r") screen = duplicatePrompt;
+          return true;
+        },
+      },
+      {
+        username: "user",
+        password: "password",
+        kickOthers: false,
+        readSnapshot: () => screen,
+        markLoggedIn: () => undefined,
+        timeouts: {
+          promptMs: 20,
+          passwordPromptMs: 20,
+          loginMs: 20,
+          pollMs: 1,
+          postSendMs: 0,
+        },
+      },
+    );
+
+    expect(result).toEqual({ ok: false, reason: "duplicate_login" });
+    expect(sent).toEqual(["user\r", "password\r"]);
+  });
+
+  it("clears PTT's default answer when resuming a duplicate login decision", async () => {
+    const mod = await import("./terminalDriver.js");
+    const sent: string[] = [];
+    let screen = "您想刪除其他重複登入的連線嗎？[Y/n]";
+
+    const result = await mod.loginThroughTerminal(
+      {
+        send: async (message: string) => {
+          sent.push(message);
+          if (message === "\by\r") {
+            screen = "【主功能表】 批踢踢實業坊";
+          }
+          return true;
+        },
+      },
+      {
+        username: "user",
+        password: "password",
+        kickOthers: true,
+        readSnapshot: () => screen,
+        markLoggedIn: () => undefined,
+        timeouts: {
+          promptMs: 20,
+          passwordPromptMs: 20,
+          loginMs: 20,
+          pollMs: 1,
+          postSendMs: 0,
+        },
+      },
+    );
+
+    expect(result).toEqual({ ok: true });
+    expect(sent).toEqual(["\by\r"]);
+  });
+
+  it("waits for the duplicate prompt to clear when preserving the existing session", async () => {
+    const mod = await import("./terminalDriver.js");
+    const sent: string[] = [];
+    let screen = "您想刪除其他重複登入的連線嗎？[Y/n]";
+    let staleReads = 0;
+    let markedLoggedIn = false;
+
+    const result = await mod.loginThroughTerminal(
+      {
+        send: async (message: string) => {
+          sent.push(message);
+          if (message === "\bn\r") staleReads = 2;
+          if (message === "\r") screen = "【主功能表】 批踢踢實業坊";
+          return true;
+        },
+      },
+      {
+        username: "user",
+        password: "password",
+        kickOthers: false,
+        readSnapshot: () => {
+          if (staleReads > 0) {
+            staleReads -= 1;
+            return screen;
+          }
+          if (sent.includes("\bn\r") && !sent.includes("\r")) {
+            screen = "保留其他連線\n請按任意鍵繼續";
+          }
+          return screen;
+        },
+        markLoggedIn: () => { markedLoggedIn = true; },
+        timeouts: {
+          promptMs: 30,
+          passwordPromptMs: 30,
+          loginMs: 30,
+          pollMs: 1,
+          postSendMs: 0,
+        },
+      },
+    );
+
+    expect(result).toEqual({ ok: true });
+    expect(markedLoggedIn).toBe(true);
+    expect(sent).toEqual(["\bn\r", "\r"]);
+  });
+
   it("serializes bot operations to avoid overlapping terminal commands", async () => {
     const mod = await import("./terminalDriver.js");
     const runSerial = mod.createSerialTaskRunner();
@@ -1040,6 +1286,105 @@ describe("terminal driver module", () => {
     });
   });
 
+  it("opens PTT TopBoards without backing out of the main menu after login", async () => {
+    const mod = await import("./terminalDriver.js");
+    const calls: string[] = [];
+    let screen = "【主功能表】 批踢踢實業坊";
+    const hotRows = [
+      "【看板列表】                     批踢踢實業坊                     熱門看板",
+      "",
+      "",
+      "      1 ˇBaseball     棒球 ◎[棒球] 一馬首轟不一樣富貴邦MFGA   爆!Matthew10244",
+      "",
+    ];
+    const bot = {
+      async enterIndex() {
+        calls.push("enterIndex");
+        screen = "【主功能表】 批踢踢實業坊";
+        return true;
+      },
+      async send(message: string) {
+        calls.push(message);
+        if (message === "\x1at") screen = hotRows.join("\n");
+        return true;
+      },
+      getLine(index: number) {
+        return { str: screen.split("\n")[index] ?? "" };
+      },
+    };
+
+    const boards = await mod.fetchHotBoardsFromBotManually(bot);
+
+    expect(calls).toEqual(["\x1at", "q"]);
+    expect(boards.map((board) => board.name)).toEqual(["Baseball"]);
+  });
+
+  it("does not send q when the TopBoards shortcut did not open a board list", async () => {
+    const mod = await import("./terminalDriver.js");
+    const calls: string[] = [];
+    const rows = ["【主功能表】 批踢踢實業坊"];
+    const bot = {
+      async send(command: string) {
+        calls.push(command);
+        return true;
+      },
+      getLine(index: number) {
+        return { str: rows[index] ?? "" };
+      },
+    };
+
+    await expect(mod.fetchHotBoardsFromBotManually(bot)).resolves.toEqual([]);
+    expect(calls).toEqual(["\x1at"]);
+  });
+
+  it("exposes terminal popularity through the implementation-layer Board DTO", async () => {
+    const mod = await import("./terminalDriver.js");
+    let screen = "【主功能表】 批踢踢實業坊";
+    const hotRow = [
+      "   ",
+      "1".padStart(4),
+      " ˇ",
+      "Gossiping".padEnd(12),
+      "chat".padEnd(6),
+      "◎",
+      "hot board".padEnd(31),
+      " ",
+      "4027".padStart(5),
+    ].join("");
+    const bot = {
+      state: { connect: true, login: true },
+      on() { return this; },
+      async enterIndex() {
+        screen = "【主功能表】 批踢踢實業坊";
+        return true;
+      },
+      async send(message: string) {
+        if (message === "\x1at") {
+          screen = ["【看板列表】", "", "", hotRow, ""].join("\n");
+        }
+        return true;
+      },
+      getLine(index: number) {
+        return { str: screen.split("\n")[index] ?? "" };
+      },
+      async getArticles() { return []; },
+      async getArticle() { return {}; },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot as never);
+
+    await expect(driver.listBoardEntries({ kind: "hot" })).resolves.toEqual([
+      {
+        kind: "board",
+        board: {
+          name: "Gossiping",
+          title: "hot board",
+          onlineUsers: 4027,
+          popularityLabel: "4027",
+        },
+      },
+    ]);
+  });
+
   it("parses category options from the real post prompt screen", async () => {
     const mod = await import("./terminalDriver.js");
 
@@ -1145,6 +1490,62 @@ describe("terminal driver module", () => {
 
     expect(options).toEqual(["測試", "色彩", "控制", "簽名", "圖", "動畫", "互動", "公告"]);
     expect(sent).not.toContain("sTest\r");
+  });
+
+  it("leaves a title-search series before starting a write workflow", async () => {
+    const mod = await import("./terminalDriver.js");
+    const calls: string[] = [];
+    let state: "series" | "main" | "board" | "category" | "title" = "series";
+    const seriesRows = fixtureSection(
+      readRealPttFixture("filtered-write.txt"),
+      "title-search list",
+    ).split("\n");
+    const boardRow = buildBoardLine({
+      index: 1,
+      date: "8/31",
+      author: "TEST_USER",
+      title: "[測試] terminal fixture",
+    });
+    const bot = {
+      async enterIndex() {
+        calls.push("enterIndex");
+        state = "main";
+        return true;
+      },
+      async enterBoardByName(boardName: string) {
+        calls.push(`enter:${boardName}`);
+        state = "board";
+        return true;
+      },
+      async send(command: string) {
+        calls.push(`send:${command}`);
+        if (command === "\x10") state = "category";
+        if (command === "\x03" && state === "category") state = "title";
+        else if (command === "\x03" && state === "title") state = "board";
+        return true;
+      },
+      getLine(index: number) {
+        const rows = state === "series"
+          ? seriesRows
+          : state === "main"
+            ? ["【主功能表】 批踢踢實業坊"]
+            : state === "board"
+              ? ["看板《Test》", "", "", boardRow]
+              : state === "category"
+                ? [
+                    "發表文章於【 Test 】 [測試] 每週定期清除本板文章 看板",
+                    "種類： 1.測試 2.色彩 (1-2或不選)",
+                  ]
+                : ["標題: [測試] "];
+        return { str: rows[index] ?? "" };
+      },
+    };
+
+    await expect(mod.fetchPostCategoryOptionsFromBot(bot, "Test")).resolves.toEqual([
+      "測試",
+      "色彩",
+    ]);
+    expect(calls.slice(0, 3)).toEqual(["enterIndex", "enter:Test", "send:\x10"]);
   });
 
   it("restores Re: prefix when ptt-client splits it into the status field", async () => {
@@ -1825,7 +2226,25 @@ describe("terminal driver module", () => {
     ]);
   });
 
-  it("reads favorites from the terminal screen instead of ptt-client getFavorite", async () => {
+  it("excludes favorite folders and board groups from favorite board names", async () => {
+    const mod = await import("./terminalDriver.js");
+    const screen = [
+      "【看板列表】                     批踢踢實業坊                     我的最愛",
+      "[←][q]回上層 [→][r]閱讀 [↑↓]選擇 [PgUp][PgDn]翻頁 [c]新文章 [/]搜尋 [h]求助",
+      "   編號   看  板       類別   中   文   敘   述               人氣 板   主",
+      "●    1 ˇKaohsiung    地方 ◎防災~                              HOT",
+      "     2   TY_Research  分類 Σ我的最愛看板",
+      "     3   GetMarry     分類 □我的最愛看板",
+      "     4 ˇBabyMother   家庭 ◎[寶寶] 記得打流感疫苗               19",
+    ].join("\n");
+
+    expect(mod.parseFavoriteBoardNamesFromScreen(screen)).toEqual([
+      "Kaohsiung",
+      "BabyMother",
+    ]);
+  });
+
+  it("reads favorites through the global shortcut without repeated back-navigation", async () => {
     const mod = await import("./terminalDriver.js");
     const calls: string[] = [];
     const rows = [
@@ -1841,12 +2260,8 @@ describe("terminal driver module", () => {
         calls.push("getFavorite");
         return [{ name: "Brother" }] as never;
       },
-      async enterFavorite() {
-        calls.push("enterFavorite");
-        return true;
-      },
-      async enterIndex() {
-        calls.push("enterIndex");
+      async send(command: string) {
+        calls.push(command);
         return true;
       },
       getLine(index: number) {
@@ -1858,10 +2273,93 @@ describe("terminal driver module", () => {
       "Baseball",
       "Stock",
     ]);
-    expect(calls).toEqual(["enterIndex", "enterFavorite", "enterIndex"]);
+    expect(calls).toEqual(["\x1af", "q"]);
   });
 
-  it("resets to the PTT index before reading favorites", async () => {
+  it("waits for the favorite list instead of parsing the stale last hot-board page", async () => {
+    const mod = await import("./terminalDriver.js");
+    const calls: string[] = [];
+    let screenReads = 0;
+    const staleHotRows = [
+      "【看板列表】                     批踢踢實業坊",
+      "[←][q]回上層 [→][r]閱讀 [↑↓]選擇 [PgUp][PgDn]翻頁 [c]新文章 [/]搜尋 [h]求助",
+      "   編號   看  板       類別   中   文   敘   述               人氣 板   主",
+      "●   94 ˇKaohsiung    地方 ◎防災~                              HOT",
+      "    95   TY_Research  分類 ◎研究                                8",
+      "    96   GetMarry     生活 ◎結婚                                6",
+    ];
+    const favoriteRows = [
+      "【看板列表】                     批踢踢實業坊",
+      "[←][q]回上層 [→][r]閱讀 [↑↓]選擇 [PgUp][PgDn]翻頁 [c]新文章 [/]搜尋 [h]求助",
+      "   編號   看  板       類別   中   文   敘   述               人氣 板   主",
+      "●    1 ˇBaseball     棒球 ◎[棒球] 中職今年很多補賽             爆!",
+      "     2 ˇElephants    CPBL ◎[兄弟] Thank you 緯達                 58",
+      "     3 ˇjoke         娛樂 ◎[就可] 我難過                         25",
+      "     4 ˇStock        學術 ◎[股票] 樂透進行中                    爆!",
+    ];
+
+    const bot = {
+      async send(command: string) {
+        calls.push(command);
+        return true;
+      },
+      getLine(index: number) {
+        if (index === 0) screenReads += 1;
+        const rows = screenReads <= 2 ? staleHotRows : favoriteRows;
+        return { str: rows[index] ?? "" };
+      },
+    };
+
+    const names = await mod.fetchFavoriteBoardNamesFromBot(bot);
+    expect(names.slice(0, 4)).toEqual([
+      "Baseball",
+      "Elephants",
+      "joke",
+      "Stock",
+    ]);
+    expect(names).not.toContain("Kaohsiung");
+    expect(calls).toEqual(["\x1af", "q"]);
+  });
+
+  it("rewinds a remembered favorite page before collecting favorites", async () => {
+    const mod = await import("./terminalDriver.js");
+    const calls: string[] = [];
+    let page: "main" | "remembered" | "first" = "main";
+    const fixture = readRealPttFixture("favorites.txt");
+    const rememberedRows = fixtureSection(
+      fixture,
+      "remembered page immediately after Ctrl-Z f",
+    ).split("\n");
+    const firstRows = fixtureSection(fixture, "after Home").split("\n");
+    const bot = {
+      async send(command: string) {
+        calls.push(command);
+        if (command === "\x1af") page = "remembered";
+        if (command === "\x1b[1~") page = "first";
+        return true;
+      },
+      getLine(index: number) {
+        const rows = page === "main"
+          ? ["【主功能表】 批踢踢實業坊"]
+          : page === "remembered"
+            ? rememberedRows
+            : firstRows;
+        return { str: rows[index] ?? "" };
+      },
+    };
+
+    const names = await mod.fetchFavoriteBoardNamesFromBot(bot);
+    expect(names.slice(0, 4)).toEqual([
+      "Baseball",
+      "Elephants",
+      "joke",
+      "Stock",
+    ]);
+    expect(names).not.toContain("Kaohsiung");
+    expect(calls).toEqual(["\x1af", "\x1b[1~", "\x1b[6~", "q"]);
+  });
+
+  it("opens favorites directly from the PTT main menu", async () => {
     const mod = await import("./terminalDriver.js");
     const calls: string[] = [];
     const rows = [
@@ -1871,12 +2369,8 @@ describe("terminal driver module", () => {
       "●    1 ˇBaseball     棒球 ◎[棒球] 一馬首轟不一樣富貴邦MFGA   爆!Matthew10244",
     ];
     const bot = {
-      async enterIndex() {
-        calls.push("enterIndex");
-        return true;
-      },
-      async enterFavorite() {
-        calls.push("enterFavorite");
+      async send(command: string) {
+        calls.push(command);
         return true;
       },
       getLine(index: number) {
@@ -1887,25 +2381,17 @@ describe("terminal driver module", () => {
     await expect(mod.fetchFavoriteBoardNamesFromBot(bot)).resolves.toEqual([
       "Baseball",
     ]);
-    expect(calls).toEqual(["enterIndex", "enterFavorite", "enterIndex"]);
+    expect(calls).toEqual(["\x1af", "q"]);
   });
 
-  it("leaves an article reader before reading favorites", async () => {
+  it("uses the global shortcut to open favorites from an article reader", async () => {
     const mod = await import("./terminalDriver.js");
     const calls: string[] = [];
     let inArticle = true;
     const bot = {
       async send(command: string) {
         calls.push(command);
-        if (command === "q") inArticle = false;
-        return true;
-      },
-      async enterFavorite() {
-        calls.push("enterFavorite");
-        return true;
-      },
-      async enterIndex() {
-        calls.push("enterIndex");
+        if (command === "\x1af") inArticle = false;
         return true;
       },
       getLine(index: number) {
@@ -1932,7 +2418,7 @@ describe("terminal driver module", () => {
     await expect(mod.fetchFavoriteBoardNamesFromBot(bot)).resolves.toEqual([
       "Baseball",
     ]);
-    expect(calls).toEqual(["q", "enterIndex", "enterFavorite", "enterIndex"]);
+    expect(calls).toEqual(["\x1af", "q"]);
   });
 
   it("continues manual favorite parsing across multiple favorite pages", async () => {
@@ -1978,17 +2464,9 @@ describe("terminal driver module", () => {
       async getFavorite() {
         throw new RangeError("Invalid count value: -1");
       },
-      async enterFavorite() {
-        calls.push("enterFavorite");
-        return true;
-      },
       async send(command: string) {
         calls.push(command);
-        page = Math.min(page + 1, pages.length - 1);
-        return true;
-      },
-      async enterIndex() {
-        calls.push("enterIndex");
+        if (command === "\x1b[6~") page = Math.min(page + 1, pages.length - 1);
         return true;
       },
       getLine(index: number) {
@@ -2021,10 +2499,9 @@ describe("terminal driver module", () => {
       "Test",
     ]);
     expect(calls).toEqual([
-      "enterIndex",
-      "enterFavorite",
+      "\x1af",
       "\x1b[6~",
-      "enterIndex",
+      "q",
     ]);
   });
 
@@ -3480,6 +3957,14 @@ describe("terminal driver module", () => {
         "[測試] 原標題",
       ),
     ).toBe(false);
+  });
+
+  it("recognizes the captured Test-board delete confirmation", async () => {
+    const mod = await import("./terminalDriver.js");
+    const fixture = readRealPttFixture("delete.txt");
+
+    expect(mod.isArticleDeletePrompt(fixtureSection(fixture, "prompt in normal Test board"))).toBe(true);
+    expect(fixtureSection(fixture, "verified")).toContain("(本文已被刪除) [TEST_USER]");
   });
 
   it("edits the expected article without adding a custom summary", async () => {

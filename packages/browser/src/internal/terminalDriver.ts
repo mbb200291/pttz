@@ -48,6 +48,7 @@ export type ConnectionStatus =
   | "closed";
 
 export type LoginFailureReason =
+  | "duplicate_login"
   | "guest_overload"
   | "login_rate_limited"
   | "invalid_credentials"
@@ -444,9 +445,11 @@ const PTT_KEY_PGDOWN = "\x1b[6~";
 const PTT_KEY_HOME = "\x1b[1~";
 const PTT_KEY_END = "\x1b[4~";
 const PTT_KEY_CTRL_C = "\x03";
+const PTT_KEY_CTRL_Z = "\x1a";
 const PTT_KEY_CTRL_P = "\x10";
 const PTT_KEY_CTRL_X = "\x18";
 const PTT_KEY_CTRL_Y = "\x19";
+const PTT_KEY_BACKSPACE = "\b";
 const PTT_KEY_EDITOR_TOP = "\x1b,";
 const MAX_ARTICLE_EDIT_LINES = 2000;
 const MAX_BOARD_SCREEN_INDEX_GAP = 50000;
@@ -486,6 +489,10 @@ function isPasswordPromptScreen(plain: string): boolean {
     /輸入.*密碼/u.test(plain) ||
     plain.toLowerCase().includes("password:")
   );
+}
+
+function isDuplicateLoginScreen(plain: string): boolean {
+  return plain.includes("您想刪除其他重複登入的連線嗎");
 }
 
 function isPressAnyKeyScreen(plain: string): boolean {
@@ -545,7 +552,11 @@ export async function loginThroughTerminal(
     const plain = readPlainSnapshot();
     const failureReason = detectLoginFailureReasonFromScreen(plain);
     if (failureReason !== "unknown") return { ok: false, reason: failureReason };
-    if (isLoginPromptScreen(plain) || isPasswordPromptScreen(plain)) break;
+    if (
+      isLoginPromptScreen(plain) ||
+      isPasswordPromptScreen(plain) ||
+      isDuplicateLoginScreen(plain)
+    ) break;
     if (isPressAnyKeyScreen(plain)) {
       await bot.send("\r");
       await sleep(timeouts.postSendMs);
@@ -555,11 +566,23 @@ export async function loginThroughTerminal(
   }
 
   let plain = readPlainSnapshot();
-  if (!isLoginPromptScreen(plain) && !isPasswordPromptScreen(plain)) {
+  const resumedAtDuplicatePrompt = isDuplicateLoginScreen(plain);
+  let duplicatePromptAnswered = false;
+  if (
+    !isLoginPromptScreen(plain) &&
+    !isPasswordPromptScreen(plain) &&
+    !resumedAtDuplicatePrompt
+  ) {
     return { ok: false, reason: detectLoginFailureReasonFromScreen(readPlainSnapshot()) };
   }
 
-  if (isLoginPromptScreen(plain) && !isPasswordPromptScreen(plain)) {
+  if (resumedAtDuplicatePrompt) {
+    await bot.send(
+      `${PTT_KEY_BACKSPACE}${options.kickOthers ? "y" : "n"}\r`,
+    );
+    duplicatePromptAnswered = true;
+    await sleep(timeouts.postSendMs);
+  } else if (isLoginPromptScreen(plain) && !isPasswordPromptScreen(plain)) {
     await bot.send(`${options.username}\r`);
     await sleep(timeouts.postSendMs);
 
@@ -582,12 +605,14 @@ export async function loginThroughTerminal(
     }
   }
 
-  if (!isPasswordPromptScreen(readPlainSnapshot())) {
-    return { ok: false, reason: detectLoginFailureReasonFromScreen(readPlainSnapshot()) };
-  }
+  if (!resumedAtDuplicatePrompt) {
+    if (!isPasswordPromptScreen(readPlainSnapshot())) {
+      return { ok: false, reason: detectLoginFailureReasonFromScreen(readPlainSnapshot()) };
+    }
 
-  await bot.send(`${options.password}\r`);
-  await sleep(timeouts.postSendMs);
+    await bot.send(`${options.password}\r`);
+    await sleep(timeouts.postSendMs);
+  }
 
   const loginStartedAt = Date.now();
   while (Date.now() - loginStartedAt < timeouts.loginMs) {
@@ -595,8 +620,18 @@ export async function loginThroughTerminal(
     const failureReason = detectLoginFailureReasonFromScreen(plain);
     if (failureReason !== "unknown") return { ok: false, reason: failureReason };
 
-    if (plain.includes("您想刪除其他重複登入的連線嗎")) {
-      await bot.send(`${options.kickOthers ? "y" : "n"}\r`);
+    if (isDuplicateLoginScreen(plain)) {
+      if (duplicatePromptAnswered) {
+        await sleep(timeouts.pollMs);
+        continue;
+      }
+      if (!options.kickOthers) {
+        return { ok: false, reason: "duplicate_login" };
+      }
+      await bot.send(
+        `${PTT_KEY_BACKSPACE}y\r`,
+      );
+      duplicatePromptAnswered = true;
       await sleep(timeouts.postSendMs);
       continue;
     }
@@ -635,6 +670,7 @@ class PttClientTerminalDriver implements TerminalDriver {
   >();
   private readonly screenListeners = new Set<(screen: string) => void>();
   private readonly runSerial = createSerialTaskRunner();
+  private readonly articleAidByRelativeIndex = new Map<string, string>();
   private lastFilterBoardName: string | null = null;
   private lastFilterConditions: Array<{
     type: "push" | "title" | "author";
@@ -948,22 +984,36 @@ class PttClientTerminalDriver implements TerminalDriver {
       revision += 1;
       emit({ rawText, completeness, revision });
     };
-    await this.runSerial(() => {
+    await this.runSerial(async () => {
       signal?.throwIfAborted();
+      const relativeSearchResult = "index" in key &&
+        isFilterModeScreen(readVisibleScreen(this.bot));
       const open = "index" in key
         ? () => this.bot.send?.(`${key.index}\r\r`) ?? Promise.resolve(false)
         : () => this.bot.send?.(`#${key.aid}\r`) ?? Promise.resolve(false);
-      return fetchArticleFromBotManuallyWithOpen(
-        this.bot,
-        key.board,
-        "index" in key ? (key.index ?? 0) : 0,
-        open,
-        undefined,
-        (rawText, completeness) => emitRaw(rawText, completeness),
-        { signal },
-      ).then((article) => {
+      try {
+        const article = await fetchArticleFromBotManuallyWithOpen(
+          this.bot,
+          key.board,
+          "index" in key ? (key.index ?? 0) : 0,
+          open,
+          undefined,
+          (rawText, completeness) => emitRaw(rawText, completeness),
+          { signal, leaveOpen: relativeSearchResult },
+        );
         if (!article) throw new Error("找不到文章");
-      }).finally(() => leaveArticleReaderIfNeeded(this.bot));
+        if (relativeSearchResult) {
+          const evidence = await readOpenedArticleAid(this.bot);
+          if (evidence?.board.toLowerCase() === key.board.toLowerCase()) {
+            this.articleAidByRelativeIndex.set(
+              `${key.board.toLowerCase()}:${key.index}`,
+              evidence.aid,
+            );
+          }
+        }
+      } finally {
+        await leaveArticleReaderIfNeeded(this.bot);
+      }
     });
   }
 
@@ -977,7 +1027,14 @@ class PttClientTerminalDriver implements TerminalDriver {
     if (source.kind === "hot") {
       return (await this.listHotBoards()).map((item) => ({
         kind: "board" as const,
-        board: { name: item.name, title: item.title },
+        board: {
+          name: item.name,
+          title: item.title,
+          ...(/^\d+$/u.test(item.users)
+            ? { onlineUsers: Number(item.users) }
+            : {}),
+          ...(item.users ? { popularityLabel: item.users } : {}),
+        },
       }));
     }
     if (source.kind === "favorite") {
@@ -1058,6 +1115,17 @@ class PttClientTerminalDriver implements TerminalDriver {
   async executeArticleCommand(command: ArticleCommand): Promise<ActionResult> {
     return this.runSerial(async () => {
       await this.waitUntilLoggedIn();
+      if (command.article.index !== undefined) {
+        const aid = this.articleAidByRelativeIndex.get(
+          `${command.article.board.toLowerCase()}:${command.article.index}`,
+        );
+        if (aid) {
+          command = {
+            ...command,
+            article: { board: command.article.board, aid },
+          } as ArticleCommand;
+        }
+      }
       if (command.type === "withdraw-floor") {
         if (!command.ranges.length || command.ranges.some(({ start, end }) =>
           !Number.isInteger(start) || !Number.isInteger(end) || start <= 0 || end < start)) {
@@ -1496,10 +1564,12 @@ export function parseBoardRowFromScreenLine(line: string): PttBoardRow | null {
 export async function fetchHotBoardsFromBotManually(
   bot: BoardFetchBot,
 ): Promise<HotBoardSummary[]> {
-  if (!bot.enterBoardByOffset || !bot.getLine) return [];
+  if (!bot.send || !bot.getLine) return [];
 
-  const found = await bot.enterBoardByOffset([-1]);
-  if (!found) return [];
+  // Ctrl-Z t is a global shortcut. Avoid enterIndex(): it emits ten left-arrow
+  // presses, which can navigate past the main menu and leave the PTT session.
+  await bot.send(`${PTT_KEY_CTRL_Z}t`);
+  await sleep(80);
 
   const boards: HotBoardSummary[] = [];
   const seen = new Set<string>();
@@ -1537,7 +1607,7 @@ export async function fetchHotBoardsFromBotManually(
       await sleep(80);
     }
   } finally {
-    await bot.enterIndex?.();
+    await leaveBoardListIfOpen(bot);
   }
 
   return boards;
@@ -1549,10 +1619,14 @@ export function parseFavoriteBoardNamesFromScreen(screen: string): string[] {
   const seen = new Set<string>();
 
   for (const line of plain.split("\n")) {
-    const match = line.match(
-      /^\s*[●> ]?\s*\d+\s+[ˇ+*=!~ ]*\s*([A-Za-z][A-Za-z0-9_.+-]{1,31})\b/u,
+    // Some terminal snapshots omit one blank cell from an unselected row's
+    // two-column cursor area. Prefer the original fixed columns, then try the
+    // one-cell-restored form used by those snapshots.
+    const alignedLine = [line, ` ${line}`].find((candidate) =>
+      ["◎", "Σ", "□", "--"].includes(substrDbcsWidth(candidate, 28, 2).trim()),
     );
-    const name = match?.[1]?.trim();
+    if (!alignedLine || substrDbcsWidth(alignedLine, 28, 2).trim() !== "◎") continue;
+    const name = parseBoardRowFromScreenLine(alignedLine)?.name;
     if (!name) continue;
 
     const key = name.toLowerCase();
@@ -1565,23 +1639,45 @@ export function parseFavoriteBoardNamesFromScreen(screen: string): string[] {
   return names;
 }
 
+function firstFavoriteBoardId(screen: string): number | null {
+  const plain = stripAnsi(screen).replace(/\r/g, "");
+  for (const line of plain.split("\n")) {
+    for (const candidate of [line, ` ${line}`]) {
+      const row = parseBoardRowFromScreenLine(candidate);
+      if (row?.id !== undefined) return row.id;
+    }
+  }
+  return null;
+}
+
 export async function fetchFavoriteBoardNamesFromBot(
-  bot: Partial<
-    Pick<BotLike, "getFavorite" | "enterFavorite" | "enterIndex" | "getLine" | "send">
-  >,
+  bot: Partial<Pick<BotLike, "getLine" | "send">>,
 ): Promise<string[]> {
-  await leaveArticleReaderIfNeeded(bot);
-  await bot.enterIndex?.();
-
-  if (!bot.enterFavorite || !bot.getLine) return [];
-
-  const entered = await bot.enterFavorite([]);
-  if (!entered) return [];
+  if (!bot.send || !bot.getLine) return [];
+  const previousScreen = readVisibleScreen(bot);
+  await bot.send(`${PTT_KEY_CTRL_Z}f`);
 
   try {
     const names: string[] = [];
     const seen = new Set<string>();
-    let screen = readVisibleScreen(bot);
+    let screen = await waitForFavoriteBoardListScreen(bot, previousScreen);
+    if (!screen) return [];
+
+    // PTT remembers the cursor position in My Favorites. Always rewind before
+    // collecting so a session last left on (for example) rows 81-87 does not
+    // masquerade as the complete favorite list.
+    if (firstFavoriteBoardId(screen) !== 1) {
+      await bot.send(PTT_KEY_HOME);
+      const rewindStartedAt = Date.now();
+      while (Date.now() - rewindStartedAt < 800) {
+        const rewound = readVisibleScreen(bot);
+        if (firstFavoriteBoardId(rewound) === 1) {
+          screen = rewound;
+          break;
+        }
+        await sleep(20);
+      }
+    }
 
     for (let pageIndex = 0; pageIndex < 20; pageIndex += 1) {
       const pageNames = parseFavoriteBoardNamesFromScreen(screen);
@@ -1607,8 +1703,41 @@ export async function fetchFavoriteBoardNamesFromBot(
 
     return names;
   } finally {
-    await bot.enterIndex?.();
+    await leaveBoardListIfOpen(bot);
   }
+}
+
+async function waitForFavoriteBoardListScreen(
+  bot: Pick<BotLike, "getLine">,
+  previousScreen: string,
+  timeoutMs = 1200,
+): Promise<string | null> {
+  const previousKey = stripAnsi(previousScreen).replace(/\r/g, "");
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt <= timeoutMs) {
+    const screen = readVisibleScreen(bot);
+    const plain = stripAnsi(screen).replace(/\r/g, "");
+    const explicitlyFavorite = /【看板列表】[^\n]*我的最愛/u.test(plain);
+    const changedBoardList =
+      plain !== previousKey &&
+      isBoardDirectoryScreen(screen) &&
+      parseFavoriteBoardNamesFromScreen(screen).length > 0;
+
+    if (explicitlyFavorite || changedBoardList) return screen;
+    await sleep(20);
+  }
+
+  return null;
+}
+
+async function leaveBoardListIfOpen(
+  bot: Partial<Pick<BotLike, "getLine" | "send">>,
+): Promise<void> {
+  if (!bot.getLine || !bot.send) return;
+  const screen = readVisibleScreen(bot);
+  const plain = stripAnsi(screen).replace(/\r/g, "");
+  if (/【看板列表】/u.test(plain) || isBoardListScreen(screen)) await bot.send("q");
 }
 
 async function leaveArticleReaderIfNeeded(
@@ -1834,10 +1963,7 @@ function isBoardListScreen(screen: string): boolean {
 }
 
 function isFilterModeScreen(screen: string): boolean {
-  return stripAnsi(screen)
-    .replace(/\r/g, "")
-    .split("\n")
-    .some((line) => line.trim().startsWith("系列《"));
+  return /系列《[^》]+》/u.test(stripAnsi(screen).replace(/\r/g, ""));
 }
 
 function isBoardDirectoryScreen(screen: string): boolean {
@@ -2225,19 +2351,25 @@ async function verifyOpenedArticleAid(
   bot: WriteBot,
   key: { board: string; aid: string },
 ): Promise<boolean> {
-  if (!bot.send || !bot.getLine) return false;
+  const evidence = await readOpenedArticleAid(bot);
+  return evidence !== null &&
+    evidence.aid.toLowerCase() === key.aid.replace(/^#/u, "").toLowerCase() &&
+    evidence.board.toLowerCase() === key.board.toLowerCase();
+}
+
+async function readOpenedArticleAid(
+  bot: WriteBot,
+): Promise<{ aid: string; board: string } | null> {
+  if (!bot.send || !bot.getLine) return null;
   try {
     await bot.send("Q");
     const startedAt = Date.now();
     while (Date.now() - startedAt < 800) {
       const evidence = parseArticleInfoAid(readVisibleScreen(bot));
-      if (evidence) {
-        return evidence.aid.toLowerCase() === key.aid.replace(/^#/u, "").toLowerCase() &&
-          evidence.board.toLowerCase() === key.board.toLowerCase();
-      }
+      if (evidence) return evidence;
       await sleep(20);
     }
-    return false;
+    return null;
   } finally {
     await bot.send("q");
     await sleep(20);

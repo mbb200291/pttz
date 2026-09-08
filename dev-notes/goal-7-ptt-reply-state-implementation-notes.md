@@ -11,7 +11,7 @@
 
 ## 實作細節與踩坑
 
-1. PTTzzz UI 與 ptt-client terminal 是兩個不同狀態來源。上一個操作若停在完成提示，下一個 `X` 不一定會開啟推文選單，因此 pre-content failure 必須先重載文章再重試。
+1. pttzzz UI 與 ptt-client terminal 是兩個不同狀態來源。上一個操作若停在完成提示，下一個 `X` 不一定會開啟推文選單，因此 pre-content failure 必須先重載文章再重試。
 2. 成功重試前的 reload 只負責重新進入目標文章；推文成功後仍需第二次 reload 才能取得新回文，不能省略。
 3. `按任意鍵繼續` 畫面可能同時包含 `文章已發表`。completion loop 必須先處理 continuation，否則會提早回傳成功而沒有按鍵歸位。
 4. 回到看板本身不是文章確實發表的證據。若沒有 success/continuation 證據，cleanup 完成後仍回傳不確定結果。

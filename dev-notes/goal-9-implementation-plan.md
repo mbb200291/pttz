@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 將 PTTzzz 拆成可獨立發布的 `@pttzzz/core`、`@pttzzz/browser` 與官方 React 參考應用，並建立白皮書、conformance fixtures 與供 AI 建立替代 UI 的公開介面文件。
+**Goal:** 將 pttzzz 拆成可獨立發布的 `@pttzzz/core`、`@pttzzz/browser` 與官方 React 參考應用，並建立白皮書、conformance fixtures 與供 AI 建立替代 UI 的公開介面文件。
 
 **Architecture:** 先用白皮書和 fixture 固定 Goal 3／Goal 7 語意，再以相容 re-export 將純 parser／aggregator 移入 core、將現有 adapter 移入 browser，最後以 `PttzzzClient` 收斂 hooks。全程保持既有功能可執行；不重寫 terminal workflow、不引入 monorepo framework，也不在第一版實作 Node gateway。
 

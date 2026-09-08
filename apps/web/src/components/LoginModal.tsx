@@ -22,7 +22,6 @@ interface Props {
 export function LoginModal({ pttState, wsStatus }: Props) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [kickOthers, setKickOthers] = useState(false);
   const setPttState = usePttSocketStore((s) => s.setPttState);
   const loginError = usePttSocketStore((s) => s.loginError);
   const setLoginError = usePttSocketStore((s) => s.setLoginError);
@@ -48,12 +47,12 @@ export function LoginModal({ pttState, wsStatus }: Props) {
     e.preventDefault();
     if (!username.trim()) return;
     setLoginError(null);
-    submitLogin(username.trim(), password, kickOthers);
+    submitLogin(username.trim(), password);
   };
 
   const handleGuest = () => {
     setLoginError(null);
-    submitLogin("guest", "", false);
+    submitLogin("guest", "");
   };
 
   const inputStyle: CSSProperties = {
@@ -301,31 +300,6 @@ export function LoginModal({ pttState, wsStatus }: Props) {
                 style={inputStyle}
               />
             </div>
-            <label
-              className="flex items-start gap-3 px-3 py-2.5 text-sm"
-              style={{
-                border: `1px solid ${kickOthers ? "var(--accent-border)" : "var(--border)"}`,
-                background: kickOthers ? "var(--accent-soft)" : "var(--bg-subtle)",
-                borderRadius: 10,
-                color: "var(--text)",
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={kickOthers}
-                onChange={(e) => setKickOthers(e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-gray-600 bg-gray-800 text-sky-500 focus:ring-sky-500"
-              />
-              <span>
-                <span className="block font-medium" style={{ color: "var(--text)" }}>
-                  中斷其他連線
-                </span>
-                <span className="block text-xs" style={{ color: "var(--text-dim)" }}>
-                  預設保留其他已登入的 PTT 連線；勾選後才會回答「是」。
-                </span>
-              </span>
-            </label>
-
             <div className="flex gap-2 pt-2">
               <button
                 type="submit"

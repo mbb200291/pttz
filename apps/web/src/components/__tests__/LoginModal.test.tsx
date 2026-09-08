@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 describe("LoginModal", () => {
-  it("shows duplicate-session opt-in on the login form", async () => {
+  it("defers the duplicate-session decision until PTT reports it", async () => {
     Object.defineProperty(globalThis, "location", {
       configurable: true,
       value: {
@@ -16,8 +16,9 @@ describe("LoginModal", () => {
       <LoginModal pttState={"need_login" as never} wsStatus="connected" />,
     );
 
-    expect(html).toContain("中斷其他連線");
-    expect(html).toContain("預設保留其他已登入的 PTT 連線");
+    expect(html).not.toContain("中斷其他連線");
+    expect(html).not.toContain("預設保留其他已登入的 PTT 連線");
+    expect(html).not.toContain('type="checkbox"');
   });
 
   it("uses the tokenized login dialog surface from the design", async () => {

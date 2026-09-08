@@ -5,16 +5,34 @@
  * YouTubePreview：顯示縮圖，點擊後展開 iframe（click-to-play）
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface ImagePreviewProps {
   url: string;
 }
 
-export function ImagePreview({ url }: ImagePreviewProps) {
-  const [failed, setFailed] = useState(false);
+function retryImageUrl(url: string): string {
+  const retryUrl = new URL(url);
+  retryUrl.searchParams.set("pttzzz_retry", "1");
+  return retryUrl.toString();
+}
 
-  if (failed) {
+export function ImagePreview({ url }: ImagePreviewProps) {
+  const [phase, setPhase] = useState<
+    "initial" | "waiting" | "retrying" | "failed"
+  >("initial");
+
+  useEffect(() => {
+    setPhase("initial");
+  }, [url]);
+
+  useEffect(() => {
+    if (phase !== "waiting") return;
+    const timer = window.setTimeout(() => setPhase("retrying"), 2_000);
+    return () => window.clearTimeout(timer);
+  }, [phase]);
+
+  if (phase === "failed") {
     return (
       <a
         href={url}
@@ -30,11 +48,14 @@ export function ImagePreview({ url }: ImagePreviewProps) {
   return (
     <a href={url} target="_blank" rel="noopener noreferrer" className="block my-2">
       <img
-        src={url}
+        src={phase === "retrying" ? retryImageUrl(url) : url}
         alt=""
         referrerPolicy="no-referrer"
         loading="lazy"
-        onError={() => setFailed(true)}
+        onError={() => {
+          if (phase === "initial") setPhase("waiting");
+          else if (phase === "retrying") setPhase("failed");
+        }}
         className="max-w-full rounded-lg max-h-96 object-contain bg-gray-800"
       />
     </a>

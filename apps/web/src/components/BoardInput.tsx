@@ -2,7 +2,7 @@
  * BoardInput — 輸入看板名稱的首頁
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 export interface PopularBoard {
   name: string;
@@ -29,8 +29,18 @@ const FAVORITE_FALLBACKS: PopularBoard[] = [
   { name: "Lifeismoney", zh: "省錢板" },
 ];
 
-const POPULAR_INITIAL = 6;
+const POPULAR_CARD_MIN_WIDTH = 240;
+const POPULAR_GRID_GAP = 10;
+const POPULAR_ROWS = 2;
+const POPULAR_FALLBACK_COLUMNS = 3;
 const FAVORITE_INITIAL = 6;
+
+function popularBoardColumnCount(containerWidth: number) {
+  return Math.max(
+    1,
+    Math.floor((containerWidth + POPULAR_GRID_GAP) / (POPULAR_CARD_MIN_WIDTH + POPULAR_GRID_GAP)),
+  );
+}
 
 interface BoardInputProps {
   onEnter: (board: string) => void;
@@ -38,6 +48,7 @@ interface BoardInputProps {
   wsStatus: string;
   popularBoards?: PopularBoard[];
   popularBoardsLoading?: boolean;
+  onSearchBoards?: (prefix: string) => Promise<PopularBoard[]>;
   favoriteBoards?: string[];
   favoriteBoardsLoading?: boolean;
   recentBoards?: string[];
@@ -50,6 +61,7 @@ export function BoardInput({
   wsStatus,
   popularBoards,
   popularBoardsLoading = false,
+  onSearchBoards,
   favoriteBoards,
   favoriteBoardsLoading = false,
   recentBoards = [],
@@ -57,15 +69,20 @@ export function BoardInput({
 }: BoardInputProps) {
   const [input, setInput] = useState("");
   const [popularExpanded, setPopularExpanded] = useState(false);
+  const [popularColumns, setPopularColumns] = useState(POPULAR_FALLBACK_COLUMNS);
+  const [searchResults, setSearchResults] = useState<PopularBoard[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchFailed, setSearchFailed] = useState(false);
   const [favoriteExpanded, setFavoriteExpanded] = useState(false);
   const [favoriteOverrides, setFavoriteOverrides] = useState<Record<string, boolean>>({});
+  const popularGridRef = useRef<HTMLDivElement>(null);
 
   const isConnected = pttState === "ready";
   const hasLivePopularBoards = Boolean(popularBoards?.length);
   const boards = hasLivePopularBoards ? popularBoards! : DEFAULT_BOARD_SHORTCUTS;
   const searchTerm = input.trim().toLowerCase();
   const isSearching = searchTerm.length > 0;
-  const filteredBoards = useMemo(
+  const localSearchResults = useMemo(
     () =>
       isSearching
         ? boards.filter((board) =>
@@ -74,9 +91,67 @@ export function BoardInput({
         : boards,
     [boards, isSearching, searchTerm],
   );
+  const resultBoards = isSearching
+    ? onSearchBoards
+      ? searchResults
+      : localSearchResults
+    : boards;
+  const collapsedPopularCount = popularColumns * POPULAR_ROWS;
   const displayedBoards =
-    isSearching || popularExpanded ? filteredBoards : filteredBoards.slice(0, POPULAR_INITIAL);
-  const hiddenPopularCount = Math.max(0, filteredBoards.length - displayedBoards.length);
+    isSearching || popularExpanded
+      ? resultBoards
+      : resultBoards.slice(0, collapsedPopularCount);
+  const hiddenPopularCount = Math.max(0, resultBoards.length - displayedBoards.length);
+
+  useEffect(() => {
+    const grid = popularGridRef.current;
+    if (!grid) return;
+
+    const updateColumns = (width: number) => {
+      if (width > 0) setPopularColumns(popularBoardColumnCount(width));
+    };
+    updateColumns(grid.getBoundingClientRect().width);
+
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) updateColumns(entry.contentRect.width);
+    });
+    observer.observe(grid);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const prefix = input.trim();
+    if (!prefix || !onSearchBoards) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      setSearchFailed(false);
+      return;
+    }
+
+    let cancelled = false;
+    setSearchResults([]);
+    setSearchLoading(true);
+    setSearchFailed(false);
+    const timeout = window.setTimeout(() => {
+      onSearchBoards(prefix)
+        .then((results) => {
+          if (!cancelled) setSearchResults(results);
+        })
+        .catch(() => {
+          if (!cancelled) setSearchFailed(true);
+        })
+        .finally(() => {
+          if (!cancelled) setSearchLoading(false);
+        });
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [input, onSearchBoards]);
 
   const baseFavoriteNames = useMemo(
     () =>
@@ -480,22 +555,27 @@ export function BoardInput({
         <section>
           <SectionHead
             icon={<FlameIcon />}
-            title={hasLivePopularBoards ? "熱門看板" : "常用看板"}
+            title={isSearching ? "搜尋看板" : hasLivePopularBoards ? "熱門看板" : "常用看板"}
             hint={
               popularBoardsLoading
                 ? "同步中"
                 : isSearching
-                  ? `${filteredBoards.length} 個搜尋結果`
+                  ? searchLoading
+                    ? "搜尋中"
+                    : searchFailed
+                      ? "搜尋失敗，請稍後再試"
+                      : `${resultBoards.length} 個搜尋結果`
                   : hasLivePopularBoards
                     ? `${boards.length} 個 · 即時人數`
                     : "即時人數待同步"
             }
           />
           <div
+            ref={popularGridRef}
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
-              gap: 10,
+              gridTemplateColumns: `repeat(auto-fill, minmax(${POPULAR_CARD_MIN_WIDTH}px, 1fr))`,
+              gap: POPULAR_GRID_GAP,
             }}
           >
             {displayedBoards.map((board) => {
@@ -531,7 +611,7 @@ export function BoardInput({
                       {board.name}
                     </span>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                      {hasLivePopularBoards && (
+                      {hasLivePopularBoards && !isSearching && (
                         <span
                           style={{
                             color: "var(--accent-ink)",
@@ -624,7 +704,7 @@ export function BoardInput({
                   </>
                 ) : (
                   <>
-                    <ChevronDownIcon /> 展開全部 {filteredBoards.length} 個看板（再 +
+                    <ChevronDownIcon /> 展開全部 {resultBoards.length} 個看板（再 +
                     {hiddenPopularCount}）
                   </>
                 )}

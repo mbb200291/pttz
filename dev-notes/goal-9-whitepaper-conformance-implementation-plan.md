@@ -49,7 +49,7 @@ Add cases covering:
 top-level PTT 推/噓 comment -> proposal article score changes
 visible nested PTT 推/噓 reply -> proposal article score unchanged
 pure external 推12樓 sent as PTT 推 -> proposal article unchanged, native PTT +1, reply +1
-PTTzzz 推12樓 sent as → -> article unchanged and reply +1
+pttzzz 推12樓 sent as → -> article unchanged and reply +1
 ```
 
 Keep `nativeArticleScore` as the unfiltered PTT comparison value.
@@ -302,7 +302,7 @@ Execute every fixture `expectedCommand` through public `PttzzzClient` and a reco
 
 - [x] **Step 2: Specify article edit summary markers in the whitepaper**
 
-Keep article editing aligned with the whitepaper: send only the revised body, rely on native `※ 編輯:` records, and preserve legacy `※ PTTzzz 編輯摘要：<摘要>` markers only for backward-compatible reading.
+Keep article editing aligned with the whitepaper: send only the revised body, rely on native `※ 編輯:` records, and preserve legacy `※ pttzzz 編輯摘要：<摘要>` markers only for backward-compatible reading.
 
 - [x] **Step 3: Assert terminal transcript output**
 

@@ -1,4 +1,4 @@
-# Goal 9：PTTzzz 核心架構設計
+# Goal 9：pttzzz 核心架構設計
 
 狀態：已實作。最終結果與偏離見 `goal-9-implementation-notes.md`。
 
@@ -6,7 +6,7 @@
 
 Goal 9 已把原本集中在單一 React 專案裡的知識分成三層：
 
-1. **設計層**：白皮書定義 PTTzzz 的領域規則，例如推文聚合、巢狀回覆、投票、撤回與編輯重解析。
+1. **設計層**：白皮書定義 pttzzz 的領域規則，例如推文聚合、巢狀回覆、投票、撤回與編輯重解析。
 2. **核心實作層**：白皮書已實作成不依賴 React 的 JavaScript／TypeScript 套件，並以 `ptt-client` 為 browser gateway 的低階 PTT 連線引擎。
 3. **介面層**：不同 UI 可消費核心 API；目前的 React UI 是官方參考實作之一，不是核心本身。
 
@@ -16,7 +16,7 @@ Goal 9 已把原本集中在單一 React 專案裡的知識分成三層：
 
 - **規則只有一個權威來源**：產品語意由白皮書定義，程式碼、fixture 與 UI 都必須對應白皮書的規則編號。
 - **核心不依賴 UI framework**：核心不得 import React、Zustand、Vue 或 DOM component。
-- **PTT 傳輸與 PTTzzz 語意分離**：terminal 操作不是討論串聚合規則；兩者可獨立測試與替換。
+- **PTT 傳輸與 pttzzz 語意分離**：terminal 操作不是討論串聚合規則；兩者可獨立測試與替換。
 - **公開介面使用領域語言**：UI 操作 `replyId`、文章、回覆與投票，不直接操作 terminal 按鍵、ANSI 或原始樓號。
 - **漸進式遷移**：先建立規格與套件邊界，再搬純函式、連線層與 UI；每一階段都保持現有應用可執行。
 - **不假裝 PTT 是交易式 API**：寫入可能處於「是否送出無法確認」的狀態，錯誤模型必須明確表達。
@@ -68,9 +68,9 @@ Repository 先使用 npm workspaces，不引入 Turborepo 或額外 monorepo fra
 
 ### 4.1 `ptt-client`
 
-`ptt-client` 是第三方低階依賴，負責 WebSocket terminal、Bot 與畫面互動能力。它不知道 PTTzzz 的聚合、巢狀回覆、應用層投票或 UI DTO。
+`ptt-client` 是第三方低階依賴，負責 WebSocket terminal、Bot 與畫面互動能力。它不知道 pttzzz 的聚合、巢狀回覆、應用層投票或 UI DTO。
 
-它不會成為 PTTzzz 對 UI 公開的主要 API。UI 不應直接依賴它。
+它不會成為 pttzzz 對 UI 公開的主要 API。UI 不應直接依賴它。
 
 ### 4.2 `@pttzzz/browser`
 
@@ -97,7 +97,7 @@ Fake PTT gateway 位於 `@pttzzz/browser/testing` export，供 `apps/web` 的 Fa
 
 責任包括：
 
-- 低階文字正規化中與 PTTzzz 領域相關的純解析規則。
+- 低階文字正規化中與 pttzzz 領域相關的純解析規則。
 - 推文 intent、聚合、巢狀回覆、編輯、撤回與投票狀態。
 - 穩定的文章、回覆、投票與事件 DTO。
 - `replyId` 與內部原始 PTT 樓號之間的追蹤。

@@ -13,7 +13,7 @@ Task 1–9 已完成並通過完整驗證。變更保留在 `feature/goal-9-core
 - Web 介面使用核心 `VoteSummary` 呈現真實總數，不再由目前登入者狀態偽造總票數。
 - `expectedCommand` 現在是可執行契約：fixture runner 透過公開 `PttzzzClient` 驗證回文推噓、撤回、補充、替換、區段修改與同方向重複抑制。
 - 回文推噓與撤回格式已收斂到 core internal 共用 formatter；browser transcript 另驗證控制文字只格式化一次。
-- 文章本文編輯只傳送更新正文，不要求自訂摘要；發送端保留簽名、既有舊版摘要與 PTT 原生 `※ 編輯:` 紀錄，且不再新增 `※ PTTzzz 編輯摘要`。
+- 文章本文編輯只傳送更新正文，不要求自訂摘要；發送端保留簽名、既有舊版摘要與 PTT 原生 `※ 編輯:` 紀錄，且不再新增 `※ pttzzz 編輯摘要`。
 - 滿行判定依 PTT `recommend()` 的輸入容量計算：從 78 欄配置扣除 lead、日期、時間、IP 與實際作者欄，再扣除 `getdata()` 字串結尾所需的一欄。Parser 保存 `remainingContentColumns`；少於兩欄、已塞不下一個全形中文字時才直接拼接，aggregation 對舊 `isFullWidthLine` 僅保留相容 fallback。
 - `parsePushBuffer` 插入黏連推文分隔時不再重寫作者欄，避免第一筆推文的 padding 遺失。
 - Web rich-content 支援任意 HTTPS 主機上的 `.png`、`.jpg`、`.jpeg`、`.gif`、`.webp` 直接圖片網址；載入失敗仍退回原始連結。

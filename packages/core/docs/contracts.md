@@ -1,4 +1,4 @@
-# PTTzzz 0.1 public contracts
+# pttzzz 0.1 public contracts
 
 本文件描述 repository 內已實作並由 TypeScript、gateway contract tests 與 packed consumer 驗證的公開契約；npm registry 發布狀態不在此保證。語意規則以[核心規則白皮書](../../../docs/whitepaper/pttzzz-core.md)為準，套件分層見[核心架構](./architecture.md)。
 
@@ -96,6 +96,8 @@ export interface Board {
   category?: string;
   description?: string;
   favorite?: boolean;
+  onlineUsers?: number;
+  popularityLabel?: string;
 }
 
 export type BoardListEntry =

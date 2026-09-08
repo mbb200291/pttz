@@ -1,4 +1,4 @@
-# AI 建立 PTTzzz UI 的最短正確路徑
+# AI 建立 pttzzz UI 的最短正確路徑
 
 此頁描述 repository 內已實作並通過 packed-consumer 驗證的 0.1 API；是否已發布至 npm registry 是另一件事。完整型別見 [public contracts](./contracts.md)，討論串語意見[核心規則白皮書](../../../docs/whitepaper/pttzzz-core.md)，fixture 執行方式見[核心規則 fixture 驗證](./fixture-conformance.md)，套件邊界見[核心架構](./architecture.md)。
 
@@ -113,7 +113,7 @@ if (requestGeneration === articleRequestGeneration && activeArticleKey === reque
 
 `getArticle()` Promise 成功值是 final `Article`；讀取途中由 subscription 接收 partial。
 
-`listBoards()` 預設列熱門看板，也可指定 `{ source: { kind: "favorite" } }` 或 category source；先依 `kind` 判斷普通看板頁或分類目錄頁。`searchBoards()`／`filterBoards()` 的 items 永遠都是 `Board[]`，不需處理 category entry。看板搜尋的 `prefix` 只比對看板名稱前綴，不是全文 query。`filterBoards()` 至少要傳 `favorite: true` 或 `categoryCursor`；兩者並存表示取交集，請勿傳 `favorite: false`。
+`listBoards()` 預設列熱門看板，也可指定 `{ source: { kind: "favorite" } }` 或 category source；先依 `kind` 判斷普通看板頁或分類目錄頁。熱門來源的 `Board` 可能包含數值 `onlineUsers`，並以 `popularityLabel` 保留 PTT 終端顯示的原始人氣文字（例如數字、`HOT` 或 `爆!`）；介面應優先顯示 `onlineUsers`，缺少精確數字時再顯示 `popularityLabel`。`searchBoards()`／`filterBoards()` 的 items 永遠都是 `Board[]`，不需處理 category entry。看板搜尋的 `prefix` 只比對看板名稱前綴，不是全文 query。`filterBoards()` 至少要傳 `favorite: true` 或 `categoryCursor`；兩者並存表示取交集，請勿傳 `favorite: false`。
 
 `searchArticles()` 需要非空 query；`filterArticles()` 至少提供非空 author 或 keyword。兩者同時提供表示交集，不要用空 filter 代替 `listArticles()`。
 

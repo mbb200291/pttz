@@ -1,10 +1,10 @@
-# PTTzzz 實作概況
+# pttzzz 實作概況
 
 這份文件記錄目前 high-level 架構與能力；產品需求仍以 `spec.md` 為準，Goal 9 的詳細決策見 [goal-9-implementation-notes.md](goal-9-implementation-notes.md)。
 
 ## 產品定位
 
-PTTzzz 是直接連接 PTT WebSocket 的現代網頁閱讀器。它將原始 PTT 推文解析成聚合、巢狀、可投票與可追蹤編輯歷史的討論串，同時保留 PTT terminal 的操作限制與不確定性。
+pttzzz 是直接連接 PTT WebSocket 的現代網頁閱讀器。它將原始 PTT 推文解析成聚合、巢狀、可投票與可追蹤編輯歷史的討論串，同時保留 PTT terminal 的操作限制與不確定性。
 
 ## 目前架構
 
@@ -65,7 +65,7 @@ npm run verify    # tests + helper tests + build + lint + pack/example smoke
 ## 已完成能力
 
 - 真實 PTT WebSocket connect/login/disconnect 與安全的重複登入選項。
-- 熱門／最愛／分類看板、文章分頁、搜尋、篩選、AID 讀取與 progressive article。
+- 熱門／最愛／分類看板、文章分頁、搜尋、篩選、AID 讀取與 progressive article；熱門來源使用 PTT `TopBoards` 入口，並由公開 `Board` DTO 提供可取得的即時人數或原始人氣標記。
 - 推文聚合、巢狀回覆、文章／回文投票、撤回、編輯歷史與 OP 標示。
 - 發文、文章編輯／刪除、文章回覆、回覆某樓、回文投票及其撤回。
 - Stable reply identity、stale generation/revision 防護、exact terminal targeting。

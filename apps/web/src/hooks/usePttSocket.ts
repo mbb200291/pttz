@@ -98,6 +98,8 @@ function getClient(fakeMode: boolean): PttzzzClient {
 
 function mapLoginError(error: CoreError): PttState {
   switch (error.message) {
+    case "duplicate_login":
+      return "duplicate_login";
     case "guest_overload":
       return "guest_overload";
     case "login_rate_limited":
@@ -269,7 +271,6 @@ export function useRecentBoards(maxRecent = 5) {
 export async function submitLogin(
   username: string,
   password: string,
-  kickOthers = false,
 ): Promise<void> {
   const { client, setCredentials, setPttState, clearCredentials } =
     usePttSocketStore.getState();
@@ -282,14 +283,14 @@ export async function submitLogin(
   const result = await client.login({
     username,
     password,
-    disconnectExistingSession: kickOthers,
+    disconnectExistingSession: false,
   });
   if (result.ok) {
     setPttState("ready");
     return;
   }
 
-  clearCredentials();
+  if (result.error.message !== "duplicate_login") clearCredentials();
   usePttSocketStore.getState().setLoginError(
     result.error.message === "invalid_credentials"
       ? "帳號或密碼錯誤。"
