@@ -10,6 +10,26 @@ afterEach(() => {
 });
 
 describe("ArticleList", () => {
+  it("navigates actual article rows with arrows and opens only on request", async () => {
+    const { ArticleList } = await import("../ArticleList");
+    const open = vi.fn();
+    const back = vi.fn();
+    const { container } = render(<ArticleList boardName="Test" onBack={back} onSelectArticle={open}
+      onSelectArticleByAid={() => {}} mockLoading={false} mockArticles={[
+        { index: 2, title: "第二篇", author: "a", date: "9/8", pushCount: "1", mark: " " },
+        { index: 1, title: "第一篇", author: "b", date: "9/8", pushCount: "1", mark: " " },
+      ]} />);
+    const first = container.querySelector<HTMLButtonElement>('[data-article-index="2"]')!;
+    const second = container.querySelector<HTMLButtonElement>('[data-article-index="1"]')!;
+    first.focus();
+    fireEvent.keyDown(first, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(second);
+    expect(open).not.toHaveBeenCalled();
+    fireEvent.keyDown(second, { key: "ArrowRight" });
+    expect(open).toHaveBeenCalledWith(expect.objectContaining({ index: 1 }));
+    fireEvent.keyDown(second, { key: "ArrowLeft" });
+    expect(back).toHaveBeenCalledOnce();
+  });
   it("preloads more articles before the list bottom reaches the viewport", async () => {
     const mod = await import("../ArticleList");
 

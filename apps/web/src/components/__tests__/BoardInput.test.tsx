@@ -11,6 +11,18 @@ afterEach(() => {
 });
 
 describe("BoardInput", () => {
+  it("exposes keyboard-operable popular board names", () => {
+    const open = vi.fn();
+    render(<BoardInput pttState="ready" wsStatus="connected" onEnter={open} favoriteBoards={[]}
+      popularBoards={[{ name: "Test", zh: "測試" }, { name: "Stock", zh: "股市" }]} />);
+    const first = screen.getByRole("button", { name: "Test" });
+    const next = screen.getByRole("button", { name: "Stock" });
+    first.focus();
+    fireEvent.keyDown(first, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(next);
+    fireEvent.keyDown(next, { key: "ArrowRight" });
+    expect(open).toHaveBeenCalledWith("Stock");
+  });
   it("uses the design-token home surface and product copy", () => {
     const html = renderToStaticMarkup(
       <BoardInput

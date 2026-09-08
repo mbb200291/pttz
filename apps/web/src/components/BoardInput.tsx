@@ -3,6 +3,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { navigateList } from "../lib/keyboardNavigation";
 
 export interface PopularBoard {
   name: string;
@@ -216,6 +217,7 @@ export function BoardInput({
 
   return (
     <div
+      onKeyDown={(event) => navigateList(event)}
       style={{
         minHeight: "100vh",
         background: "var(--bg)",
@@ -607,9 +609,12 @@ export function BoardInput({
                       marginBottom: 4,
                     }}
                   >
-                    <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700 }}>
+                    <button type="button" data-navigation-item disabled={!isConnected}
+                      onClick={(event) => { event.stopPropagation(); submitBoard(board.name); }}
+                      className="focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sky-400"
+                      style={{ fontFamily: "var(--font-mono)", fontWeight: 700, background: "transparent", color: "inherit", border: 0, padding: 0, textAlign: "left", cursor: "pointer" }}>
                       {board.name}
-                    </span>
+                    </button>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                       {hasLivePopularBoards && !isSearching && (
                         <span
@@ -815,9 +820,12 @@ function FavoriteCard({
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
         <Monogram name={board.name} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 14 }}>
+          <button type="button" data-navigation-item disabled={disabled}
+            onClick={(event) => { event.stopPropagation(); onOpen(); }}
+            className="focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sky-400"
+            style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 14, background: "transparent", color: "inherit", border: 0, padding: 0, textAlign: "left", cursor: "pointer" }}>
             {board.name}
-          </div>
+          </button>
           <div style={{ color: "var(--text-muted)", fontSize: 12, marginTop: 1 }}>
             {board.zh || "我的最愛看板"}
           </div>

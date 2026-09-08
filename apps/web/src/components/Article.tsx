@@ -9,6 +9,7 @@ import { useArticle } from "../hooks/useArticle";
 import { PushThread } from "./PushThread";
 import { ArticleRevisions } from "./ArticleRevisions";
 import { RichContent } from "./RichContent";
+import { navigateList } from "../lib/keyboardNavigation";
 import type { ArticleData, PartialArticleData } from "../hooks/useArticle";
 import type { ArticleEditRecord, ArticleSummary } from "../lib/ptt/uiArticle";
 import {
@@ -162,17 +163,17 @@ function ArticleHeader({
 }
 
 function ArticleBody({ body }: { body: string }) {
-  const clean = body.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "").trim();
+  const clean = body.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
   return <RichContent text={clean} variant="body" />;
 }
 
 function LightweightArticleBody({ body }: { body: string }) {
-  const clean = body.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "").trim();
+  const clean = body.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
   if (!clean) {
     return <div className="mb-8 py-4 text-sm text-gray-500">文章內容載入中…</div>;
   }
   return (
-    <pre className="mb-8 whitespace-pre-wrap break-words font-mono text-sm leading-relaxed text-gray-200">
+    <pre tabIndex={0} aria-label="載入中的原始正文" className="mb-8 overflow-x-auto whitespace-pre font-mono text-sm leading-relaxed text-gray-200">
       {clean}
     </pre>
   );
@@ -309,6 +310,12 @@ export function Article({
   onEditArticle,
   onReplyToBoard,
 }: ArticleProps) {
+  const navigationRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (document.activeElement === document.body && !document.querySelector('[role="dialog"], dialog[open]')) {
+      navigationRef.current?.focus({ preventScroll: true });
+    }
+  }, [boardName, articleIndex, articleAid]);
   const {
     article: liveArticle,
     partialArticle,
@@ -736,7 +743,11 @@ export function Article({
   ).length;
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--text)" }}>
+    <div ref={navigationRef} tabIndex={0} data-navigation-item aria-label="文章閱讀區，左方向鍵返回"
+      onKeyDown={(event) => {
+        if (event.key === "ArrowLeft" && event.target === event.currentTarget) navigateList(event, onBack);
+      }}
+      style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--text)" }}>
       {/* 頂部導覽 */}
       <div style={{
         position: "sticky",

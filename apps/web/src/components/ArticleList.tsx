@@ -16,6 +16,7 @@ import type {
   WheelEvent,
 } from "react";
 import { useRef, useEffect, useMemo, useState } from "react";
+import { navigateList } from "../lib/keyboardNavigation";
 import { useBoard } from "../hooks/useBoard";
 import type { BoardFilter } from "../lib/ptt/viewState";
 import type { ArticleSummary } from "../lib/ptt/uiArticle";
@@ -186,6 +187,8 @@ function ArticleRow({
     <button
       type="button"
       data-article-index={normalized.index}
+      data-navigation-item
+      className="focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-400"
       data-fixed-article={isFixed ? "true" : undefined}
       onClick={handleClick}
       disabled={isDeleted}
@@ -818,6 +821,7 @@ export function ArticleList({
             row.getBoundingClientRect().top -
             cachedAnchor.viewportTop;
           window.scrollTo({ top: Math.max(0, targetTop), behavior: "auto" });
+          if (document.activeElement === document.body && !row.matches(":disabled")) row.focus({ preventScroll: true });
           return;
         }
       }
@@ -1045,6 +1049,7 @@ export function ArticleList({
   return (
     <div
       onTouchStart={handleTouchStart}
+      onKeyDown={(event) => navigateList(event, onBack)}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}

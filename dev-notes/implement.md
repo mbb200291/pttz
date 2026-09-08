@@ -36,6 +36,8 @@ Core 不依賴 React、Zustand、DOM、WebSocket、storage 或 `ptt-client`。�
 
 ## 資料與操作模型
 
+- Goal 11 第一階段：Web 列表增加焦點限定的箭頭導覽與回程焦點，正文可切換保留原始排版；PTT 格式編輯仍待後續實作。詳見 [Goal 11 紀錄](goal-11-implementation-notes.md)。
+
 - 白皮書與 fixtures 固定推文聚合、巢狀回覆、投票、撤回、編輯與 partial semantics。
 - 投票分成提案文章推噓、未經語意排除的 PTT 原生推噓，以及各回文推噓三個資料域；可見嵌套回覆與純回文推噓只從提案文章推噓排除。
 - UI 只以 stable `replyId` 操作回覆。Core 在 private target map／`PttCommand` 中解析 exact source floor/ranges，gateway transport執行目標；原始樓號不作畫面 identity，只能另出現在 opt-in debug metadata。
