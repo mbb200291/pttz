@@ -2,7 +2,7 @@
 
 ## Goal
 
-Align PTTzzz reply controls with native PTT author restrictions, make board-reply success detection cover the real terminal flow, and expose actionable push failure reasons without risking duplicate submissions.
+Align pttzzz reply controls with native PTT author restrictions, make board-reply success detection cover the real terminal flow, and expose actionable push failure reasons without risking duplicate submissions.
 
 ## Scope
 

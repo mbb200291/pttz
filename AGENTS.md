@@ -17,7 +17,7 @@ Dev server preview modes (bypass PTT login for UI development):
 
 ## Architecture
 
-PTTzzz is a pure-frontend PTT reader. The client connects directly to PTT's WebSocket (`wss://ws.ptt.cc/bbs`). In dev mode, `vite.config.ts` proxies `/ptt-ws` to inject the required `Origin: https://term.ptt.cc` header (PTT rejects connections without it).
+pttzzz is a pure-frontend PTT reader. The client connects directly to PTT's WebSocket (`wss://ws.ptt.cc/bbs`). In dev mode, `vite.config.ts` proxies `/ptt-ws` to inject the required `Origin: https://term.ptt.cc` header (PTT rejects connections without it).
 
 ### Layer overview
 

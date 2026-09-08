@@ -1,0 +1,59 @@
+[
+  {
+    "id": "web-thread-limits-display-to-three-levels",
+    "primaryRule": "WEB-THREAD-001.1",
+    "input": {
+      "maxDepth": 3,
+      "replies": [
+        { "replyId": "reply:1", "author": "alice", "replyTo": null },
+        { "replyId": "reply:2", "author": "bob", "replyTo": "reply:1" },
+        { "replyId": "reply:3", "author": "carol", "replyTo": "reply:2" },
+        { "replyId": "reply:4", "author": "dave", "replyTo": "reply:3" }
+      ]
+    },
+    "expected": [
+      { "replyId": "reply:1", "depth": 1, "displayReplyTo": null },
+      { "replyId": "reply:2", "depth": 2, "displayReplyTo": "reply:1" },
+      { "replyId": "reply:3", "depth": 3, "displayReplyTo": "reply:2" },
+      { "replyId": "reply:4", "depth": 3, "displayReplyTo": "reply:2" }
+    ]
+  },
+  {
+    "id": "web-thread-promotion-keeps-core-target",
+    "primaryRule": "WEB-THREAD-001.2",
+    "input": {
+      "maxDepth": 3,
+      "replies": [
+        { "replyId": "reply:1", "author": "alice", "replyTo": null },
+        { "replyId": "reply:2", "author": "bob", "replyTo": "reply:1" },
+        { "replyId": "reply:3", "author": "carol", "replyTo": "reply:2" },
+        { "replyId": "reply:4", "author": "dave", "replyTo": "reply:3" }
+      ]
+    },
+    "expected": [
+      {
+        "replyId": "reply:4",
+        "depth": 3,
+        "displayReplyTo": "reply:2",
+        "coreReplyTo": "reply:3"
+      }
+    ]
+  },
+  {
+    "id": "web-thread-actions-use-core-reply-id",
+    "primaryRule": "WEB-THREAD-001.3",
+    "input": {
+      "displayedReply": {
+        "replyId": "reply:4",
+        "displayReplyTo": "reply:2",
+        "coreReplyTo": "reply:3"
+      }
+    },
+    "expected": {
+      "replyActionTarget": "reply:4",
+      "voteActionTarget": "reply:4",
+      "editActionTarget": "reply:4",
+      "withdrawActionTarget": "reply:4"
+    }
+  }
+]

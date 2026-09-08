@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PTTzzz minimal browser UI</title>
+    <style>
+      body { max-width: 56rem; margin: 2rem auto; padding: 0 1rem; font: 16px system-ui; }
+      form, nav { display: flex; flex-wrap: wrap; gap: .5rem; margin-block: 1rem; }
+      input, button, select { font: inherit; padding: .45rem; }
+      button { cursor: pointer; }
+      #status[data-kind="error"] { color: #b42318; }
+      #status[data-kind="warning"] { color: #9a6700; }
+      #replies, #replies ul { list-style: none; padding-left: 1.25rem; }
+      #replies > li { border-top: 1px solid #ddd; padding-block: .75rem; }
+      .reply-meta { color: #666; font-size: .875rem; }
+    </style>
+  </head>
+  <body>
+    <h1>PTTzzz minimal browser UI</h1>
+    <output id="status" aria-live="polite">尚未連線</output>
+
+    <form id="login">
+      <input name="username" autocomplete="username" placeholder="PTT ID" required />
+      <input name="password" type="password" autocomplete="current-password" placeholder="密碼" required />
+      <label><input name="disconnectExistingSession" type="checkbox" /> 中斷其他連線</label>
+      <button>連線並登入</button>
+      <button id="disconnect" type="button">中斷連線</button>
+    </form>
+
+    <nav>
+      <button id="load-boards" type="button">熱門看板</button>
+      <input id="board" value="Test" aria-label="看板名稱" />
+      <button id="load-articles" type="button">載入文章</button>
+    </nav>
+    <ul id="boards"></ul>
+    <ul id="articles"></ul>
+
+    <article>
+      <h2 id="article-title">尚未選擇文章</h2>
+      <pre id="article-body"></pre>
+      <ul id="replies"></ul>
+    </article>
+
+    <form id="reply" hidden>
+      <strong>回覆 <span id="reply-author"></span></strong>
+      <input name="content" aria-label="回覆內容" required />
+      <select name="pushType" aria-label="推文類型">
+        <option value="neutral">→</option>
+        <option value="push">推</option>
+        <option value="boo">噓</option>
+      </select>
+      <button>送出</button>
+    </form>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

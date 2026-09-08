@@ -1,0 +1,24 @@
+{
+  "name": "@pttzzz/web-example",
+  "private": true,
+  "version": "0.1.0",
+  "pttzzz": {
+    "browser": "^0.1.0",
+    "core": "^0.1.0",
+    "rules": "0.1.x"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "test": "vitest run src",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@pttzzz/browser": "0.1.0",
+    "@pttzzz/core": "0.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^5.0.0"
+  }
+}

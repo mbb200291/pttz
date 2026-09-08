@@ -249,9 +249,9 @@ if (screen.includes("此看板不存在")) {
 
 ---
 
-## 與 PTTzzz adapter.ts 的關係
+## 與 pttzzz adapter.ts 的關係
 
-PTTzzz 的 `adapter.ts` 在 ptt-client 之上，新增了：
+pttzzz 的 `adapter.ts` 在 ptt-client 之上，新增了：
 
 - **序列化任務佇列**：避免並發命令衝突（ptt-client 底層有 WebSocket 競態條件）
 - **屏幕解析工具**：
@@ -358,4 +358,4 @@ bot.on("redraw", (screen) => {
 - ✅ **做得好**：WebSocket 連接、終端仿真、基礎資料提取
 - ❌ **不做**：業務邏輯、流程控制、錯誤區分、屏幕解析
 
-**上層應用（PTTzzz）必須自己實現**：序列化、解析、流程控制、錯誤處理、使用者體驗。
+**上層應用（pttzzz）必須自己實現**：序列化、解析、流程控制、錯誤處理、使用者體驗。

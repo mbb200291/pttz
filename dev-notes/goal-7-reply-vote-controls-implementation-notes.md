@@ -9,7 +9,7 @@
 
 ## 實作注意事項
 
-- 樓層投票語意來自內容 pattern，不使用 raw PTT 推噓類別，因此文章作者可透過 PTTzzz 對回文評分而不觸發「作者不能推噓自己的文章」限制。
+- 樓層投票語意來自內容 pattern，不使用 raw PTT 推噓類別，因此文章作者可透過 pttzzz 對回文評分而不觸發「作者不能推噓自己的文章」限制。
 - rollback 需區分點擊前是否已有尚待 server data 確認的 optimistic entry；若有則還原該 entry，否則移除 map entry 並回到解析資料。
 - 成功後仍重新載入文章，由既有 reconciliation 在解析資料確認相同投票方向後移除暫存 optimistic state。
 
@@ -29,7 +29,7 @@
 
 - 文章統計列保留 PTT 原生推／噓數，第三項改為所有可見聚合回覆總數；包含第一層與巢狀回覆，排除純文章投票、控制事件與 synthetic edit。
 - 回文卡片保留原始 PTT 類別 `推／噓／→`，移除容易與右側票數重複的 `推 +n／噓 -n` 淨分 badge。
-- PTT 作者本人按 `X` 時可能直接進入「作者本人，使用 → 加註方式」輸入畫面。adapter 現在將此提示辨認為 neutral content prompt，讓 PTTzzz 的樓層回覆與評分 pattern 能送出。
+- PTT 作者本人按 `X` 時可能直接進入「作者本人，使用 → 加註方式」輸入畫面。adapter 現在將此提示辨認為 neutral content prompt，讓 pttzzz 的樓層回覆與評分 pattern 能送出。
 - direct content prompt 仍只接受 raw neutral；raw push／boo 會中止，避免繞過 PTT 的作者限制。
 
 ### Follow-up TDD 證據

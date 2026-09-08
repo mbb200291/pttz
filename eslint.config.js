@@ -7,15 +7,17 @@ import tseslint from "typescript-eslint";
 export default tseslint.config(
   {
     ignores: [
-      "dist",
+      "**/dist/**",
       "coverage",
       ".venv",
       "node_modules",
-      "src/lib/ptt/adapter.ts.bak*",
-      "src/lib/ptt/adapter.ts.backup*",
     ],
   },
   js.configs.recommended,
+  {
+    files: ["scripts/**/*.mjs"],
+    languageOptions: { globals: globals.node },
+  },
   ...tseslint.configs.recommended,
   {
     files: ["**/*.{ts,tsx}"],

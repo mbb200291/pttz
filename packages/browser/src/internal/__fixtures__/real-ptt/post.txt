@@ -1,0 +1,27 @@
+=== Test board list ===
+【板主:hank2579】         [測試] 每週定期清除本板文章              看板《Test》
+[←]離開 [→]閱讀 [Ctrl-P]發表文章 [d]刪除 [z]精華區 [i]看板資訊/設定 [h]說明
+   編號    日 期 作  者       文  章  標  題                           人氣:1
+    656 +   8/31 boards       □ [控制]
+    657 +   8/31 chiang0904   □ [測試] 發文測試
+    658 +   8/31 pizzafan     □ [測試] sh
+    659     8/31 -            □ (本文已被刪除) [MikuLover]
+    660 +   8/31 buffalobill  □ [測試] nurikabe
+    661 +   8/31 Triceratops  □ [測試]
+    662 +   8/31 buffalobill  □ [測試] nurikabe
+    663 +   8/31 buffalobill  R: [測試] nurikabe
+    664 +   8/31 buffalobill  □ [測試] nurikabe 2
+    665     8/31 -            □ (本文已被刪除) [laisharon]
+    666 +   8/31 mrfatworm    □ [測試] jjj
+    667     8/31 -            □ (本文已被刪除) [hinatayuri]
+    668     8/31 -            □ (本文已被刪除) [hinatayuri]
+    669 +   8/31 phil10048196 □ [測試] test
+    670 +   8/31 phil10048196 □ [測試] test
+    671 +   8/31 justin890611 □ test
+
+=== category and title prompt ===
+發表文章於【 Test 】 [測試] 每週定期清除本板文章 看板
+
+種類：1.測試 2.色彩 3.控制 4.簽名 5.圖 6.動畫 7.互動 8.公告 (1-8或不選)1
+標題：[測試]
+

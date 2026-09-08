@@ -1,0 +1,34 @@
+=== title-search list ===
+【板主:hank2579】         [測試] 每週定期清除本板文章              系列《Test》
+[←]離開 [→]閱讀 [Ctrl-P]發表文章 [d]刪除 [z]精華區 [i]看板資訊/設定 [h]說明
+   編號    日 期 作  者       文  章  標  題                           人氣:2
+●    1     8/31 TEST_USER    □ [測試] pttzzz terminal fixture 20260831-2340
+
+=== filtered article ===
+ 作者  TEST_USER (測試者)                                          看板  Test
+ 標題  [測試] pttzzz terminal fixture 20260831-2340
+ 時間  Mon Aug 31 23:41:01 2026
+───────────────────────────────────────
+
+這是 PTTzzz 終端流程測試文章。
+用途：收集發文、推文、回覆與刪文畫面。
+完成後將立即刪除。
+
+--
+※ 發信站: 批踢踢實業坊(ptt.cc), 來自: 000.000.000.000 (臺灣)
+※ 文章網址: https://www.ptt.cc/bbs/Test/M.0000000000.A.000.html
+
+  瀏覽 第 1/1 頁 (100%)  目前顯示: 第 01~11 行  (y)回應(X%)推文(h)說明(←)離開
+
+=== push input while still in special-list mode (captured bug) ===
+◆您正在搜尋(標題、作者...)或其它特殊列表模式，推文計數與修改記錄將會分開計算。
+  若想正常計數請先左鍵退回正常列表模式。
+作者本人, 使用 → 加註方式
+→ TEST_USER: q第一則測試回覆                                      確定[y/N]:
+
+=== reply vote while still in special-list mode (captured bug) ===
+→ TEST_USER: q第一則測試回覆                                      08/31 23:43
+◆您正在搜尋(標題、作者...)或其它特殊列表模式，推文計數與修改記錄將會分開計算。
+  若想正常計數請先左鍵退回正常列表模式。
+作者本人, 使用 → 加註方式
+→ TEST_USER: q推1樓                                               確定[y/N]:
