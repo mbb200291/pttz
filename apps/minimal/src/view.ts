@@ -50,7 +50,7 @@ export function renderArticle(article: Article | PartialArticle): HTMLElement {
   element.append(node("h2", article.title ?? "文章整理中…"), node("p", `${article.author ?? ""} / ${article.key.board}`, "byline"));
   const body = pre(article.body ?? "", "article-body");
   body.setAttribute("aria-label", "文章正文，可水平捲動");
-  element.append(body, node("p", votes("文章評分", article.articleVotes), "article-votes"), node("p", votes("PTT 原生", article.nativeVotes), "native-votes muted"));
+  element.append(body, node("p", votes("文章評分", article.articleVotes), "article-votes"));
   const history = node("details", "", "article-history");
   history.hidden = article.completeness !== "final";
   history.append(node("summary", "文章編輯紀錄"));
@@ -156,7 +156,7 @@ export function mount(root: HTMLElement, reader: Reader, preview: boolean): () =
         const next = renderArticle(state.article);
         if (articleElement) {
           // Keep the reading surface, keyboard focus and selection stable across partials.
-          for (const selector of ["h2", ".byline", ".article-body", ".article-votes", ".native-votes"]) {
+          for (const selector of ["h2", ".byline", ".article-body", ".article-votes"]) {
             const current = articleElement.querySelector(selector)!;
             const content = next.querySelector(selector)!.textContent;
             if (current.textContent !== content) current.textContent = content;
