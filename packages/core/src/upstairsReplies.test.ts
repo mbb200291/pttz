@@ -81,4 +81,18 @@ describe("upstairs replies", () => {
     expect(result.pushes[0]).toMatchObject({ content: "推樓上", replyTo: null, score: 0 });
     expect(normalizeThreadEvents(rows)[1]).toMatchObject({ content: "推樓上", visible: true });
   });
+
+  it.each([
+    ["補充我在2樓說的：補充回答", "原回答\n補充回答"],
+    ["更正我在2樓的說法：^0:1=新", "新回答"],
+  ])("keeps body-relative editing after target withdrawal: %s", (command, content) => {
+    const rows = [
+      row("a", "問題。"),
+      row("b", "回樓上：原回答"),
+      row("b", command),
+      row("a", "撤回我在1樓的發言"),
+    ];
+    expect(normalizeThreadEvents(rows)[1]).toMatchObject({ content, visible: true });
+    expect(parse(...rows).pushes[0]).toMatchObject({ content, replyTo: null });
+  });
 });

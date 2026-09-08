@@ -834,7 +834,8 @@ function parseAndApplyPushEdits(rawPushes: AnchoredRawPush[]): ParsedRawPush[] {
       ? push.intent.visibleContent
       : push.originalContent;
     push.intent = { kind: "plain", visibleContent: content, isControl: false, relativeUpstairs: true };
-    push.structuralContent = push.originalContent;
+    // Edit replay offsets refer to the original visible body, not its prefix.
+    if (!push.editHistory.length) push.structuralContent = push.originalContent;
   }
   return parsedPushes;
 }

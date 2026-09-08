@@ -16,8 +16,10 @@
 
 新增 THREAD-005，規則、案例 manifest 與目前套件整合版本同步為 0.2.0；公開 client 方法未更動。其他平行 UI 分支仍以自身基底版本開發，合併前需重新核對相依版本。
 
-新增 17 項單元測試與 9 個跨實作案例。先確認 6 項新功能測試紅燈，再實作；追加編輯後撤回案例亦先重現事件解析與聚合不一致。沒有使用真實 PTT 或帳密。
+新增 19 項單元測試與 9 個跨實作案例。先確認 6 項新功能測試紅燈，再實作；追加編輯後撤回案例亦先重現事件解析與聚合不一致。沒有使用真實 PTT 或帳密。
+
+審查追加補充／局部編輯後撤回目標兩個回歸案例：聚合的編輯重播必須保留原始可見正文作為基準，不得改用帶「回樓上」前綴的原文，否則會恢復隱藏前綴或使字元索引錯位。兩例先重現失敗再修正。
 
 依賴使用 worktree 獨立 node_modules；離線快取缺失後按 lockfile 安裝，未引用主工作區的 workspace links。
 
-新 worktree 必須先執行 `npm run build:packages`，Web 測試才能載入 core/internal 的公開套件輸出。`npm run verify` 通過：core 355、browser 168、Web 205 項測試，11 項 smoke 輔助測試、build、lint 與 package smoke。保留既有 3 項 lint、bundle 大小與 Node 棄用警告。
+新 worktree 必須先執行 `npm run build:packages`，Web 測試才能載入 core/internal 的公開套件輸出。`npm run verify` 通過：core 357、browser 168、Web 205 項測試，11 項 smoke 輔助測試、build、lint 與 package smoke。保留既有 3 項 lint、bundle 大小與 Node 棄用警告。
