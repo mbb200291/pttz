@@ -10,6 +10,23 @@ afterEach(() => {
 });
 
 describe("ArticleList", () => {
+  it("opens compose with Ctrl+P without intercepting search or modified shortcuts", async () => {
+    const { ArticleList } = await import("../ArticleList");
+    const compose = vi.fn();
+    const { container } = render(<ArticleList boardName="Test" onBack={() => {}} onSelectArticle={() => {}}
+      onSelectArticleByAid={() => {}} onCompose={compose} mockLoading={false} mockArticles={[
+        { index: 1, title: "[請益] 第一篇", author: "b", date: "9/8", pushCount: "1", mark: " " },
+      ]} />);
+    const row = container.querySelector<HTMLElement>('[data-article-index="1"]')!;
+    expect(fireEvent.keyDown(row, { key: "p", ctrlKey: true })).toBe(false);
+    expect(compose).toHaveBeenCalledWith(["請益"]);
+    compose.mockClear();
+    for (const extra of [{ repeat: true }, { isComposing: true }, { altKey: true }, { shiftKey: true }, { metaKey: true }]) {
+      fireEvent.keyDown(row, { key: "p", ctrlKey: true, ...extra });
+    }
+    fireEvent.keyDown(container.querySelector("input")!, { key: "p", ctrlKey: true });
+    expect(compose).not.toHaveBeenCalled();
+  });
   it("navigates actual article rows with arrows and opens only on request", async () => {
     const { ArticleList } = await import("../ArticleList");
     const open = vi.fn();

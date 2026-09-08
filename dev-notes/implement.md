@@ -93,6 +93,8 @@ npm run verify    # tests + helper tests + build + lint + pack/example smoke
 
 ## 細節文件
 
+Goal 11 後續：Web 文章統計合併為核心校正票數操作列；首頁加入空間方向鍵導覽，文章 X／R 與看板 Ctrl+P 僅開啟既有編輯器。browser 最新頁讀取重新定位終端，舊頁排除重疊／置底並推進游標；useBoard 同步請求鎖與 generation 保護刷新、載入更多及快取重驗證。詳見 [Goal 11 實作紀錄](goal-11-implementation-notes.md)。
+
 - [Goal 9 architecture design](goal-9-core-architecture-design.md)
 - [Goal 9 implementation plan](goal-9-implementation-plan.md)
 - [Goal 9 implementation notes](goal-9-implementation-notes.md)

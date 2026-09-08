@@ -845,6 +845,10 @@ class PttClientTerminalDriver implements TerminalDriver {
       const offset = Math.max(beforeIndex - 9, 1);
       await this.bot.send(`${PTT_KEY_END}${PTT_KEY_END}${offset}\r`);
       await sleep(150);
+    } else if (sameFilterActive) {
+      // Refresh the existing result set without reapplying its conditions.
+      await this.bot.send(`${PTT_KEY_END}${PTT_KEY_END}`);
+      await sleep(150);
     }
 
     const screen = readVisibleScreen(this.bot);
@@ -3328,6 +3332,11 @@ export async function fetchBoardArticlesFromBotManually(
   if (beforeIndex > 0) {
     const offset = Math.max(beforeIndex - 9, 1);
     await bot.send(`${PTT_KEY_END}${PTT_KEY_END}${offset}\r`);
+    await sleep(120);
+  } else {
+    // A previous lookahead/page read leaves the terminal on an older window.
+    // A cursorless read must always return the latest page, including pins.
+    await bot.send(`${PTT_KEY_END}${PTT_KEY_END}`);
     await sleep(120);
   }
 

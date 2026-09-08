@@ -6,6 +6,13 @@
 
 **Tech Stack:** React、TypeScript、Vitest、Testing Library、原生鍵盤與 CSS white-space。
 
+## 後續：統計整合、分頁與快捷鍵
+
+- [x] 以 hook／gateway 回歸測試重現重複刷新後置底文章消失、提早顯示最舊、游標覆蓋與請求競態；修正根因，保留錯誤與可重試狀態。
+- [x] 統計呈現提案：合併為一列可操作推噓按鈕（核心 articleVotes）、聚合回覆數與回覆此文；移除重複原生統計，不改動 vote handlers 與權限限制。
+- [x] 快捷鍵提案：首頁四方向鍵選看板／Enter 進入；文章 X 開留言、R 開回覆文章；列表 Ctrl+P 開發文。沿用既有 callback，排除輸入、IME、dialog、重複按鍵及不相容修飾鍵，絕不直接送出。
+- [x] 確認設計後補互動回歸測試，驗證焦點、無權限／彈窗阻擋、瀏覽器預覽；執行完整 verify，更新 README／notes，一起提交分支，不 merge/push。
+
 - [x] 在 navigation 測試涵蓋箭頭移動、開啟／返回、disabled、輸入框、IME、修飾鍵與巢狀按鈕；先跑紅燈。
 - [x] 新增小型 keyboardNavigation helper，整合 ArticleList、BoardInput、Article；保留原生 Tab/Enter，回程恢復列表焦點。
 - [x] RichContent 加原始排版切換；原文保持等寬空白與水平捲動，媒體另列。Article 與 partial 不 trim 正文。

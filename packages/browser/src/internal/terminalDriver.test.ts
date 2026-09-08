@@ -2032,7 +2032,60 @@ describe("terminal driver module", () => {
       785692,
       785691,
     ]);
-    expect(calls).toEqual([]);
+    expect(calls).toEqual(["send:\x1b[4~\x1b[4~"]);
+  });
+
+  it("refreshes from the latest screen after an older page was read", async () => {
+    const mod = await import("./terminalDriver.js");
+    let latest = false;
+    const bot = {
+      async send(command: string) {
+        if (command === "\x1b[4~\x1b[4~") latest = true;
+        return true;
+      },
+      getLine(index: number) {
+        const rows = ["  看板《Test》[測試] 人氣:1", "", "",
+          buildBoardLine({ index: latest ? 100 : 70, date: "4/17", author: "author", title: "[測試] 文章" }),
+          ...(latest ? [buildBoardLine({ index: 101, date: "4/17", author: "mod", title: "[公告] 置底" }).replace("101", "  *")] : []),
+        ];
+        return { str: rows[index] ?? "" };
+      },
+    };
+    const articles = await mod.fetchBoardArticlesFromBotManually(bot, "Test");
+    expect(articles.some((article) => article.index === 100)).toBe(true);
+    expect(articles.some((article) => article.fixed)).toBe(true);
+  });
+
+  it("refreshes an active title filter from its latest results after pagination", async () => {
+    const mod = await import("./terminalDriver.js");
+    const sent: string[] = [];
+    let filtered = false;
+    let latest = true;
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      async enterBoardByName() { filtered = false; return true; },
+      getLine(index: number) {
+        const rows = [filtered ? "系列《Test》" : "看板《Test》",
+          buildBoardLine({ index: latest ? 30 : 11, date: "4/17", author: "author", title: "matching topic" }),
+        ];
+        return { str: rows[index] ?? "" };
+      },
+      async send(command: string) {
+        sent.push(command);
+        if (command === "/topic\r") filtered = true;
+        if (command === "\x1b[4~\x1b[4~") latest = true;
+        if (command === "\x1b[4~\x1b[4~11\r") latest = false;
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+    expect((await driver.searchArticles("Test", "topic"))[0]?.index).toBe(30);
+    expect((await driver.searchArticles("Test", "topic", 20))[0]?.index).toBe(11);
+    expect((await driver.searchArticles("Test", "topic"))[0]?.index).toBe(30);
+    expect(sent.filter((command) => command === "/topic\r")).toHaveLength(1);
+    expect(filtered).toBe(true);
   });
 
   it("re-enters the board when forceReenter is true, even if already on a normal board list screen", async () => {

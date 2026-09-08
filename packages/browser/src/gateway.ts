@@ -604,14 +604,17 @@ function terminalGatewayDriver(driver: GatewayTerminalDriver): BrowserGatewayDri
               ? await driver.searchArticles(input.board, input.keyword, beforeIndex)
               : await driver.listArticles(input.board, beforeIndex);
         const fresh = batch.filter((row) =>
+          (beforeIndex === undefined || (!row.fixed && row.index < beforeIndex)) &&
           (!input.author || normalizedPttId(row.author) === normalizedPttId(input.author)) &&
           !rows.some((seen) => seen.index === row.index)
         );
         rows.push(...fresh);
-        const last = batch[batch.length - 1];
-        if (!last) break;
-        if (beforeIndex !== undefined && last.index >= beforeIndex) break;
-        beforeIndex = last.index;
+        // Terminal windows overlap and pins are not chronological cursors.
+        const normalIndexes = batch.filter((row) => !row.fixed).map((row) => row.index);
+        if (!normalIndexes.length) break;
+        const oldestIndex = Math.min(...normalIndexes);
+        if (beforeIndex !== undefined && oldestIndex >= beforeIndex) break;
+        beforeIndex = oldestIndex;
       }
       return rows;
     },

@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { navigateList } from "../lib/keyboardNavigation";
+import { navigateBoardGrid } from "../lib/keyboardNavigation";
 
 export interface PopularBoard {
   name: string;
@@ -77,8 +77,14 @@ export function BoardInput({
   const [favoriteExpanded, setFavoriteExpanded] = useState(false);
   const [favoriteOverrides, setFavoriteOverrides] = useState<Record<string, boolean>>({});
   const popularGridRef = useRef<HTMLDivElement>(null);
+  const navigationRef = useRef<HTMLDivElement>(null);
 
   const isConnected = pttState === "ready";
+  useEffect(() => {
+    if (isConnected && document.activeElement === document.body) {
+      navigationRef.current?.querySelector<HTMLElement>('[data-navigation-item]:not(:disabled)')?.focus({ preventScroll: true });
+    }
+  });
   const hasLivePopularBoards = Boolean(popularBoards?.length);
   const boards = hasLivePopularBoards ? popularBoards! : DEFAULT_BOARD_SHORTCUTS;
   const searchTerm = input.trim().toLowerCase();
@@ -217,7 +223,8 @@ export function BoardInput({
 
   return (
     <div
-      onKeyDown={(event) => navigateList(event)}
+      ref={navigationRef}
+      onKeyDown={navigateBoardGrid}
       style={{
         minHeight: "100vh",
         background: "var(--bg)",
@@ -512,6 +519,9 @@ export function BoardInput({
                     }}
                   >
                     <button
+                      type="button"
+                      data-navigation-item
+                      className="focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sky-400"
                       onClick={() => submitBoard(name)}
                       disabled={!isConnected}
                       style={{

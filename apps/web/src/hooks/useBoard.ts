@@ -179,6 +179,7 @@ export function useBoard(
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const nextCursorRef = useRef<string | undefined>();
+  const activeRequestRef = useRef<"load" | "refresh" | null>(null);
   const queryGenerationRef = useRef(0);
   const mountedRef = useRef(true);
   const revalidateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -237,10 +238,12 @@ export function useBoard(
     setArticles(cachedArticles);
     setHasMore(true);
     nextCursorRef.current = undefined;
+    activeRequestRef.current = null;
 
     const runFetch = () => {
       revalidateTimerRef.current = null;
       if (cancelled || requestGeneration !== queryGenerationRef.current) return;
+      activeRequestRef.current = "load";
       if (revalidateDelayMs > 0) setLoading(true);
 
       fetchArticles(false, requestGeneration)
@@ -277,7 +280,10 @@ export function useBoard(
           setHasMore(false);
         })
         .finally(() => {
-          if (!cancelled && requestGeneration === queryGenerationRef.current) setLoading(false);
+          if (!cancelled && requestGeneration === queryGenerationRef.current) {
+            activeRequestRef.current = null;
+            setLoading(false);
+          }
         });
     };
 
@@ -297,13 +303,13 @@ export function useBoard(
   }, [boardName, client, fetchArticles, filter, pttState]);
 
   const loadMore = useCallback(() => {
-    if (!client || loading || refreshing || articles.length === 0 || !hasMore) return;
+    if (!client || activeRequestRef.current || loading || refreshing || articles.length === 0 || !hasMore) return;
 
     if (!nextCursorRef.current) {
-      setHasMore(false);
       return;
     }
 
+    activeRequestRef.current = "load";
     setLoading(true);
     const requestGeneration = queryGenerationRef.current;
     fetchArticles(true, requestGeneration)
@@ -329,26 +335,33 @@ export function useBoard(
         setError(err instanceof Error ? err.message : "無法載入更多文章");
       })
       .finally(() => {
-        if (mountedRef.current && requestGeneration === queryGenerationRef.current) setLoading(false);
+        if (mountedRef.current && requestGeneration === queryGenerationRef.current) {
+          activeRequestRef.current = null;
+          setLoading(false);
+        }
       });
   }, [articles, boardName, client, fetchArticles, filter, hasMore, loading, refreshing]);
 
   const refresh = useCallback(() => {
-    if (!client || refreshing) return;
+    if (!client || activeRequestRef.current === "refresh" || refreshing) return;
 
     if (revalidateTimerRef.current) {
       clearTimeout(revalidateTimerRef.current);
       revalidateTimerRef.current = null;
     }
+    activeRequestRef.current = "refresh";
     setRefreshing(true);
     setLoading(false);
     setError(null);
     const requestGeneration = ++queryGenerationRef.current;
-    nextCursorRef.current = undefined;
+    const previousCursor = nextCursorRef.current;
     fetchArticles(false, requestGeneration)
       .then((next) => {
         if (!mountedRef.current || requestGeneration !== queryGenerationRef.current) return;
-        if (next.length === 0) return;
+        if (next.length === 0) {
+          nextCursorRef.current = previousCursor;
+          return;
+        }
         setArticles((prev) => {
           const refreshed =
             prev.length > 0 ? refreshCoreArticles(prev, next) : next;
@@ -366,7 +379,10 @@ export function useBoard(
         setError(err instanceof Error ? err.message : "無法重新載入文章");
       })
       .finally(() => {
-        if (mountedRef.current && requestGeneration === queryGenerationRef.current) setRefreshing(false);
+        if (mountedRef.current && requestGeneration === queryGenerationRef.current) {
+          activeRequestRef.current = null;
+          setRefreshing(false);
+        }
       });
   }, [boardName, client, fetchArticles, filter, refreshing]);
 

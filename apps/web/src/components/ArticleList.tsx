@@ -16,7 +16,7 @@ import type {
   WheelEvent,
 } from "react";
 import { useRef, useEffect, useMemo, useState } from "react";
-import { navigateList } from "../lib/keyboardNavigation";
+import { canUseShortcut, navigateList } from "../lib/keyboardNavigation";
 import { useBoard } from "../hooks/useBoard";
 import type { BoardFilter } from "../lib/ptt/viewState";
 import type { ArticleSummary } from "../lib/ptt/uiArticle";
@@ -1049,7 +1049,14 @@ export function ArticleList({
   return (
     <div
       onTouchStart={handleTouchStart}
-      onKeyDown={(event) => navigateList(event, onBack)}
+      onKeyDown={(event) => {
+        if (event.key.toLowerCase() === "p" && onCompose && canUseShortcut(event, true)) {
+          event.preventDefault();
+          onCompose(observedCategoryOptions);
+          return;
+        }
+        navigateList(event, onBack);
+      }}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
@@ -1182,6 +1189,8 @@ export function ArticleList({
             <button
               type="button"
               onClick={() => onCompose(observedCategoryOptions)}
+              aria-keyshortcuts="Control+p"
+              title="發文（Ctrl+P）"
               style={{
                 display: "inline-flex",
                 alignItems: "center",

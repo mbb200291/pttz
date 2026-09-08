@@ -319,6 +319,24 @@ describe("real terminal gateway supplemental contract", () => {
     expect(listArticles).toHaveBeenNthCalledWith(2, "Test", 10);
   });
 
+  it("excludes overlapping terminal rows and pinned rows from older cursor pages", async () => {
+    const row = (index: number, fixed = false) => ({ index, fixed, title: String(index), author: "a", date: "1/1" });
+    const listArticles = vi.fn(async (_board: string, before?: number) => {
+      if (before === undefined) return [row(999, true), row(10), row(9)];
+      if (before >= 9) return [row(999, true), row(10), row(9), row(8), row(7)];
+      return [row(8), row(7), row(6), row(5), row(4)];
+    });
+    const gateway = new BrowserPttGateway(createTerminalGatewayDriverForTesting({ listArticles } as unknown as GatewayTerminalDriver));
+    const first = await gateway.listArticles({ board: "Test", limit: 3 });
+    expect(first.items.map((item) => item.key.index)).toEqual([999, 10, 9]);
+    const second = await gateway.listArticles({ board: "Test", limit: 3, cursor: first.nextCursor });
+    expect(second.items.map((item) => item.key.index)).toEqual([8, 7, 6]);
+    expect(second.nextCursor).toBeTruthy();
+    const third = await gateway.listArticles({ board: "Test", limit: 3, cursor: second.nextCursor });
+    expect(third.items.map((item) => item.key.index)).toEqual([5, 4]);
+    expect(third.nextCursor).toBeUndefined();
+  });
+
   it("intersects author with native score filtering across terminal pages", async () => {
     const score = vi.fn(async (_board: string, _keywords: string[], _minimum: number, before?: number) => before
       ? [
