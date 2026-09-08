@@ -161,6 +161,7 @@
     <nav aria-label="案例分類">
       <a href="#aggregation">分散推文合併</a>
       <a href="#nested-replies">嵌套回文</a>
+      <a href="#upstairs">樓上回覆</a>
       <a href="#votes">文章與回文推噓</a>
       <a href="#editing">回文編輯與撤回</a>
       <a href="#boundaries">更多解析邊界</a>
@@ -275,6 +276,157 @@
           </div></div>
         </div>
         <p class="explanation">原始 4F 的確回覆 3F，但 UI 最多顯示三層，所以第四層會提升為 3F 的同層節點並共同掛在 2F 下方。`推3樓` 仍使用原始 PTT 樓號，讓 Carol 的 3F 回文評分 +1；控制指令本身隱藏。</p>
+      </article>
+    </section>
+
+    <section class="group" id="upstairs">
+      <div class="group-heading"><span class="group-number">02A</span><h2>樓上回覆（THREAD-005）</h2></div>
+      <p class="group-note">樓上指緊鄰上一個原始 PTT 推文樓號，不是上一張可見卡片。以下為 fixture 的靜態對照；樓號僅供檢閱。發送端仍使用明確樓號，不發送相對語法。</p>
+      <article class="case" id="upstairs-reply-prefix" data-fixture="upstairs-reply-prefix">
+        <div class="case-title"><span class="case-id">UP 01 · THREAD-005.1</span><h3>回樓上：一般嵌套回覆</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="faint">1F</span> <span class="neutral">→</span> alice: 我們可以試試。 <span class="faint">09/08 12:00</span><br><span class="faint">2F</span> <span class="neutral">→</span> bob: 回樓上：同意 <span class="faint">09/08 12:00</span></div></div>
+          <div><div class="column-label">解析後局部 UI</div><div class="ui">
+            <div class="ui-bar">2 則可見回覆（包含嵌套） · PTT 原生 0</div>
+            <div class="reply-card"><div class="reply-head"><span class="author">alice</span><span class="reply-score">0</span></div><p class="reply-body">我們可以試試。</p></div>
+            <div class="reply-card" style="margin-left:24px"><div class="reply-head"><span class="author">bob</span><span>回覆 alice</span><span class="reply-score">0</span></div><p class="reply-body">同意</p></div>
+          </div></div>
+        </div>
+        <p class="explanation">Bob 回覆前一個原始樓號 Alice；移除前綴後顯示「同意」，不新增回文票。 <a href="../fixtures/thread-events/thread.json">fixture：<code>upstairs-reply-prefix</code></a></p>
+      </article>
+      <article class="case" id="upstairs-ascii-colon-reply" data-fixture="upstairs-ascii-colon-reply">
+        <div class="case-title"><span class="case-id">UP 02 · THREAD-005.1</span><h3>半形冒號也可識別</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="faint">1F</span> <span class="neutral">→</span> alice: 下午兩點集合。 <span class="faint">09/08 12:00</span><br><span class="faint">2F</span> <span class="neutral">→</span> bob: 回樓上: 我會準時到。 <span class="faint">09/08 12:00</span></div></div>
+          <div><div class="column-label">解析後局部 UI</div><div class="ui">
+            <div class="ui-bar">2 則可見回覆（包含嵌套） · 文章分數 0 · PTT 原生 0</div>
+            <div class="reply-card"><div class="reply-head"><span class="author">alice</span><span class="reply-score">0</span></div><p class="reply-body">下午兩點集合。</p></div>
+            <div class="reply-card" style="margin-left:24px"><div class="reply-head"><span class="author">bob</span><span>回覆 alice</span><span class="reply-score">0</span></div><p class="reply-body">我會準時到。</p></div>
+          </div></div>
+        </div>
+        <p class="explanation">回樓上: 與回樓上：效果相同；前綴後的空白不成為正文的一部分。 <a href="../fixtures/thread-events/thread.json">fixture：<code>upstairs-ascii-colon-reply</code></a></p>
+      </article>
+      <article class="case" id="upstairs-vote-with-body" data-fixture="upstairs-vote-with-body">
+        <div class="case-title"><span class="case-id">UP 03 · THREAD-005.1</span><h3>推樓上＋正文：同時加分與回覆</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="faint">1F</span> <span class="neutral">→</span> alice: 我們週末去走步道吧。 <span class="faint">09/08 12:00</span><br><span class="faint">2F</span> <span class="boo">噓</span> bob: 推樓上 我可以帶午餐。 <span class="faint">09/08 12:00</span></div></div>
+          <div><div class="column-label">解析後局部 UI</div><div class="ui">
+            <div class="ui-bar">2 則可見回覆（包含嵌套） · 文章分數 0 · PTT 原生 -1</div>
+            <div class="reply-card"><div class="reply-head"><span class="author">alice</span><span class="reply-score">1</span></div><p class="reply-body">我們週末去走步道吧。</p></div>
+            <div class="reply-card" style="margin-left:24px"><div class="reply-head"><span class="author">bob</span><span>回覆 alice</span><span class="reply-score">0</span></div><p class="reply-body">我可以帶午餐。</p></div>
+          </div></div>
+        </div>
+        <p class="explanation">指令方向來自「推樓上」，即使原始類別是噓，Alice 回文仍加 1。正文顯示為嵌套回覆，提案文章分數為 0；PTT 原生為 −1。 <a href="../fixtures/thread-events/thread.json">fixture：<code>upstairs-vote-with-body</code></a></p>
+      </article>
+      <article class="case" id="upstairs-vote-on-merged-source" data-fixture="upstairs-vote-on-merged-source">
+        <div class="case-title"><span class="case-id">UP 04 · THREAD-005.2</span><h3>樓上來源已聚合：投給整張卡片</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="faint">1F</span> <span class="neutral">→</span> alice: 我認為 <span class="faint">09/08 12:00</span><br><span class="faint">2F</span> <span class="neutral">→</span> alice: 可以試試。 <span class="faint">09/08 12:00</span><br><span class="faint">3F</span> <span class="push">推</span> bob: 推樓上 <span class="faint">09/08 12:00</span></div></div>
+          <div><div class="column-label">解析後局部 UI</div><div class="ui">
+            <div class="ui-bar">1 則可見回覆（包含嵌套） · PTT 原生 1</div>
+            <div class="reply-card"><div class="reply-head"><span class="author">alice</span><span class="reply-score">1</span></div><p class="reply-body">我認為<br>可以試試。</p></div>
+          </div></div>
+        </div>
+        <p class="explanation">第三樓的樓上是原始第二樓，第二樓已與第一樓聚合，因此整張 Alice 回文加 1。純指令隱藏；提案文章分數 0、PTT 原生 +1。 <a href="../fixtures/thread-events/thread.json">fixture：<code>upstairs-vote-on-merged-source</code></a></p>
+      </article>
+      <article class="case" id="upstairs-interleaved-same-minute" data-fixture="upstairs-interleaved-same-minute">
+        <div class="case-title"><span class="case-id">UP 05 · THREAD-005.4</span><h3>同分鐘插隊：仍回覆緊鄰上一樓</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="faint">1F</span> <span class="neutral">→</span> alice: 原本的問題。 <span class="faint">09/08 12:00</span><br><span class="faint">2F</span> <span class="neutral">→</span> carol: 剛插進來的問題。 <span class="faint">09/08 12:00</span><br><span class="faint">3F</span> <span class="neutral">→</span> bob: 回樓上：同意 <span class="faint">09/08 12:00</span></div></div>
+          <div><div class="column-label">解析後局部 UI</div><div class="ui">
+            <div class="ui-bar">3 則可見回覆（包含嵌套） · PTT 原生 0</div>
+            <div class="reply-card"><div class="reply-head"><span class="author">alice</span><span class="reply-score">0</span></div><p class="reply-body">原本的問題。</p></div>
+            <div class="reply-card"><div class="reply-head"><span class="author">carol</span><span class="reply-score">0</span></div><p class="reply-body">剛插進來的問題。</p></div>
+            <div class="reply-card" style="margin-left:24px"><div class="reply-head"><span class="author">bob</span><span>回覆 carol</span><span class="reply-score">0</span></div><p class="reply-body">同意</p></div>
+          </div></div>
+        </div>
+        <p class="explanation">不從時間猜測作者意圖。Carol 的樓上是 Bob，不是 Alice；接受此種插隊可能造成指錯對象的限制。 <a href="../fixtures/thread-events/thread.json">fixture：<code>upstairs-interleaved-same-minute</code></a></p>
+      </article>
+      <article class="case" id="upstairs-control-does-not-get-skipped" data-fixture="upstairs-control-does-not-get-skipped">
+        <div class="case-title"><span class="case-id">UP 06 · THREAD-005.3</span><h3>樓上是隱藏指令：不往更前面尋找</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="faint">1F</span> <span class="neutral">→</span> alice: 問題。 <span class="faint">09/08 12:00</span><br><span class="faint">2F</span> <span class="neutral">→</span> carol: 撤回我對1樓的推 <span class="faint">09/08 12:00</span><br><span class="faint">3F</span> <span class="push">推</span> bob: 推樓上 <span class="faint">09/08 12:00</span></div></div>
+          <div><div class="column-label">解析後局部 UI</div><div class="ui">
+            <div class="ui-bar">2 則可見回覆（包含嵌套） · PTT 原生 1</div>
+            <div class="reply-card"><div class="reply-head"><span class="author">alice</span><span class="reply-score">0</span></div><p class="reply-body">問題。</p></div>
+            <div class="reply-card"><div class="reply-head"><span class="author">bob</span><span class="reply-score">0</span></div><p class="reply-body">推樓上</p></div>
+          </div></div>
+        </div>
+        <p class="explanation">前一樓是隱藏的文章投票，沒有可見回覆目標。「推樓上」保留為一般文字，不會跳過控制事件替 Alice 加分。 <a href="../fixtures/thread-events/thread.json">fixture：<code>upstairs-control-does-not-get-skipped</code></a></p>
+      </article>
+      <article class="case" id="upstairs-first-event-fallback" data-fixture="upstairs-first-event-fallback">
+        <div class="case-title"><span class="case-id">UP 07 · THREAD-005.3</span><h3>第一樓沒有樓上</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="faint">1F</span> <span class="neutral">→</span> bob: 回樓上：沒有前文 <span class="faint">09/08 12:00</span></div></div>
+          <div><div class="column-label">解析後局部 UI</div><div class="ui">
+            <div class="ui-bar">1 則可見回覆（包含嵌套） · PTT 原生 0</div>
+            <div class="reply-card"><div class="reply-head"><span class="author">bob</span><span class="reply-score">0</span></div><p class="reply-body">回樓上：沒有前文</p></div>
+          </div></div>
+        </div>
+        <p class="explanation">沒有前一個原始事件時，保留整段文字，不建立不存在的父回覆。 <a href="../fixtures/thread-events/thread.json">fixture：<code>upstairs-first-event-fallback</code></a></p>
+      </article>
+      <article class="case" id="upstairs-word-boundaries" data-fixture="upstairs-word-boundaries">
+        <div class="case-title"><span class="case-id">UP 08 · THREAD-005.1</span><h3>一般用語：不把樓上兩字都當成指令</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="faint">1F</span> <span class="neutral">→</span> alice: 問題。 <span class="faint">09/08 12:00</span><br><span class="faint">2F</span> <span class="neutral">→</span> bob: 推樓上的貓。 <span class="faint">09/08 12:00</span><br><span class="faint">3F</span> <span class="neutral">→</span> carol: 回樓上住戶 <span class="faint">09/08 12:00</span><br><span class="faint">4F</span> <span class="neutral">→</span> dora: 我想推樓上 <span class="faint">09/08 12:00</span></div></div>
+          <div><div class="column-label">解析後局部 UI</div><div class="ui">
+            <div class="ui-bar">4 則可見回覆（包含嵌套） · PTT 原生 0</div>
+            <div class="reply-card"><div class="reply-head"><span class="author">alice</span><span class="reply-score">0</span></div><p class="reply-body">問題。</p></div>
+            <div class="reply-card"><div class="reply-head"><span class="author">bob</span><span class="reply-score">0</span></div><p class="reply-body">推樓上的貓。</p></div>
+            <div class="reply-card"><div class="reply-head"><span class="author">carol</span><span class="reply-score">0</span></div><p class="reply-body">回樓上住戶</p></div>
+            <div class="reply-card"><div class="reply-head"><span class="author">dora</span><span class="reply-score">0</span></div><p class="reply-body">我想推樓上</p></div>
+          </div></div>
+        </div>
+        <p class="explanation">「推樓上的貓」、「回樓上住戶」和句中「我想推樓上」均保留為一般回文，不嵌套也不新增回文票。 <a href="../fixtures/thread-events/thread.json">fixture：<code>upstairs-word-boundaries</code></a></p>
+      </article>
+      <article class="case" id="upstairs-boo-is-not-supported" data-fixture="upstairs-boo-is-not-supported">
+        <div class="case-title"><span class="case-id">UP 09 · THREAD-005.1</span><h3>第一版不支援噓樓上</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="faint">1F</span> <span class="neutral">→</span> alice: 我們週末去走步道吧。 <span class="faint">09/08 12:00</span><br><span class="faint">2F</span> <span class="boo">噓</span> bob: 噓樓上 <span class="faint">09/08 12:00</span></div></div>
+          <div><div class="column-label">解析後局部 UI</div><div class="ui">
+            <div class="ui-bar">2 則可見回覆（包含嵌套） · 文章分數 -1 · PTT 原生 -1</div>
+            <div class="reply-card"><div class="reply-head"><span class="author">alice</span><span class="reply-score">0</span></div><p class="reply-body">我們週末去走步道吧。</p></div>
+            <div class="reply-card"><div class="reply-head"><span class="author">bob</span><span class="reply-score">0</span></div><p class="reply-body">噓樓上</p></div>
+          </div></div>
+        </div>
+        <p class="explanation">「噓樓上」目前不是相對回文指令，保持一般文字。此例原始 PTT 類別是噓，所以提案文章及原生文章都扣 1；Alice 回文不扣分。 <a href="../fixtures/thread-events/thread.json">fixture：<code>upstairs-boo-is-not-supported</code></a></p>
+      </article>
+      <article class="case" id="upstairs-invalid-reference-breaks-inheritance" data-fixture="upstairs-invalid-reference-breaks-inheritance">
+        <div class="case-title"><span class="case-id">UP 10 · THREAD-005.3</span><h3>無效樓上：不繼承作者較早的回覆對象</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="faint">1F</span> <span class="neutral">→</span> alice: 問題。 <span class="faint">09/08 12:00</span><br><span class="faint">2F</span> <span class="neutral">→</span> bob: 回1樓：先回答 <span class="faint">09/08 12:00</span><br><span class="faint">3F</span> <span class="neutral">→</span> carol: 撤回我對1樓的推 <span class="faint">09/08 12:00</span><br><span class="faint">4F</span> <span class="neutral">→</span> bob: 回樓上：再回答 <span class="faint">09/08 12:00</span><br><span class="faint">5F</span> <span class="neutral">→</span> bob: 繼續說明。 <span class="faint">09/08 12:00</span></div></div>
+          <div><div class="column-label">解析後局部 UI</div><div class="ui">
+            <div class="ui-bar">3 則可見回覆（包含嵌套） · PTT 原生 0</div>
+            <div class="reply-card"><div class="reply-head"><span class="author">alice</span><span class="reply-score">0</span></div><p class="reply-body">問題。</p></div>
+            <div class="reply-card" style="margin-left:24px"><div class="reply-head"><span class="author">bob</span><span>回覆 alice</span><span class="reply-score">0</span></div><p class="reply-body">先回答</p></div>
+            <div class="reply-card"><div class="reply-head"><span class="author">bob</span><span class="reply-score">0</span></div><p class="reply-body">回樓上：再回答<br>繼續說明。</p></div>
+          </div></div>
+        </div>
+        <p class="explanation">Bob 後一次「回樓上」前面是控制事件，因此另起一般回文；後續普通文字可與它聚合，但不得繼承 Bob 先前對 Alice 的回覆關係。 <a href="../fixtures/thread-events/thread.json">fixture：<code>upstairs-invalid-reference-breaks-inheritance</code></a></p>
+      </article>
+      <article class="case" id="upstairs-withdrawn-target-is-not-retargeted" data-fixture="upstairs-withdrawn-target-is-not-retargeted">
+        <div class="case-title"><span class="case-id">UP 11 · THREAD-005.3</span><h3>原目標撤回：不改投其他人</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="faint">1F</span> <span class="neutral">→</span> dora: 更早的話。 <span class="faint">09/08 12:00</span><br><span class="faint">2F</span> <span class="neutral">→</span> alice: 目標。 <span class="faint">09/08 12:00</span><br><span class="faint">3F</span> <span class="neutral">→</span> bob: 推樓上 <span class="faint">09/08 12:00</span><br><span class="faint">4F</span> <span class="neutral">→</span> alice: 撤回我在2樓的發言 <span class="faint">09/08 12:00</span></div></div>
+          <div><div class="column-label">解析後局部 UI</div><div class="ui">
+            <div class="ui-bar">2 則可見回覆（包含嵌套） · PTT 原生 0</div>
+            <div class="reply-card"><div class="reply-head"><span class="author">dora</span><span class="reply-score">0</span></div><p class="reply-body">更早的話。</p></div>
+            <div class="reply-card"><div class="reply-head"><span class="author">bob</span><span class="reply-score">0</span></div><p class="reply-body">推樓上</p></div>
+          </div></div>
+        </div>
+        <p class="explanation">原始目標撤回後，「推樓上」回到可見一般文字；不向上搜尋其他回文，也不把票轉給更早的作者。 <a href="../fixtures/thread-events/thread.json">fixture：<code>upstairs-withdrawn-target-is-not-retargeted</code></a></p>
+      </article>
+      <article class="case" id="upstairs-edit-payload-is-opaque" data-fixture="upstairs-edit-payload-is-opaque">
+        <div class="case-title"><span class="case-id">UP 12 · THREAD-005.5</span><h3>編輯後出現推樓上：只是正文</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="faint">1F</span> <span class="neutral">→</span> alice: 問題。 <span class="faint">09/08 12:00</span><br><span class="faint">2F</span> <span class="neutral">→</span> bob: 回樓上：原回答 <span class="faint">09/08 12:00</span><br><span class="faint">3F</span> <span class="neutral">→</span> bob: 更正我在2樓的說法：推樓上 <span class="faint">09/08 12:00</span></div></div>
+          <div><div class="column-label">解析後局部 UI</div><div class="ui">
+            <div class="ui-bar">2 則可見回覆（包含嵌套） · PTT 原生 0</div>
+            <div class="reply-card"><div class="reply-head"><span class="author">alice</span><span class="reply-score">0</span></div><p class="reply-body">問題。</p></div>
+            <div class="reply-card" style="margin-left:24px"><div class="reply-head"><span class="author">bob</span><span>回覆 alice</span><span class="reply-score">0</span></div><p class="reply-body">推樓上</p></div>
+          </div></div>
+        </div>
+        <p class="explanation">Bob 的目標在最初回覆時已確定。更正後的「推樓上」只是顯示文字，不新增投票、不重新定位。 <a href="../fixtures/thread-events/thread.json">fixture：<code>upstairs-edit-payload-is-opaque</code></a></p>
       </article>
     </section>
 

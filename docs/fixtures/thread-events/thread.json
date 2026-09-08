@@ -1,5 +1,153 @@
 [
   {
+    "id": "upstairs-vote-with-body",
+    "primaryRule": "THREAD-005.1",
+    "rules": [
+      "THREAD-005.1",
+      "THREAD-005.2"
+    ],
+    "articleAuthor": "op",
+    "rawPushes": [
+      {
+        "author": "alice",
+        "content": "我們週末去走步道吧。",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      },
+      {
+        "author": "bob",
+        "content": "推樓上 我可以帶午餐。",
+        "type": "boo",
+        "time": "09/08 12:00"
+      }
+    ],
+    "expected": {
+      "replies": [
+        {
+          "author": "alice",
+          "content": "我們週末去走步道吧。",
+          "replyToAuthor": null,
+          "score": 1
+        },
+        {
+          "author": "bob",
+          "content": "我可以帶午餐。",
+          "replyToAuthor": "alice",
+          "score": 0
+        }
+      ],
+      "nativeArticleScore": -1,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    },
+    "expectedArticleScores": {
+      "articlePushCount": 0,
+      "articleBooCount": 0,
+      "articleScore": 0,
+      "nativePushCount": 0,
+      "nativeBooCount": 1,
+      "nativeArticleScore": -1
+    }
+  },
+  {
+    "id": "upstairs-ascii-colon-reply",
+    "primaryRule": "THREAD-005.1",
+    "rules": [
+      "THREAD-005.1"
+    ],
+    "articleAuthor": "op",
+    "rawPushes": [
+      {
+        "author": "alice",
+        "content": "下午兩點集合。",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      },
+      {
+        "author": "bob",
+        "content": "回樓上: 我會準時到。",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      }
+    ],
+    "expected": {
+      "replies": [
+        {
+          "author": "alice",
+          "content": "下午兩點集合。",
+          "replyToAuthor": null,
+          "score": 0
+        },
+        {
+          "author": "bob",
+          "content": "我會準時到。",
+          "replyToAuthor": "alice",
+          "score": 0
+        }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    },
+    "expectedArticleScores": {
+      "articlePushCount": 0,
+      "articleBooCount": 0,
+      "articleScore": 0,
+      "nativePushCount": 0,
+      "nativeBooCount": 0,
+      "nativeArticleScore": 0
+    }
+  },
+  {
+    "id": "upstairs-boo-is-not-supported",
+    "primaryRule": "THREAD-005.1",
+    "rules": [
+      "THREAD-005.1"
+    ],
+    "articleAuthor": "op",
+    "rawPushes": [
+      {
+        "author": "alice",
+        "content": "我們週末去走步道吧。",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      },
+      {
+        "author": "bob",
+        "content": "噓樓上",
+        "type": "boo",
+        "time": "09/08 12:00"
+      }
+    ],
+    "expected": {
+      "replies": [
+        {
+          "author": "alice",
+          "content": "我們週末去走步道吧。",
+          "replyToAuthor": null,
+          "score": 0
+        },
+        {
+          "author": "bob",
+          "content": "噓樓上",
+          "replyToAuthor": null,
+          "score": 0
+        }
+      ],
+      "nativeArticleScore": -1,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    },
+    "expectedArticleScores": {
+      "articlePushCount": 0,
+      "articleBooCount": 1,
+      "articleScore": -1,
+      "nativePushCount": 0,
+      "nativeBooCount": 1,
+      "nativeArticleScore": -1
+    }
+  },
+  {
     "id": "upstairs-reply-prefix",
     "primaryRule": "THREAD-005.1",
     "rules": [
