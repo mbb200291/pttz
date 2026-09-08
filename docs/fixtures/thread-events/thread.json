@@ -1,5 +1,446 @@
 [
   {
+    "id": "upstairs-reply-prefix",
+    "primaryRule": "THREAD-005.1",
+    "rules": [
+      "THREAD-005.1"
+    ],
+    "articleAuthor": "op",
+    "rawPushes": [
+      {
+        "author": "alice",
+        "content": "我們可以試試。",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      },
+      {
+        "author": "bob",
+        "content": "回樓上：同意",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      }
+    ],
+    "expected": {
+      "replies": [
+        {
+          "author": "alice",
+          "content": "我們可以試試。",
+          "replyToAuthor": null,
+          "score": 0
+        },
+        {
+          "author": "bob",
+          "content": "同意",
+          "replyToAuthor": "alice",
+          "score": 0
+        }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "upstairs-vote-on-merged-source",
+    "primaryRule": "THREAD-005.2",
+    "rules": [
+      "THREAD-005.2"
+    ],
+    "articleAuthor": "op",
+    "rawPushes": [
+      {
+        "author": "alice",
+        "content": "我認為",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      },
+      {
+        "author": "alice",
+        "content": "可以試試。",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      },
+      {
+        "author": "bob",
+        "content": "推樓上",
+        "type": "push",
+        "time": "09/08 12:00"
+      }
+    ],
+    "expected": {
+      "replies": [
+        {
+          "author": "alice",
+          "content": "我認為\n可以試試。",
+          "replyToAuthor": null,
+          "score": 1
+        }
+      ],
+      "nativeArticleScore": 1,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "upstairs-control-does-not-get-skipped",
+    "primaryRule": "THREAD-005.3",
+    "rules": [
+      "THREAD-005.3"
+    ],
+    "articleAuthor": "op",
+    "rawPushes": [
+      {
+        "author": "alice",
+        "content": "問題。",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      },
+      {
+        "author": "carol",
+        "content": "撤回我對1樓的推",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      },
+      {
+        "author": "bob",
+        "content": "推樓上",
+        "type": "push",
+        "time": "09/08 12:00"
+      }
+    ],
+    "expected": {
+      "replies": [
+        {
+          "author": "alice",
+          "content": "問題。",
+          "replyToAuthor": null,
+          "score": 0
+        },
+        {
+          "author": "bob",
+          "content": "推樓上",
+          "replyToAuthor": null,
+          "score": 0
+        }
+      ],
+      "nativeArticleScore": 1,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "upstairs-interleaved-same-minute",
+    "primaryRule": "THREAD-005.4",
+    "rules": [
+      "THREAD-005.4"
+    ],
+    "articleAuthor": "op",
+    "rawPushes": [
+      {
+        "author": "alice",
+        "content": "原本的問題。",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      },
+      {
+        "author": "carol",
+        "content": "剛插進來的問題。",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      },
+      {
+        "author": "bob",
+        "content": "回樓上：同意",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      }
+    ],
+    "expected": {
+      "replies": [
+        {
+          "author": "alice",
+          "content": "原本的問題。",
+          "replyToAuthor": null,
+          "score": 0
+        },
+        {
+          "author": "carol",
+          "content": "剛插進來的問題。",
+          "replyToAuthor": null,
+          "score": 0
+        },
+        {
+          "author": "bob",
+          "content": "同意",
+          "replyToAuthor": "carol",
+          "score": 0
+        }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "upstairs-edit-payload-is-opaque",
+    "primaryRule": "THREAD-005.5",
+    "rules": [
+      "THREAD-005.5"
+    ],
+    "articleAuthor": "op",
+    "rawPushes": [
+      {
+        "author": "alice",
+        "content": "問題。",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      },
+      {
+        "author": "bob",
+        "content": "回樓上：原回答",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      },
+      {
+        "author": "bob",
+        "content": "更正我在2樓的說法：推樓上",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      }
+    ],
+    "expected": {
+      "replies": [
+        {
+          "author": "alice",
+          "content": "問題。",
+          "replyToAuthor": null,
+          "score": 0
+        },
+        {
+          "author": "bob",
+          "content": "推樓上",
+          "replyToAuthor": "alice",
+          "score": 0
+        }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "upstairs-word-boundaries",
+    "primaryRule": "THREAD-005.1",
+    "rules": [
+      "THREAD-005.1"
+    ],
+    "articleAuthor": "op",
+    "rawPushes": [
+      {
+        "author": "alice",
+        "content": "問題。",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      },
+      {
+        "author": "bob",
+        "content": "推樓上的貓。",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      },
+      {
+        "author": "carol",
+        "content": "回樓上住戶",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      },
+      {
+        "author": "dora",
+        "content": "我想推樓上",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      }
+    ],
+    "expected": {
+      "replies": [
+        {
+          "author": "alice",
+          "content": "問題。",
+          "replyToAuthor": null,
+          "score": 0
+        },
+        {
+          "author": "bob",
+          "content": "推樓上的貓。",
+          "replyToAuthor": null,
+          "score": 0
+        },
+        {
+          "author": "carol",
+          "content": "回樓上住戶",
+          "replyToAuthor": null,
+          "score": 0
+        },
+        {
+          "author": "dora",
+          "content": "我想推樓上",
+          "replyToAuthor": null,
+          "score": 0
+        }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "upstairs-first-event-fallback",
+    "primaryRule": "THREAD-005.3",
+    "rules": [
+      "THREAD-005.3"
+    ],
+    "articleAuthor": "op",
+    "rawPushes": [
+      {
+        "author": "bob",
+        "content": "回樓上：沒有前文",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      }
+    ],
+    "expected": {
+      "replies": [
+        {
+          "author": "bob",
+          "content": "回樓上：沒有前文",
+          "replyToAuthor": null,
+          "score": 0
+        }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "upstairs-invalid-reference-breaks-inheritance",
+    "primaryRule": "THREAD-005.3",
+    "rules": [
+      "THREAD-005.3"
+    ],
+    "articleAuthor": "op",
+    "rawPushes": [
+      {
+        "author": "alice",
+        "content": "問題。",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      },
+      {
+        "author": "bob",
+        "content": "回1樓：先回答",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      },
+      {
+        "author": "carol",
+        "content": "撤回我對1樓的推",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      },
+      {
+        "author": "bob",
+        "content": "回樓上：再回答",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      },
+      {
+        "author": "bob",
+        "content": "繼續說明。",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      }
+    ],
+    "expected": {
+      "replies": [
+        {
+          "author": "alice",
+          "content": "問題。",
+          "replyToAuthor": null,
+          "score": 0
+        },
+        {
+          "author": "bob",
+          "content": "先回答",
+          "replyToAuthor": "alice",
+          "score": 0
+        },
+        {
+          "author": "bob",
+          "content": "回樓上：再回答\n繼續說明。",
+          "replyToAuthor": null,
+          "score": 0
+        }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "upstairs-withdrawn-target-is-not-retargeted",
+    "primaryRule": "THREAD-005.3",
+    "rules": [
+      "THREAD-005.3"
+    ],
+    "articleAuthor": "op",
+    "rawPushes": [
+      {
+        "author": "dora",
+        "content": "更早的話。",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      },
+      {
+        "author": "alice",
+        "content": "目標。",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      },
+      {
+        "author": "bob",
+        "content": "推樓上",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      },
+      {
+        "author": "alice",
+        "content": "撤回我在2樓的發言",
+        "type": "neutral",
+        "time": "09/08 12:00"
+      }
+    ],
+    "expected": {
+      "replies": [
+        {
+          "author": "dora",
+          "content": "更早的話。",
+          "replyToAuthor": null,
+          "score": 0
+        },
+        {
+          "author": "bob",
+          "content": "推樓上",
+          "replyToAuthor": null,
+          "score": 0
+        }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
     "id": "nested-supported-target-patterns",
     "primaryRule": "THREAD-001.1",
     "rules": ["THREAD-001.1", "THREAD-001.2", "THREAD-001.3", "RAW-001.2"],

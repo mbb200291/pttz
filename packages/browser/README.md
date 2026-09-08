@@ -2,7 +2,7 @@
 
 Official browser gateway and client factory for `@pttzzz/core`.
 
-The current package version is `0.1.0`, targeting rules `0.1.x`. See
+The current package version is `0.2.0`, targeting rules `0.2.x`. See
 [package.json](./package.json) for dependencies and compatibility declarations.
 These declarations do not establish npm publication status.
 
