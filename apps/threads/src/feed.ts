@@ -1,5 +1,15 @@
 import { articleKeyId, type ArticleSummary, type PttzzzClient } from "@pttzzz/core";
 export interface FeedSnapshot { items: ArticleSummary[]; errors: string[]; completed: number; total: number }
+/** Avoid repeating the card's metadata; never alter the core article body. */
+export function feedBody(body: string, summary: ArticleSummary): string {
+  const lines=body.split("\n");
+  const author=lines[0]?.match(/^作者\s+(\S+)/)?.[1];
+  const title=lines[1]?.match(/^標題\s+(.+)/)?.[1].trim();
+  if (author===summary.author && title===summary.title && /^時間\s+\S/.test(lines[2] ?? "")) {
+    return lines.slice(3).join("\n").replace(/^\n+/,"");
+  }
+  return body;
+}
 export async function loadFeed(client: Pick<PttzzzClient, "listBoards" | "filterArticles">, current: () => boolean, progress: (done: number, total: number) => void = () => {}, minimumNativeScore = 20): Promise<FeedSnapshot> {
   const result: FeedSnapshot = {items:[],errors:[],completed:0,total:0};
   if (!current()) return result;

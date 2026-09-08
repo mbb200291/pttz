@@ -2,11 +2,20 @@
 
 **Goal:** 獨立 apps/threads，登入後直接提供熱門看板精選與文章閱讀；第一版唯讀。
 
-**Architecture:** 沿用 core/browser 公開 API。串行讀熱門前5板，每板最多6篇、PTT推數>=20，排除置頂，輪流混合。不做全站排名、推薦引擎或全文預抓。
+**Architecture:** 沿用 core/browser 公開 API。串行讀熱門前5板，每板最多6篇、PTT推數>=20，排除置頂，輪流混合。依可視範圍依序載入內文，不做全站排名、推薦引擎或初始全量正文預抓。
 
 **Tech Stack:** Vanilla TypeScript、Vite、Vitest；無新UI框架。
 
-**視覺方向:** 深色單欄閱讀串流、細分隔、單一暖白文字層級；作者與看板提供脈絡。主區工作內容為文章摘要，點入才載入內文。焦點與 hover 輕量回饋，明確載入狀態與返回導覽，不加入裝飾動畫。
+## 串流內文與緊湊排版修訂
+
+依使用者 review：直接顯示內文、過長收合，於原位向下展開；沿用深色、細分隔與單欄，減少標頭與列間距，動態僅用原生展開及焦點回饋。
+
+- [x] 先補 app 測試：可視文章逐筆讀取、partial 內文、展開／收合不換頁、不重讀、離頁停止排隊、斷線清除快取。
+- [x] 修改 app.ts：IntersectionObserver 啟動可視範圍預覽，重用同篇 in-flight／final，保留查看討論入口；快取限本次最多 30 篇串流。
+- [x] 修改 style.css：正文最多五行（max-height fallback），縮小上下留白；長文原位展開，ResizeObserver 更新收合按鈕。
+- [x] 更新 UI README／notes；測試、build、lint 與桌面／手機 preview，實作與文件同一 commit；不 merge/push。
+
+**視覺方向:** 深色單欄閱讀串流、細分隔、單一暖白文字層級；作者與看板提供脈絡。主區直接呈現內文預覽，長文原位展開。焦點與 hover 輕量回饋，明確載入狀態與返回導覽，不加入裝飾動畫。
 
 - [x] feed tests：串行與上限、置頂/重複、部分失敗、取消後不發新請求。
 - [x] feed 實作與文章 generation/revision gate；先建立失敗案例再實作。

@@ -1,8 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import { ok, type ArticleSummary } from "@pttzzz/core";
-import { loadFeed } from "./feed";
+import { feedBody, loadFeed } from "./feed";
 const article = (board: string, index: number, pinned = false): ArticleSummary => ({key:{board,index},title:board+index,author:"alice",pinned,nativeScoreLabel:"爆"});
 const boards = ["A","B","C","D","E","F"];
+it("omits only a matching duplicated PTT header from the inline excerpt", () => {
+  const summary=article("Test",1);
+  expect(feedBody("作者  alice\n標題  Test1\n時間  Tue Sep 08 12:00:00 2026\n\n這是正文",summary)).toBe("這是正文");
+  expect(feedBody("作者  someoneElse\n標題  Test1\n時間  今天\n\n這是正文",summary)).toContain("作者");
+  expect(feedBody("  保留縮排\n作者在文章中說明",summary)).toBe("  保留縮排\n作者在文章中說明");
+});
 function source() {
   return {
     listBoards: vi.fn(async () => ok({kind:"boards" as const,items:boards.map(name=>({name,title:name}))})),

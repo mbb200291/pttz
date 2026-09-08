@@ -1,5 +1,5 @@
-import { articleKeyId, type Article, type ArticleSummary, type PartialArticle, type PttzzzClient, type Reply } from "@pttzzz/core";
-import { loadFeed, type FeedSnapshot } from "./feed";
+import { articleKeyId, ok, type Article, type ArticleSummary, type PartialArticle, type PttzzzClient, type Reply, type Result } from "@pttzzz/core";
+import { feedBody, loadFeed, type FeedSnapshot } from "./feed";
 import { RequestScope } from "./requestScope";
 
 function node<K extends keyof HTMLElementTagNameMap>(tag: K, text = "", className = ""): HTMLElementTagNameMap[K] {
@@ -21,6 +21,50 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
   let feed: FeedSnapshot = {items:[],errors:[],completed:0,total:0};
   let feedScroll = 0;
   let selectedId = "";
+  type CachedArticle = { snapshot?: Article | PartialArticle; pending?: Promise<Result<Article>>; error?: string };
+  const articleCache = new Map<string, CachedArticle>();
+  const expanded = new Set<string>();
+  let previewUpdates = new Map<string, () => void>();
+  let stopPreviews = () => {};
+  function clearPreviews(): void {
+    stopPreviews(); previewUpdates.clear(); articleCache.clear(); expanded.clear();
+  }
+  // The same read serves a visible excerpt and an explicitly opened article.
+  function readArticle(article: ArticleSummary): Promise<Result<Article>> {
+    const id = articleKeyId(article.key);
+    let entry = articleCache.get(id);
+    if (entry?.snapshot?.completeness === "final") return Promise.resolve(ok(entry.snapshot));
+    if (entry?.pending) return entry.pending;
+    entry = { snapshot: entry?.snapshot };
+    articleCache.set(id, entry);
+    const target = entry;
+    let revision = -Infinity;
+    let final = false;
+    const publish = (snapshot: Article | PartialArticle): void => {
+      if (articleCache.get(id) !== target || articleKeyId(snapshot.key) !== id || final || snapshot.revision <= revision) return;
+      revision = snapshot.revision; final = snapshot.completeness === "final";
+      target.snapshot = snapshot;
+      previewUpdates.get(id)?.();
+    };
+    const stop = client.subscribe(event => {
+      if (event.type === "article.partial" || event.type === "article.updated") publish(event.article);
+    });
+    target.pending = (async () => {
+      try {
+        const result = await client.getArticle({ article: article.key });
+        if (result.ok) publish(result.value);
+        else target.error = result.error.message;
+        return result;
+      } catch {
+        target.error = "內文讀取失敗";
+        return { ok: false, error: { code: "READ_FAILED", message: target.error, retryable: true } } as const;
+      } finally {
+        stop(); target.pending = undefined;
+        if (articleCache.get(id) === target) previewUpdates.get(id)?.();
+      }
+    })();
+    return target.pending;
+  }
   let unsubscribeArticle: (() => void) | undefined;
   function stopReading(): void { unsubscribeArticle?.(); unsubscribeArticle=undefined; }
   const header = node("header");
@@ -43,6 +87,7 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
     return title;
   }
   function reset(message: string): void {
+    clearPreviews();
     scope.invalidate(); stopReading(); user=""; feed={items:[],errors:[],completed:0,total:0};
     selectedId=""; feedScroll=0; account.replaceChildren();
     content.replaceChildren(heading("閱讀暫停"),button("重新登入",()=>location.reload()));
@@ -88,8 +133,10 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
       if (!current()) return;
       if (!result.ok) { showStatus(result.error.message); return; }
       user=result.value.userId;
+      clearPreviews();
       feed={items:[],errors:[],completed:0,total:0}; feedScroll=0; selectedId="";
       account.replaceChildren(node("span",preview ? "預覽模式" : user),button("登出",()=>{
+        clearPreviews();
         scope.invalidate(); user=""; feed={items:[],errors:[],completed:0,total:0};
         account.replaceChildren(); content.replaceChildren(heading("正在登出…"));
         void client.disconnect().then(()=>reset("已登出。"),()=>reset("連線清理失敗，請重新整理。"));
@@ -99,8 +146,41 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
   }
 
   function renderFeed(restore = false): void {
-    scope.invalidate(); stopReading();
-    const title=heading("此刻，大家在聊什麼。");
+    scope.invalidate(); stopReading(); stopPreviews();
+    previewUpdates = new Map();
+    let active = true;
+    let reading = false;
+    const queue: ArticleSummary[] = [];
+    const queued = new Set<string>();
+    const resizeCallbacks: (() => void)[] = [];
+    const resize = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(() => resizeCallbacks.forEach(update => update()));
+    const drain = async (): Promise<void> => {
+      if (reading) return;
+      reading = true;
+      while (active && queue.length) {
+        const article = queue.shift()!;
+        if (!active) break;
+        await readArticle(article);
+      }
+      reading = false;
+    };
+    const enqueue = (article: ArticleSummary): void => {
+      const id = articleKeyId(article.key);
+      if (!active || queued.has(id)) return;
+      queued.add(id); queue.push(article); void drain();
+    };
+    const observer = typeof IntersectionObserver === "undefined" ? undefined : new IntersectionObserver(entries => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        const article = feed.items.find(item => articleKeyId(item.key) === (entry.target as HTMLElement).dataset.articleId);
+        if (article) enqueue(article);
+        observer?.unobserve(entry.target);
+      }
+    });
+    stopPreviews = () => {
+      active = false; queue.length = 0; observer?.disconnect(); resize?.disconnect(); previewUpdates.clear();
+    };
+    const title=heading("熱門討論");
     const top=node("div","","feed-heading");
     top.append(title,button("重新整理",()=>void refresh()));
     const explanation=node("p",preview
@@ -108,14 +188,50 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
       : "前五個熱門看板 · PTT 原生推數至少 20 · 各板最多六篇，依來源交錯排列","muted");
     const list=node("div","","feed");
     for (const article of feed.items) {
-      const item=button("",()=>void openArticle(article),"feed-item");
-      item.dataset.articleId=articleKeyId(article.key);
+      const id = articleKeyId(article.key);
+      const item=node("article","","feed-item");
+      item.dataset.articleId=id;
       item.append(node("span",article.author.slice(0,2).toUpperCase(),"avatar"));
-      const details=node("span","","item-detail");
+      const details=node("div","","item-detail");
+      const titleButton=button(article.title,()=>void openArticle(article),"item-title");
+      titleButton.dataset.articleId=id;
       details.append(node("span",article.author+" · "+article.key.board,"byline"),
-        node("span",article.title,"item-title"),
-        node("span",[article.publishedAt,article.nativeScoreLabel ?? article.nativeScore?.toString(), "閱讀全文 ↗"].filter(Boolean).join(" · "),"muted"));
+        titleButton);
+      const body=node("div","","feed-body");
+      body.id="feed-body-"+feed.items.indexOf(article);
+      const loading=node("p","內文等待載入…","muted excerpt-status");
+      const toggle=button("展開全文",()=>{
+        if (expanded.has(id)) expanded.delete(id); else expanded.add(id);
+        update();
+      },"text-action");
+      toggle.setAttribute("aria-controls",body.id); toggle.hidden=true;
+      const retry=button("重試內文",()=>void readArticle(article),"text-action"); retry.hidden=true;
+      const update=():void=>{
+        const entry=articleCache.get(id);
+        const snapshot=entry?.snapshot;
+        const text=snapshot?.body===undefined ? undefined : feedBody(snapshot.body,article);
+        if (text!==undefined && body.textContent!==text) body.textContent=text;
+        const isExpanded=expanded.has(id);
+        body.classList.toggle("expanded",isExpanded);
+        toggle.setAttribute("aria-expanded",String(isExpanded));
+        toggle.textContent=isExpanded?"收合":"展開全文";
+        const height=body.scrollHeight;
+        const lineHeight=parseFloat(getComputedStyle(body).lineHeight) || 24;
+        toggle.hidden=!(height>lineHeight*5+1 || (!height && (text?.split("\n").length ?? 0)>5));
+        const complete=snapshot?.completeness==="final";
+        loading.textContent=entry?.error ?? (complete ? (text?.trim() ? "" : "（無內文）") : text ? "正在讀取其餘內容…" : "內文等待載入…");
+        loading.hidden=!loading.textContent;
+        retry.hidden=!entry?.error;
+      };
+      const actions=node("div","","feed-actions");
+      actions.append(toggle,retry,button("查看討論",()=>void openArticle(article),"text-action"),
+        node("span",[article.publishedAt,article.nativeScoreLabel ?? article.nativeScore?.toString()].filter(Boolean).join(" · "),"muted"));
+      details.append(body,loading,actions);
+      previewUpdates.set(id,update); resizeCallbacks.push(update); update();
       item.append(details); list.append(item);
+      resize?.observe(body);
+      observer?.observe(item);
+      if (!observer) enqueue(article);
     }
     if (!feed.items.length) list.append(node("p","這次沒有取得符合條件的文章。可以稍後重新整理。","empty"));
     const errors=node("div","","errors");
@@ -129,6 +245,7 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
     }
   }
   async function refresh(): Promise<void> {
+    clearPreviews();
     stopReading();
     const current=scope.next();
     content.replaceChildren(heading("正在整理討論…"),node("p","依序讀取熱門看板，不會自動發文或回覆。","muted"));
@@ -188,6 +305,7 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
     };
   }
   async function openArticle(article: ArticleSummary): Promise<void> {
+    stopPreviews();
     feedScroll=window.scrollY; selectedId=articleKeyId(article.key);
     stopReading();
     const current=scope.next();
@@ -205,7 +323,9 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
     unsubscribeArticle=stop;
     window.scrollTo(0,0); showStatus("讀取完整文章…");
     try {
-      const result=await client.getArticle({article:article.key});
+      const cached=articleCache.get(selectedId)?.snapshot;
+      if(cached) accept(cached);
+      const result=await readArticle(article);
       if (!current()) return;
       if(!result.ok) {showStatus(result.error.message);return;}
       accept(result.value);
@@ -214,5 +334,5 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
   }
   renderLogin();
   if(preview) void login("preview","preview");
-  return ()=>{scope.invalidate();stopReading();unsubscribe();root.replaceChildren();};
+  return ()=>{clearPreviews();scope.invalidate();stopReading();unsubscribe();root.replaceChildren();};
 }
