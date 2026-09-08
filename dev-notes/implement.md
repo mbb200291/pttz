@@ -77,7 +77,7 @@ npm run verify    # tests + helper tests + build + lint + pack/example smoke
 
 ## Goal 12：Threads 風格唯讀介面
 
-串流依可視範圍依序讀取正文，預設五行並可原位展開；同篇預覽與討論頁共用本次串流的讀取及快取，刷新或連線結束時清除。緊湊版面不改動核心解析規則。
+串流依可視範圍依序讀取正文，預設五行，點文章區塊原位展開全文與回覆；共用本次串流的讀取及快取，刷新或連線結束時清除。圖片與 YouTube 直接呈現為原生橫向媒體列；緊湊版面及媒體網址識別不改動核心解析規則。
 
 `apps/threads` 為獨立的原生 TypeScript/Vite 介面，透過公開 core/browser 契約取得熱門看板精選、逐步讀取文章、呈現巢狀回覆與編輯歷程。第一版以五個熱門看板、每板最多六篇及原生推數門檻 20 組成有限串流，不另建推薦引擎；保留原 Web UI，新增 `npm run dev:threads` 入口。詳見 [plan](goal-12-implementation-plan.md)、[notes](goal-12-implementation-notes.md) 及 [UI README](../apps/threads/README.md)。
 

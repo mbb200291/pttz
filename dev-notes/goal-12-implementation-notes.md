@@ -4,6 +4,17 @@
 
 新增 `apps/threads`，獨立唯讀 TypeScript/Vite UI，以熱門看板精選為入口。不改 core/browser、原有 Web UI 或 spec.md。UI 取捨與啟動方式集中於 [介面 README](../apps/threads/README.md)。
 
+## 原位討論與媒體修訂（2026-09-08）
+
+- 使用者確認整塊文章原位展開全文與回覆，移除「查看討論」及獨立文章頁流程。標題使用原生 button 保留 Enter／Space 操作，媒體、回覆、連結、選字及拖曳不切換收合。
+- `media.ts` 只在 UI 識別媒體網址，不引用另一個 UI 或修改 core。HTTPS 圖片、單張 Imgur、YouTube 主機及 11 字元 ID 通過 URL 驗證後才嵌入；任意 HTML 不執行。
+- 原生橫向捲動、右側露出下一張、scroll snap proximity；圖片 lazy/no-referrer，YouTube lazy/privacy-enhanced iframe、不自動播放，來源連結一直保留。第三方連線風險已寫入 UI README。
+- 參考 [MDN scroll-snap-type](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/scroll-snap-type)、[YouTube 嵌入說明](https://support.google.com/youtube/answer/171780)；modern-web-guidance 離線未命中，改查官方文件。未新增依賴。
+- 審查發現 partial 重建 PTT 統計 details 會清除展開及焦點；以失敗測試重現後改為穩定容器。媒體追加或移除前方圖片均保留既有播放器、不 detach；若原文真的重新排列既有媒體，仍可能因 DOM 排序重啟播放器。
+- 以本機 fake gateway 驗證，未登入真實 PTT。外部測試圖片載入失敗時會保留原圖連結；正常圖片版面另用記憶體 SVG 示意圖驗證，不宣稱所有圖床可用。
+- 手機 390px：頁面無橫向溢出，媒體列 clientWidth 316／scrollWidth 854，滑至影片後點播放器仍維持文章收合。YouTube 顯示播放器控制項；標題 Enter／Space 及點正文能原位展開／收合。測試假資料與網路攔截已還原。
+- 完整 `npm run verify` 通過：core 329、browser 168、Web 205、Threads 19，另 11 helper、build、lint、package smoke；只有既有 Fast Refresh／bundle size 警告。
+
 ## 實作注意事項
 
 - feed 先寫失敗測試，再實作五板、每板六篇、推數門檻、去重與交錯順序；只用公開 core/browser API。

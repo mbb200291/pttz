@@ -42,7 +42,7 @@ it("uses safe text and returning stays on the feed when the shared article finis
   const item=await screen.findByRole("button",{name:/A <script>title/});
   expect(document.querySelector("script")).toBeNull();
   fireEvent.click(item);
-  fireEvent.click(screen.getByRole("button",{name:"返回串流"}));
+  fireEvent.click(item);
   test.finish();
   await waitFor(()=>expect(document.querySelector(".feed-body")?.textContent).toBe("Secret body"));
   expect(screen.queryByRole("button",{name:"返回串流"})).toBeNull();
@@ -98,8 +98,8 @@ it("loads a visible excerpt before opening and expands inline without another re
   });
   const excerpt=card.querySelector<HTMLElement>(".feed-body")!;
   expect(excerpt.textContent).toContain("第一段");
-  const toggle=screen.getByRole("button",{name:"展開全文"});
-  fireEvent.click(toggle);
+  const toggle=screen.getByRole("button",{name:/A <script>title/});
+  fireEvent.click(card);
   expect(toggle.getAttribute("aria-expanded")).toBe("true");
   expect(screen.queryByRole("button",{name:"返回串流"})).toBeNull();
   fireEvent.click(toggle);
@@ -119,7 +119,7 @@ it("clears the feed and pending reads on disconnect", async () => {
 it("shows partial content, rejects older revisions and other articles without replacing focus", async () => {
   const test=setup();
   fireEvent.click(await screen.findByRole("button",{name:/A <script>title/}));
-  const back=screen.getByRole("button",{name:"返回串流"});
+  const back=screen.getByRole("button",{name:/A <script>title/});
   back.focus();
   const emitPartial=(index:number, revision:number, body:string)=>test.emit({
     type:"article.partial",articleKey:{board:"Test",index},revision,
@@ -136,5 +136,43 @@ it("shows partial content, rejects older revisions and other articles without re
   emitPartial(1,4,"After navigation");
   expect(document.querySelector(".feed-body")?.textContent).toBe("After navigation");
   expect(screen.queryByRole("button",{name:"返回串流"})).toBeNull();
+  test.finish();
+});
+
+it("expands replies inline, keeps media stable and ignores media or text selection clicks", async () => {
+  const test=setup();
+  const title=await screen.findByRole("button",{name:/A <script>title/});
+  const card=document.querySelector<HTMLElement>(".feed-item")!;
+  fireEvent.click(card);
+  expect(title.getAttribute("aria-expanded")).toBe("true");
+  expect(screen.queryByRole("button",{name:"查看討論"})).toBeNull();
+  const snapshot = {key:{board:"Test",index:1},revision:1,completeness:"incomplete" as const,
+    body:"正文\nhttps://example.com/a.jpg\nhttps://youtu.be/dQw4w9WgXcQ", replies:[{
+      replyId:"r1",author:"bob",content:"這是回覆",pushType:"neutral" as const,depth:0,
+      score:0,votes:{pushCount:0,booCount:0,score:0},visible:true,isOp:false,edits:[],children:[],
+    }]};
+  test.emit({type:"article.partial",articleKey:snapshot.key,revision:1,article:snapshot});
+  expect(screen.getByText("這是回覆")).toBeTruthy();
+  const frame=card.querySelector("iframe")!;
+  expect(frame).not.toBeNull();
+  const native=screen.getByText("PTT 原始統計").parentElement as HTMLDetailsElement;
+  native.open=true; native.querySelector("summary")!.focus();
+  fireEvent.click(card.querySelector(".media-strip")!);
+  expect(title.getAttribute("aria-expanded")).toBe("true");
+  const range=document.createRange(); range.selectNodeContents(card.querySelector(".feed-body")!);
+  window.getSelection()!.removeAllRanges();
+  window.getSelection()!.addRange(range);
+  expect(window.getSelection()!.toString()).toContain("正文");
+  fireEvent.click(card);
+  expect(title.getAttribute("aria-expanded")).toBe("true");
+  window.getSelection()!.removeAllRanges();
+  test.emit({type:"article.partial",articleKey:snapshot.key,revision:2,article:{...snapshot,revision:2,body:snapshot.body+"\n更新"}});
+  expect(card.querySelector("iframe")).toBe(frame);
+  expect(screen.getByText("PTT 原始統計").parentElement).toBe(native);
+  expect(native.open).toBe(true);
+  expect(document.activeElement).toBe(native.querySelector("summary"));
+  fireEvent.click(title);
+  expect(card.querySelector<HTMLElement>(".inline-discussion")!.hidden).toBe(true);
+  expect(card.querySelector("iframe")).toBe(frame);
   test.finish();
 });
