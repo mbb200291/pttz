@@ -1,0 +1,76 @@
+[
+  {
+    "id": "nested-supported-target-patterns",
+    "rules": ["RAW-001", "THREAD-004"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "root", "content": "根。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "回1樓：中文", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "bob", "content": "TO 1F English", "time": "01/01 12:02" },
+      { "type": "neutral", "author": "carol", "content": ">>1f imageboard", "time": "01/01 12:03" },
+      { "type": "neutral", "author": "dave", "content": "回1F upper-F", "time": "01/01 12:04" },
+      { "type": "neutral", "author": "erin", "content": "reply to 1F long-English", "time": "01/01 12:05" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "root", "content": "根。", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "中文", "replyToAuthor": "root", "score": 0 },
+        { "author": "bob", "content": "English", "replyToAuthor": "root", "score": 0 },
+        { "author": "carol", "content": "imageboard", "replyToAuthor": "root", "score": 0 },
+        { "author": "dave", "content": "upper-F", "replyToAuthor": "root", "score": 0 },
+        { "author": "erin", "content": "long-English", "replyToAuthor": "root", "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "nested-interleaved-targets-stay-separate",
+    "rules": ["THREAD-001", "THREAD-006"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "root-a", "content": "A。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "root-b", "content": "B。", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "回1樓：先回 A", "time": "01/01 12:02" },
+      { "type": "neutral", "author": "bob", "content": "路過。", "time": "01/01 12:03" },
+      { "type": "neutral", "author": "alice", "content": "回2樓：再回 B", "time": "01/01 12:04" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "root-a", "content": "A。", "replyToAuthor": null, "score": 0 },
+        { "author": "root-b", "content": "B。", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "先回 A", "replyToAuthor": "root-a", "score": 0 },
+        { "author": "bob", "content": "路過。", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "再回 B", "replyToAuthor": "root-b", "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "nested-three-level-clamp",
+    "rules": ["THREAD-007"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "第一層。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "bob", "content": "回1樓：第二層。", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "carol", "content": "回2樓：第三層。", "time": "01/01 12:02" },
+      { "type": "neutral", "author": "dave", "content": "回3樓：第四層提升。", "time": "01/01 12:03" },
+      { "type": "neutral", "author": "erin", "content": "回4樓：超深也提升。", "time": "01/01 12:04" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "alice", "content": "第一層。", "replyToAuthor": null, "score": 0 },
+        { "author": "bob", "content": "第二層。", "replyToAuthor": "alice", "score": 0 },
+        { "author": "carol", "content": "第三層。", "replyToAuthor": "bob", "score": 0 },
+        { "author": "dave", "content": "第四層提升。", "replyToAuthor": "bob", "score": 0 },
+        { "author": "erin", "content": "超深也提升。", "replyToAuthor": "bob", "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  }
+]

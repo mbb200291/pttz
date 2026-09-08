@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
+  aggregateThreadSnapshot,
   aggregatePushes,
   calcArticleScore,
   detectArticleVote,
   detectVote,
+  normalizeThreadEvents,
   normalizePttId,
 } from "../pushAggregator";
 import type { ArticleEditRecord, OpEditedReplySegment, RawPush } from "../parser";
@@ -34,6 +36,22 @@ describe("單則推文不聚合", () => {
     expect(thread.pushes).toHaveLength(1);
     expect(thread.pushes[0].content).toBe("Hello");
     expect(thread.pushes[0].author).toBe("alice");
+  });
+});
+
+describe("thread snapshot status", () => {
+  it.each([
+    [false, "incomplete"],
+    [true, "final"],
+  ] as const)("maps complete=%s to %s", (complete, status) => {
+    const snapshot = aggregateThreadSnapshot(
+      [push("alice", "Hello")],
+      OP,
+      complete,
+    );
+
+    expect(snapshot.status).toBe(status);
+    expect(snapshot.thread.pushes[0].content).toBe("Hello");
   });
 });
 
@@ -122,6 +140,29 @@ describe("連續同作者推文合併", () => {
     expect(alicePushes[0].content).toBe("Hello\nWorld");
   });
 
+  it("連續同作者同目標以串接符號續接即使相隔六分鐘仍合併", () => {
+    const raw = [
+      push("root", "根。", "01/01 12:00", "neutral", 10, 1),
+      push("alice", "回1樓：前段。||", "01/01 12:01", "neutral", 20, 2),
+      push("alice", "回1樓：六分鐘後", "01/01 12:07", "neutral", 30, 3),
+    ];
+    const alicePushes = aggregatePushes(raw, OP).pushes.filter(
+      (item) => item.author === "alice",
+    );
+
+    expect(alicePushes).toHaveLength(1);
+    expect(alicePushes[0].content).toBe("前段。\n六分鐘後");
+  });
+
+  it("連續同作者在時間格式無效時仍依連續條件合併", () => {
+    const raw = [
+      push("alice", "前段", "invalid-a"),
+      push("alice", "後段", "invalid-b"),
+    ];
+
+    expect(aggregatePushes(raw, OP).pushes).toHaveLength(1);
+  });
+
   it("中間有他人但時間間隔小且前則未用終止符時仍合併", () => {
     const raw = [push("alice", "Hello"), push("bob", "Hi"), push("alice", "World")];
     const thread = aggregatePushes(raw, OP);
@@ -178,6 +219,60 @@ describe("不連續推文的合併條件", () => {
     const result = aggregatePushes(raw, OP).pushes;
     const alicePushes = result.filter((r) => r.author === "alice");
     expect(alicePushes).toHaveLength(2);
+  });
+
+  it("不連續相隔六分鐘時不合併", () => {
+    const raw = [
+      push("alice", "前段", "01/01 12:00"),
+      push("bob", "插入。", "01/01 12:01"),
+      push("alice", "後段", "01/01 12:06"),
+    ];
+
+    expect(aggregatePushes(raw, OP).pushes.filter((item) => item.author === "alice"))
+      .toHaveLength(2);
+  });
+
+  it("不連續跨月一分鐘時合併", () => {
+    const raw = [
+      push("alice", "前段", "01/31 23:59"),
+      push("bob", "插入。", "02/01 00:00"),
+      push("alice", "後段", "02/01 00:00"),
+    ];
+
+    expect(aggregatePushes(raw, OP).pushes.filter((item) => item.author === "alice"))
+      .toHaveLength(1);
+  });
+
+  it.each([
+    ["02/28 23:59", "03/01 00:00"],
+    ["02/29 23:59", "03/01 00:00"],
+  ])("不連續跨二月邊界 %s → %s 一分鐘時合併", (before, after) => {
+    const raw = [
+      push("alice", "前段", before),
+      push("bob", "插入。", after),
+      push("alice", "後段", after),
+    ];
+
+    expect(aggregatePushes(raw, OP).pushes.filter((item) => item.author === "alice"))
+      .toHaveLength(1);
+  });
+
+  it("不連續且時間無效或缺失時不合併", () => {
+    const invalid: AnchoredRawPush[] = [
+      push("alice", "前段", "invalid-a"),
+      push("bob", "插入。", "01/01 12:01"),
+      push("alice", "後段", "invalid-b"),
+    ];
+    const missing: AnchoredRawPush[] = [
+      { type: "push", author: "alice", content: "前段" } as RawPush,
+      push("bob", "插入。", "01/01 12:01"),
+      { type: "push", author: "alice", content: "後段" } as RawPush,
+    ];
+
+    for (const raw of [invalid, missing]) {
+      expect(aggregatePushes(raw, OP).pushes.filter((item) => item.author === "alice"))
+        .toHaveLength(2);
+    }
   });
 
   it("前則結尾是驚嘆號或問號 → 不合併", () => {
@@ -899,6 +994,22 @@ describe("HTML vote model alignment", () => {
     const target = thread.pushes.find((item) => item.author === "carol")!;
     expect(target.score).toBe(0);
     expect(thread.pushes.some((item) => item.author === "alice")).toBe(false);
+  });
+
+  it("projects a withdrawn raw event as an invisible single-space placeholder", () => {
+    const events = normalizeThreadEvents([
+      push("root", "目標。", "08/12 22:40", "neutral", 10, 1),
+      push("alice", "推1樓 原回覆。", "08/12 22:41", "neutral", 20, 2),
+      push("alice", "撤回我在2樓的發言", "08/12 22:42", "neutral", 30, 3),
+    ]);
+
+    expect(events.find((event) => event.rawFloor === 2)).toEqual({
+      rawFloor: 2,
+      author: "alice",
+      content: " ",
+      withdrawn: true,
+      visible: false,
+    });
   });
 
   it("applies Replace to body as opaque text without changing structure or vote", () => {

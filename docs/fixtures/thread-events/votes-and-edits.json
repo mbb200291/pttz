@@ -1,0 +1,153 @@
+[
+  {
+    "id": "votes-pure-article-and-inverse-raw-score",
+    "rules": ["VOTE-001", "VOTE-003", "VOTE-006"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "push", "author": "alice", "content": "推", "time": "01/01 12:00" },
+      { "type": "boo", "author": "alice", "content": "噓", "time": "01/01 12:01" },
+      { "type": "boo", "author": "bob", "content": "噓", "time": "01/01 12:02" }
+    ],
+    "expected": {
+      "replies": [],
+      "nativeArticleScore": -1,
+      "articlePushVoters": [],
+      "articleBooVoters": ["bob"]
+    }
+  },
+  {
+    "id": "votes-pure-reply-dedup-and-last-direction",
+    "rules": ["VOTE-002", "VOTE-004", "VOTE-005"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "root", "content": "目標。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "推1樓", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "推1樓", "time": "01/01 12:02" },
+      { "type": "neutral", "author": "alice", "content": "噓1樓", "time": "01/01 12:03" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "root", "content": "目標。", "replyToAuthor": null, "score": -1 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "votes-composite-body-and-ptt-type",
+    "rules": ["THREAD-005", "VOTE-003", "VOTE-004", "VOTE-005"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "root", "content": "目標。", "time": "01/01 12:00" },
+      { "type": "boo", "author": "alice", "content": "推1樓：同意", "time": "01/01 12:01" },
+      { "type": "push", "author": "bob", "content": "噓1樓 不同意", "time": "01/01 12:02" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "root", "content": "目標。", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "同意", "replyToAuthor": "root", "score": 0 },
+        { "author": "bob", "content": "不同意", "replyToAuthor": "root", "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "votes-reply-withdraw-keeps-body",
+    "rules": ["VOTE-005", "VOTE-006"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "root", "content": "目標。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "推1樓 我同意。", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "撤回我對1樓的推", "time": "01/01 12:02" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "root", "content": "目標。", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "我同意。", "replyToAuthor": "root", "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "edits-append-opaque-payload",
+    "rules": ["EDIT-001", "EDIT-002"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "原文。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "補充我在1樓發言：推99樓 只是文字", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "alice", "content": "原文。\n推99樓 只是文字", "replyToAuthor": null, "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "edits-replace-preserves-structure",
+    "rules": ["EDIT-001", "EDIT-002"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "root", "content": "根。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "回1樓：原回覆。", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "更正我在2樓發言：回99樓：opaque", "time": "01/01 12:02" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "root", "content": "根。", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "回99樓：opaque", "replyToAuthor": "root", "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
+    "id": "edits-withdraw-removes-visible-body",
+    "rules": ["RAW-001", "EDIT-001", "EDIT-003"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "root", "content": "目標。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "推1樓 原回覆。", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "撤回我在2樓的發言", "time": "01/01 12:02" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "root", "content": "目標。", "replyToAuthor": null, "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    },
+    "expectedNormalizedEvents": [
+      {
+        "rawFloor": 1,
+        "author": "root",
+        "content": "目標。",
+        "withdrawn": false,
+        "visible": true
+      },
+      {
+        "rawFloor": 2,
+        "author": "alice",
+        "content": " ",
+        "withdrawn": true,
+        "visible": false
+      },
+      {
+        "rawFloor": 3,
+        "author": "alice",
+        "content": "",
+        "withdrawn": false,
+        "visible": false
+      }
+    ]
+  }
+]

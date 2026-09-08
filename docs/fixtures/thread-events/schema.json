@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pttzzz.dev/schemas/thread-events.json",
+  "title": "PTTzzz thread-event conformance cases",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["id", "rules", "articleAuthor", "rawPushes", "expected"],
+    "properties": {
+      "id": { "type": "string", "minLength": 1 },
+      "rules": {
+        "type": "array",
+        "minItems": 1,
+        "uniqueItems": true,
+        "items": { "type": "string", "pattern": "^(RAW|THREAD|VOTE|EDIT|PARTIAL)-[0-9]{3}$" }
+      },
+      "articleAuthor": { "type": "string", "minLength": 1 },
+      "rawPushes": {
+        "type": "array",
+        "items": { "$ref": "#/$defs/rawPush" }
+      },
+      "expected": { "$ref": "#/$defs/expected" },
+      "expectedNormalizedEvents": {
+        "type": "array",
+        "items": { "$ref": "#/$defs/normalizedEvent" }
+      },
+      "stages": {
+        "type": "array",
+        "minItems": 2,
+        "items": { "$ref": "#/$defs/stage" }
+      }
+    }
+  },
+  "$defs": {
+    "rawPush": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "author", "content", "time"],
+      "properties": {
+        "type": { "enum": ["push", "boo", "neutral", "edit"] },
+        "author": { "type": "string" },
+        "content": { "type": "string" },
+        "time": { "type": "string" },
+        "ipAddress": { "type": "string" },
+        "isFullWidthLine": { "type": "boolean" }
+      }
+    },
+    "reply": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["author", "content", "replyToAuthor", "score"],
+      "properties": {
+        "author": { "type": "string" },
+        "content": { "type": "string" },
+        "replyToAuthor": { "type": ["string", "null"] },
+        "score": { "type": "integer" }
+      }
+    },
+    "normalizedEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rawFloor", "author", "content", "withdrawn", "visible"],
+      "properties": {
+        "rawFloor": { "type": "integer", "minimum": 1 },
+        "author": { "type": "string" },
+        "content": { "type": "string" },
+        "withdrawn": { "type": "boolean" },
+        "visible": { "type": "boolean" }
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["replies", "nativeArticleScore", "articlePushVoters", "articleBooVoters"],
+      "properties": {
+        "replies": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/reply" }
+        },
+        "nativeArticleScore": { "type": "integer" },
+        "articlePushVoters": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "articleBooVoters": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["complete", "rawPushCount", "expected"],
+      "properties": {
+        "complete": { "type": "boolean" },
+        "rawPushCount": { "type": "integer", "minimum": 0 },
+        "expected": { "$ref": "#/$defs/stageExpected" }
+      }
+    },
+    "stageExpected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["replies", "nativeArticleScore", "articlePushVoters", "articleBooVoters", "status"],
+      "properties": {
+        "replies": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/reply" }
+        },
+        "nativeArticleScore": { "type": "integer" },
+        "articlePushVoters": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "articleBooVoters": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "status": { "enum": ["incomplete", "final"] }
+      }
+    }
+  }
+}

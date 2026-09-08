@@ -52,6 +52,14 @@ export interface PushEditHistoryRecord {
   content: string;
 }
 
+export interface NormalizedThreadEvent {
+  rawFloor: number;
+  author: string;
+  content: string;
+  withdrawn: boolean;
+  visible: boolean;
+}
+
 export interface AggregatedPush {
   id: string;
   type: PushType;
@@ -80,6 +88,13 @@ export interface AggregatedThread {
   nativeNeutralCount: number;
   articlePushVoters: string[];
   articleBooVoters: string[];
+}
+
+export type ThreadSnapshotStatus = "incomplete" | "final";
+
+export interface AggregatedThreadSnapshot {
+  status: ThreadSnapshotStatus;
+  thread: AggregatedThread;
 }
 
 export function detectArticleVote(content: string): "push" | "boo" | null {
@@ -176,19 +191,62 @@ function buildGroupEditHistory(group: PushGroup): PushEditHistoryRecord[] | unde
   ];
 }
 
-/** 解析 "MM/DD HH:mm" → 當年的分鐘數（用於計算時間差） */
-function parsePttTime(time: string): number {
-  // "12/31 23:59"
-  const match = time.match(/^(\d{2})\/(\d{2}) (\d{2}):(\d{2})$/);
-  if (!match) return 0;
-  const [, mm, dd, hh, min] = match.map(Number);
-  // 粗略換算成分鐘（跨年不處理，僅比較間隔）
-  return ((mm * 31 + dd) * 24 + hh) * 60 + min;
+const PTT_CALENDARS = [
+  {
+    id: "normal",
+    monthDays: [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31],
+    yearMinutes: 365 * 24 * 60,
+  },
+  {
+    id: "leap",
+    monthDays: [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31],
+    yearMinutes: 366 * 24 * 60,
+  },
+] as const;
+
+interface PttTimeInterpretation {
+  calendar: "normal" | "leap";
+  minutes: number;
+  yearMinutes: number;
 }
 
-/** 計算兩個 PTT 時間字串之間的分鐘差（絕對值） */
-function timeDiffMinutes(t1: string, t2: string): number {
-  return Math.abs(parsePttTime(t1) - parsePttTime(t2));
+/** 解析無年份的 "MM/DD HH:mm" → 所有合法曆法 interpretation */
+function parsePttTime(time: string | undefined): PttTimeInterpretation[] {
+  if (typeof time !== "string") return [];
+  const match = time.match(/^(\d{2})\/(\d{2}) (\d{2}):(\d{2})$/);
+  if (!match) return [];
+  const [, mm, dd, hh, min] = match.map(Number);
+  if (mm < 1 || mm > 12 || dd < 1 || hh > 23 || min > 59) return [];
+
+  return PTT_CALENDARS.flatMap((calendar) => {
+    if (dd > calendar.monthDays[mm - 1]) return [];
+    const elapsedDays = calendar.monthDays
+      .slice(0, mm - 1)
+      .reduce((sum, days) => sum + days, dd - 1);
+    return [{
+      calendar: calendar.id,
+      minutes: (elapsedDays * 24 + hh) * 60 + min,
+      yearMinutes: calendar.yearMinutes,
+    }];
+  });
+}
+
+/** 計算兩個 PTT 時間字串之間的最短環狀分鐘差 */
+function timeDiffMinutes(
+  t1: string | undefined,
+  t2: string | undefined,
+): number | null {
+  const first = parsePttTime(t1);
+  const second = parsePttTime(t2);
+  const differences = first.flatMap((left) =>
+    second
+      .filter((right) => right.calendar === left.calendar)
+      .map((right) => {
+        const direct = Math.abs(left.minutes - right.minutes);
+        return Math.min(direct, left.yearMinutes - direct);
+      }),
+  );
+  return differences.length > 0 ? Math.min(...differences) : null;
 }
 
 // ─── 合併群組 ─────────────────────────────────────────────────────────────────
@@ -269,13 +327,10 @@ function groupPushes(rawPushes: ParsedRawPush[]): PushGroup[] {
       continue;
     }
 
-    // 連續同作者：上一則全域推文就是同作者。
     const prevGlobal = rawPushes[i - 1];
     const isConsecutive = prevGlobal.author === cur.author;
-
-    // 前一段必須可續接。非連續時還必須在 k 分鐘內。
-    const timeOk =
-      timeDiffMinutes(lastPush.time, cur.time) <= TIME_GAP_MINUTES;
+    const timeDiff = timeDiffMinutes(lastPush.time, cur.time);
+    const timeOk = timeDiff !== null && timeDiff <= TIME_GAP_MINUTES;
 
     if (canContinueFromPush(lastPush) && (isConsecutive || timeOk)) {
       sameGroup.pushes.push(cur);
@@ -567,6 +622,37 @@ function applyPushEdits(pushes: ParsedRawPush[]): void {
   }
 }
 
+function parseAndApplyPushEdits(rawPushes: AnchoredRawPush[]): ParsedRawPush[] {
+  const parsedPushes = rawPushes.map((push, index) => {
+    const intent = parsePushIntent(push.content);
+    return {
+      ...push,
+      rawFloor: push.rawFloor ?? index + 1,
+      intent,
+      originalContent: push.content,
+      structuralContent: intent.visibleContent,
+      withdrawn: false,
+      editHistory: [],
+    };
+  });
+  applyPushEdits(parsedPushes);
+  return parsedPushes;
+}
+
+export function normalizeThreadEvents(
+  rawPushes: AnchoredRawPush[],
+): NormalizedThreadEvent[] {
+  return parseAndApplyPushEdits(rawPushes).map((push) => ({
+    rawFloor: push.rawFloor!,
+    author: push.author,
+    content: push.withdrawn
+      ? push.editHistory[push.editHistory.length - 1]?.content ?? " "
+      : push.intent.visibleContent,
+    withdrawn: push.withdrawn,
+    visible: !push.withdrawn && !push.intent.isControl,
+  }));
+}
+
 function extractAuthorId(author: string): string {
   return author.trim().split(/\s+/u)[0] ?? "";
 }
@@ -624,19 +710,7 @@ export function aggregatePushes(
   articleEditRecords: ArticleEditRecord[] = [],
 ): AggregatedThread {
   const articleAuthorId = normalizePttId(articleAuthor);
-  const parsedPushes: ParsedRawPush[] = rawPushes.map((push, index) => {
-    const intent = parsePushIntent(push.content);
-    return {
-      ...push,
-      rawFloor: push.rawFloor ?? index + 1,
-      intent,
-      originalContent: push.content,
-      structuralContent: intent.visibleContent,
-      withdrawn: false,
-      editHistory: [],
-    };
-  });
-  applyPushEdits(parsedPushes);
+  const parsedPushes = parseAndApplyPushEdits(rawPushes);
 
   // Step 1：分群
   const groups = groupPushes(
@@ -855,6 +929,17 @@ export function aggregatePushes(
     articleBooVoters: [...articleVoters.values()]
       .filter((vote) => vote.direction === "boo")
       .map((vote) => vote.author),
+  };
+}
+
+export function aggregateThreadSnapshot(
+  rawPushes: AnchoredRawPush[],
+  articleAuthor: string,
+  complete: boolean,
+): AggregatedThreadSnapshot {
+  return {
+    status: complete ? "final" : "incomplete",
+    thread: aggregatePushes(rawPushes, articleAuthor),
   };
 }
 
