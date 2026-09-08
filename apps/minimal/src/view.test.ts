@@ -30,7 +30,8 @@ it("renders visible nested replies, separate vote domains, and edit records with
   expect(node.textContent).not.toContain("999");
   expect(node.textContent).toContain("PTT 原生：推 8 / 噓 2 / 分數 6");
   expect(node.textContent).toContain("文章評分：推 4 / 噓 1 / 分數 3");
-  expect(node.textContent).toContain("回覆評分：推 3 / 噓 1 / 分數 2");
+  expect(node.querySelector(".reply > .muted")?.textContent).toBe("推 3 / 噓 1 / -> 2");
+  expect(node.textContent).not.toContain("回覆評分：");
   expect(node.textContent).toContain("保留  空白\n下一行");
   expect(node.textContent).toContain("修改紀錄");
   expect(node.querySelector("form,textarea,input:not([type=checkbox])")).toBeNull();

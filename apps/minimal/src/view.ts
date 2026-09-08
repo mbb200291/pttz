@@ -32,7 +32,7 @@ function replyList(replies: readonly Reply[], parentAuthor = "", complete = true
     const item = node("li", "", "reply");
     item.dataset.replyId = reply.replyId;
     item.append(node("p", `+ ${reply.author}${reply.isOp ? " [原作者]" : ""}${parentAuthor ? ` / 回覆 ${parentAuthor}` : ""} / ${reply.pushType === "push" ? "推" : reply.pushType === "boo" ? "噓" : "→"}${reply.createdAt ? ` / ${reply.createdAt}` : ""}`, "reply-meta"),
-      pre(reply.content, "reply-content"), node("p", votes("回覆評分", reply.votes), "muted"));
+      pre(reply.content, "reply-content"), node("p", `推 ${reply.votes.pushCount} / 噓 ${reply.votes.booCount} / -> ${reply.votes.score}`, "muted"));
     if (complete && reply.edits.length) {
       const details = node("details");
       details.append(node("summary", "回覆編輯紀錄"));
