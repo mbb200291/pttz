@@ -1,0 +1,29 @@
+{
+  "name": "@pttzzz/browser",
+  "version": "0.1.0",
+  "type": "module",
+  "files": ["dist"],
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run src --config vitest.config.ts"
+  },
+  "dependencies": {
+    "@pttzzz/core": "0.1.0",
+    "ptt-client": "^0.9.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.2",
+    "vitest": "^4.1.2"
+  }
+}

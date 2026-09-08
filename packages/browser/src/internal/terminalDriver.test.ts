@@ -24,9 +24,384 @@ function buildBoardLine(params: {
   return line.join("").replace(/\s+$/, "");
 }
 
-describe("ptt adapter module", () => {
+describe("terminal driver module", () => {
+  it("parses canonical AID evidence from the PTT article-info screen", async () => {
+    const mod = await import("./terminalDriver.js");
+    expect(mod.parseArticleInfoAid(
+      "文章代碼(AID): #1fwkuLQh (Test)\n文章網址: https://www.ptt.cc/bbs/Test/M.1.A.1.html",
+    )).toEqual({ aid: "1fwkuLQh", board: "Test" });
+    expect(mod.parseArticleInfoAid("作者 alice 看板 Test")).toBeNull();
+  });
+
+  it("refuses a push when the exact index opens a different article", async () => {
+    const mod = await import("./terminalDriver.js");
+    const sent: string[] = [];
+    const boardRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 42, date: "08/22", author: "alice", title: "目標文章" }),
+    ];
+    const wrongRows = [
+      "作者  bob 看板 Test",
+      "標題  其他文章",
+      "時間  Sat Aug 22 10:00:00 2026",
+      "───────────────────────────────────────",
+      "錯誤內容",
+    ];
+    let screenRows = boardRows;
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      getLine(index: number) { return { str: screenRows[index] ?? "" }; },
+      async getLines() { return screenRows; },
+      async send(command: string) {
+        sent.push(command);
+        if (command === "42\r\r") screenRows = wrongRows;
+        if (command === "q") screenRows = boardRows;
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+
+    await expect(driver.executeArticleCommand({
+      type: "reply-article",
+      article: { board: "Test", index: 42 },
+      content: "不可送出",
+      pushType: "neutral",
+    })).resolves.toMatchObject({ ok: false, outcome: "not-sent" });
+    expect(sent).not.toContain("X");
+    expect(sent).not.toContain("不可送出\r");
+    expect(sent.at(-1)).toBe("q");
+  });
+
+  it("rejects wrong canonical AID evidence before every article write workflow", async () => {
+    const mod = await import("./terminalDriver.js");
+    const key = { board: "Test", aid: "#expected" } as const;
+    const commands = [
+      { type: "reply-article", article: key, content: "x", pushType: "neutral" },
+      { type: "edit-article", article: key, content: "new", editSummary: "fix" },
+      { type: "delete-article", article: key },
+      { type: "reply-article-to-board", article: key, content: "response" },
+    ] as const;
+
+    for (const command of commands) {
+      const sent: string[] = [];
+      const boardRows = [
+        "看板《Test》",
+        buildBoardLine({ index: 42, date: "08/22", author: "alice", title: "目標文章" }),
+      ];
+      const articleRows = [
+        "作者  alice 看板 Test",
+        "標題  目標文章",
+        "時間  Sat Aug 22 10:00:00 2026",
+        "───────────────────────────────────────",
+        "內容",
+        ...Array.from({ length: 18 }, () => ""),
+        "瀏覽 第 1/1 頁 (100%)",
+      ];
+      const infoRows = ["文章代碼(AID): #other (Test)"];
+      let mode: "board" | "article" | "info" = "board";
+      const bot = {
+        state: { connect: true, login: true },
+        _state: { connect: true, login: true, position: { boardname: "Test" } },
+        on() { return this; },
+        getLine(index: number) {
+          const rows = mode === "board" ? boardRows : mode === "article" ? articleRows : infoRows;
+          return { str: rows[index] ?? "" };
+        },
+        async getLines() { return articleRows; },
+        async send(value: string) {
+          sent.push(value);
+          if (value === "#expected\r") mode = "article";
+          else if (value === "Q") mode = "info";
+          else if (value === "q") mode = mode === "info" ? "article" : "board";
+          return true;
+        },
+      };
+      const driver = mod.createTerminalDriverForTesting(bot);
+      await expect(driver.executeArticleCommand(command)).resolves.toMatchObject({
+        ok: false,
+        outcome: "not-sent",
+      });
+      expect(sent).not.toContain("X");
+      expect(sent).not.toContain("E");
+      expect(sent).not.toContain("d");
+      expect(sent).not.toContain("y");
+    }
+  });
+
+  it("rejects a wrong index target before edit, delete, or board-reply keys", async () => {
+    const mod = await import("./terminalDriver.js");
+    const key = { board: "Test", index: 42 } as const;
+    const commands = [
+      { type: "edit-article", article: key, content: "new", editSummary: "fix" },
+      { type: "delete-article", article: key },
+      { type: "reply-article-to-board", article: key, content: "response" },
+    ] as const;
+    for (const command of commands) {
+      const sent: string[] = [];
+      const boardRows = [
+        "看板《Test》",
+        buildBoardLine({ index: 42, date: "08/22", author: "alice", title: "目標文章" }),
+      ];
+      const wrongRows = [
+        "作者  bob 看板 Test",
+        "標題  其他文章",
+        "時間  Sat Aug 22 10:00:00 2026",
+        "───────────────────────────────────────",
+        "錯誤內容",
+      ];
+      let screenRows = boardRows;
+      const bot = {
+        state: { connect: true, login: true },
+        _state: { connect: true, login: true, position: { boardname: "Test" } },
+        on() { return this; },
+        getLine(index: number) { return { str: screenRows[index] ?? "" }; },
+        async getLines() { return screenRows; },
+        async send(value: string) {
+          sent.push(value);
+          if (value === "42\r\r") screenRows = wrongRows;
+          else if (value === "q") screenRows = boardRows;
+          return true;
+        },
+      };
+      const driver = mod.createTerminalDriverForTesting(bot);
+      await expect(driver.executeArticleCommand(command)).resolves.toMatchObject({
+        ok: false,
+        outcome: "not-sent",
+      });
+      expect(sent).not.toContain("E");
+      expect(sent).not.toContain("d");
+      expect(sent).not.toContain("y");
+    }
+  });
+
+  it("re-locates the exact article after reads and board-list work before writing", async () => {
+    const mod = await import("./terminalDriver.js");
+    const sent: string[] = [];
+    const boardRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 42, date: "08/22", author: "alice", title: "目標文章" }),
+    ];
+    const articleRows = [
+      "作者  alice 看板 Test",
+      "標題  目標文章",
+      "時間  Sat Aug 22 10:00:00 2026",
+      "───────────────────────────────────────",
+      "內容",
+      ...Array.from({ length: 18 }, () => ""),
+      "瀏覽 第 1/1 頁 (100%)",
+    ];
+    let screenRows = boardRows;
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      getLine(index: number) { return { str: screenRows[index] ?? "" }; },
+      async getLines() { return screenRows; },
+      async send(command: string) {
+        sent.push(command);
+        if (command === "42\r\r") screenRows = articleRows;
+        else if (command === "q") screenRows = boardRows;
+        else if (command === "X") screenRows = ["1.值得推薦 2.給它噓聲 3.只加註解"];
+        else if (command === "3") screenRows = ["請輸入推文內容:"];
+        else if (command === "安全送出\r") screenRows = ["確定送出推文嗎"];
+        else if (command === "y\r") screenRows = articleRows;
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+
+    await driver.getArticle("Test", 42);
+    await driver.listArticles("Test");
+    await expect(driver.executeArticleCommand({
+      type: "reply-article",
+      article: { board: "Test", index: 42 },
+      content: "安全送出",
+      pushType: "neutral",
+    })).resolves.toEqual({ ok: true, outcome: "sent" });
+
+    expect(sent.filter((command) => command === "42\r\r")).toHaveLength(2);
+    expect(sent.indexOf("X")).toBeGreaterThan(sent.lastIndexOf("42\r\r"));
+    expect(sent).toContain("安全送出\r");
+    expect(sent.at(-1)).toBe("q");
+  });
+
+  it("locates an older index through board pagination before writing", async () => {
+    const mod = await import("./terminalDriver.js");
+    const sent: string[] = [];
+    const newestRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 100, date: "08/22", author: "new", title: "新文章" }),
+    ];
+    const targetRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 42, date: "08/01", author: "alice", title: "舊目標" }),
+    ];
+    const articleRows = [
+      "作者  alice 看板 Test",
+      "標題  舊目標",
+      "時間  Sat Aug  1 10:00:00 2026",
+      "───────────────────────────────────────",
+      "內容",
+      ...Array.from({ length: 18 }, () => ""),
+      "瀏覽 第 1/1 頁 (100%)",
+    ];
+    let screenRows = newestRows;
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      getLine(index: number) { return { str: screenRows[index] ?? "" }; },
+      async getLines() { return screenRows; },
+      async send(value: string) {
+        sent.push(value);
+        if (value.endsWith("42\r") && value !== "42\r\r") screenRows = targetRows;
+        else if (value === "42\r\r") screenRows = articleRows;
+        else if (value === "q") screenRows = targetRows;
+        else if (value === "X") screenRows = ["請輸入推文內容:"];
+        else if (value === "安全送出\r") screenRows = ["確定送出推文嗎"];
+        else if (value === "y\r") screenRows = articleRows;
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+    await expect(driver.executeArticleCommand({
+      type: "reply-article",
+      article: { board: "Test", index: 42 },
+      content: "安全送出",
+      pushType: "neutral",
+    })).resolves.toEqual({ ok: true, outcome: "sent" });
+    expect(sent.some((value) => value.endsWith("42\r") && value !== "42\r\r")).toBe(true);
+    expect(sent).toContain("X");
+  });
+
+  it("keeps a multi-range withdrawal inside one serialized terminal task", async () => {
+    const mod = await import("./terminalDriver.js");
+    const sent: string[] = [];
+    const boardRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 42, date: "08/22", author: "alice", title: "目標文章" }),
+    ];
+    const articleRows = [
+      "作者  alice 看板 Test",
+      "標題  目標文章",
+      "時間  Sat Aug 22 10:00:00 2026",
+      "───────────────────────────────────────",
+      "內容",
+      ...Array.from({ length: 18 }, () => ""),
+      "瀏覽 第 1/1 頁 (100%)",
+    ];
+    let screenRows = boardRows;
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      getLine(index: number) { return { str: screenRows[index] ?? "" }; },
+      async getLines() { return screenRows; },
+      async send(value: string) {
+        sent.push(value);
+        if (value === "42\r\r") screenRows = articleRows;
+        else if (value === "q") screenRows = boardRows;
+        else if (value === "X") screenRows = ["請輸入推文內容:"];
+        else if (value.startsWith("撤回我在")) screenRows = ["確定送出推文嗎"];
+        else if (value === "y\r") screenRows = articleRows;
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+    const withdrawal = driver.executeArticleCommand({
+      type: "withdraw-floor",
+      article: { board: "Test", index: 42 },
+      ranges: [{ start: 2, end: 2 }, { start: 4, end: 4 }],
+    });
+    const concurrent = driver.send("SECOND");
+    await expect(withdrawal).resolves.toEqual({ ok: true, outcome: "sent" });
+    await concurrent;
+
+    expect(sent.indexOf("SECOND")).toBeGreaterThan(sent.indexOf("撤回我在4樓發言\r"));
+    expect(sent.filter((value) => value === "X")).toHaveLength(2);
+  });
+
+  it("aborts a slow article read and releases the serialized queue", async () => {
+    const mod = await import("./terminalDriver.js");
+    const boardRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 42, date: "08/22", author: "alice", title: "目標文章" }),
+    ];
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      getLine(index: number) { return { str: boardRows[index] ?? "" }; },
+      async getLines() { return boardRows; },
+      async send() { return true; },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+    const controller = new AbortController();
+    const read = driver.readArticleSource(
+      { board: "Test", index: 42 },
+      () => undefined,
+      controller.signal,
+    );
+    controller.abort();
+
+    await expect(read).rejects.toMatchObject({ name: "AbortError" });
+    await expect(driver.listArticles("Test")).resolves.toEqual([
+      expect.objectContaining({ index: 42, title: "目標文章" }),
+    ]);
+  });
+
+  it("restores the terminal index after a prefix board query", async () => {
+    const mod = await import("./terminalDriver.js");
+    const calls: string[] = [];
+    const bot = {
+      select() {
+        return {
+          where(type: string, value: unknown) { calls.push(`${type}:${String(value)}`); },
+          async get() {
+            calls.push("get");
+            return [{ name: "C_Chat", title: "聊天" }];
+          },
+        };
+      },
+      async enterIndex() { calls.push("index"); return true; },
+    };
+    await expect(mod.queryBoardsFromBot(bot, { prefix: "C_" })).resolves.toEqual([
+      { name: "C_Chat", title: "聊天" },
+    ]);
+    expect(calls).toEqual(["prefix:C_", "get", "index"]);
+  });
+
+  it("queries a category subdirectory by private route and restores the index", async () => {
+    const mod = await import("./terminalDriver.js");
+    const calls: string[] = [];
+    const bot = {
+      select() {
+        return {
+          where(type: string, value: unknown) { calls.push(`${type}:${JSON.stringify(value)}`); },
+          async get() {
+            calls.push("get");
+            return [
+              { id: 3, title: "子分類", folder: true },
+              { name: "C_Chat", title: "聊天", folder: false },
+            ];
+          },
+        };
+      },
+      async enterIndex() { calls.push("index"); return true; },
+    };
+    await expect(mod.queryBoardDirectoryFromBot(bot, [1, 2])).resolves.toEqual([
+      { kind: "category", title: "子分類", route: [1, 2, 3] },
+      { kind: "board", board: { name: "C_Chat", title: "聊天" } },
+    ]);
+    expect(calls).toEqual([
+      "entry:\"class\"", "offsets:[1,2]", "get", "index",
+    ]);
+  });
+
   it("waits for a delayed push-type menu before sending a boo", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     let screen = "瀏覽文章";
     let snapshotsAfterCommand = 0;
@@ -58,12 +433,12 @@ describe("ptt adapter module", () => {
         afterConfirmMs: 0,
         afterContinueMs: 0,
       }),
-    ).resolves.toEqual({ ok: true });
+    ).resolves.toEqual({ ok: true, outcome: "sent" });
     expect(sent.slice(0, 4)).toEqual(["X", "2", "噓\r", "y\r"]);
   });
 
   it("does not send push or boo content when the type menu cannot be confirmed", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     const bot = {
       async send(command: string) {
@@ -86,14 +461,16 @@ describe("ptt adapter module", () => {
       }),
     ).resolves.toEqual({
       ok: false,
+      outcome: "not-sent",
       code: "push-entry-timeout",
       reason: "PTT 未顯示推文方式，請重新載入文章後再試",
+      retryable: true,
     });
     expect(sent).toEqual(["X", "\x03"]);
   });
 
   it("sends a neutral reply from the author's direct input prompt", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     let screen = "瀏覽文章";
     const bot = {
@@ -118,12 +495,12 @@ describe("ptt adapter module", () => {
         afterConfirmMs: 0,
         afterContinueMs: 0,
       }),
-    ).resolves.toEqual({ ok: true });
+    ).resolves.toEqual({ ok: true, outcome: "sent" });
     expect(sent).toEqual(["X", "噓1樓\r", "y\r"]);
   });
 
   it("does not bypass the author's neutral-only prompt for a raw boo", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     let screen = "瀏覽文章";
     const bot = {
@@ -148,14 +525,15 @@ describe("ptt adapter module", () => {
       }),
     ).resolves.toEqual({
       ok: false,
-      code: "push-entry-timeout",
-      reason: "PTT 未顯示推文方式，請重新載入文章後再試",
+      outcome: "not-sent",
+      code: "push-type-not-allowed",
+      reason: "PTT 限制此文章只能使用 → 加註方式",
     });
     expect(sent).toEqual(["X", "\x03"]);
   });
 
   it("reports when the push content prompt cannot be confirmed", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     const bot = {
       async send(command: string) {
@@ -180,14 +558,16 @@ describe("ptt adapter module", () => {
       }),
     ).resolves.toEqual({
       ok: false,
+      outcome: "not-sent",
       code: "push-content-prompt-timeout",
       reason: "PTT 未顯示推文輸入框，請重新載入文章後再試",
+      retryable: true,
     });
     expect(sent).toEqual(["X", "3", "\x03"]);
   });
 
   it("reports an uncertain result when push confirmation is missing", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     let screen = "1.值得推薦 2.給它噓聲 3.只加註解";
     const bot = {
@@ -213,6 +593,7 @@ describe("ptt adapter module", () => {
       }),
     ).resolves.toEqual({
       ok: false,
+      outcome: "uncertain",
       code: "push-confirm-timeout",
       reason: "無法確認回文是否送出，請重新整理文章檢查",
     });
@@ -223,7 +604,7 @@ describe("ptt adapter module", () => {
     ["push", "1"],
     ["neutral", "3"],
   ] as const)("selects the PTT %s type key from the menu", async (type, key) => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     let screen = "1.值得推薦 2.給它噓聲 3.只加註解";
     const bot = {
@@ -248,15 +629,15 @@ describe("ptt adapter module", () => {
         afterConfirmMs: 0,
         afterContinueMs: 0,
       }),
-    ).resolves.toEqual({ ok: true });
+    ).resolves.toEqual({ ok: true, outcome: "sent" });
     expect(sent.slice(0, 4)).toEqual(["X", key, "內容\r", "y\r"]);
   });
 
   it("exports a factory for the ptt-client-backed adapter", async () => {
-    const mod = await import("../adapter");
-    const adapter = mod.createPttAdapter();
+    const mod = await import("./terminalDriver.js");
+    const adapter = mod.createTerminalDriver();
 
-    expect(typeof mod.createPttAdapter).toBe("function");
+    expect(typeof mod.createTerminalDriver).toBe("function");
     expect(typeof adapter.login).toBe("function");
     expect(typeof adapter.listArticles).toBe("function");
     expect(typeof adapter.getArticle).toBe("function");
@@ -264,12 +645,12 @@ describe("ptt adapter module", () => {
   });
 
   it("reports whether the external ptt-client module is available", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     expect(mod.pttClientModuleLoaded).toBe(true);
   });
 
   it("waits for the password prompt before sending the password during login", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     let screen = "請輸入代號，或以 guest 參觀";
 
@@ -306,7 +687,7 @@ describe("ptt adapter module", () => {
   });
 
   it("recognizes PTT's full password prompt wording during login", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     let screen = "請輸入代號，或以 guest 參觀";
 
@@ -343,7 +724,7 @@ describe("ptt adapter module", () => {
   });
 
   it("can recover when a retry starts while PTT is still waiting for password", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     let screen = "請輸入您的密碼:";
 
@@ -378,7 +759,7 @@ describe("ptt adapter module", () => {
   });
 
   it("does not treat the login banner as a successful login before password auth", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     let screen = "批踢踢實業坊\n請輸入代號，或以 guest 參觀";
     let markedLoggedIn = false;
@@ -419,7 +800,7 @@ describe("ptt adapter module", () => {
   });
 
   it("serializes bot operations to avoid overlapping terminal commands", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const runSerial = mod.createSerialTaskRunner();
     const events: string[] = [];
 
@@ -449,8 +830,8 @@ describe("ptt adapter module", () => {
   });
 
   it("applies combined board filters by push threshold before title keyword", async () => {
-    const mod = await import("../adapter");
-    const adapter = mod.createPttAdapter();
+    const mod = await import("./terminalDriver.js");
+    const adapter = mod.createTerminalDriver();
     const sent: string[] = [];
     const screen = [
       "看板《Baseball》",
@@ -494,7 +875,7 @@ describe("ptt adapter module", () => {
   });
 
   it("maps library article rows into the current ArticleSummary shape", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
 
     expect(
       mod.mapArticleRow({
@@ -516,7 +897,7 @@ describe("ptt adapter module", () => {
   });
 
   it("maps hot board rows into homepage popular board data", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
 
     expect(
       mod.mapHotBoardRow({
@@ -532,7 +913,7 @@ describe("ptt adapter module", () => {
   });
 
   it("drops article-list rows that were misread as hot board rows", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
 
     expect(
       mod.mapHotBoardRow({
@@ -548,7 +929,7 @@ describe("ptt adapter module", () => {
   });
 
   it("parses category options from the real post prompt screen", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
 
     expect(
       mod.parsePostCategoryOptions(
@@ -562,7 +943,7 @@ describe("ptt adapter module", () => {
   });
 
   it("parses numbered post categories without using board-title brackets", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
 
     expect(
       mod.parsePostCategoryOptions(
@@ -575,7 +956,7 @@ describe("ptt adapter module", () => {
   });
 
   it("recognizes PTT post guidelines without treating them as the editor or a success screen", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const guidelineScreen = [
       "                ▕         ● 文 章 發 表 綱 領 ●",
       "                ▕     【 四不政策 】",
@@ -588,7 +969,7 @@ describe("ptt adapter module", () => {
   });
 
   it("advances through PTT post guidelines while waiting for the title prompt", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     let screen = "● 文 章 發 表 綱 領 ●\n【 四不政策 】";
 
@@ -611,7 +992,7 @@ describe("ptt adapter module", () => {
   });
 
   it("does not type the board search command into a dangling post title prompt after reading categories", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     let state: "board" | "category" | "title" = "board";
 
@@ -655,7 +1036,7 @@ describe("ptt adapter module", () => {
   });
 
   it("restores Re: prefix when ptt-client splits it into the status field", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
 
     expect(
       mod.mapArticleRow({
@@ -677,7 +1058,7 @@ describe("ptt adapter module", () => {
   });
 
   it("parses visible board rows from a board redraw screen", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
 
     const partial = mod.parsePartialBoardScreen(
       [
@@ -750,7 +1131,7 @@ describe("ptt adapter module", () => {
   });
 
   it("drops stale normal rows left below the current board redraw", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
 
     const partial = mod.parsePartialBoardScreen(
       [
@@ -808,7 +1189,7 @@ describe("ptt adapter module", () => {
   });
 
   it("parses board rows with fixed-width columns like ptt-client", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
 
     const partial = mod.parsePartialBoardScreen(
       [
@@ -865,7 +1246,7 @@ describe("ptt adapter module", () => {
   });
 
   it("fixes the missing first row id the same way as ptt-client", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
 
     const partial = mod.parsePartialBoardScreen(
       [
@@ -900,7 +1281,7 @@ describe("ptt adapter module", () => {
   });
 
   it("ignores board footer and command rows when parsing a redraw screen", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
 
     const partial = mod.parsePartialBoardScreen(
       [
@@ -947,7 +1328,7 @@ describe("ptt adapter module", () => {
   });
 
   it("keeps fixed article ids when the board row includes a leading star marker", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
 
     const partial = mod.parsePartialBoardScreen(
       [
@@ -976,7 +1357,7 @@ describe("ptt adapter module", () => {
   });
 
   it("reuses the current board screen when opening an article from the same board", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const calls: string[] = [];
     const bot = {
       async enterBoardByName(boardName: string) {
@@ -1021,7 +1402,7 @@ describe("ptt adapter module", () => {
   });
 
   it("re-enters the board list before opening when the current screen is an article in the same board", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const calls: string[] = [];
     let mode: "article" | "board" | "opened" = "article";
     const boardRows = [
@@ -1084,7 +1465,7 @@ describe("ptt adapter module", () => {
   });
 
   it("reads a board page manually without leaving the board view", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const calls: string[] = [];
     const bot = {
       async send(command: string) {
@@ -1146,7 +1527,7 @@ describe("ptt adapter module", () => {
     // A push-filtered board list looks identical to a normal board list (no "系列《" marker),
     // so ensureNormalBoardView would return early without re-entering.
     // forceReenter=true bypasses that early return to guarantee the board is entered fresh.
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const calls: string[] = [];
     const bot = {
       async send(command: string) {
@@ -1199,7 +1580,7 @@ describe("ptt adapter module", () => {
   });
 
   it("uses board-list search fallback when entering from the PTT board directory", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const calls: string[] = [];
     let state: "directory" | "matched" | "board" = "directory";
 
@@ -1254,7 +1635,7 @@ describe("ptt adapter module", () => {
   });
 
   it("returns to index before manual board entry when board-directory search misses", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const calls: string[] = [];
     let state: "directory" | "index" | "board" = "directory";
 
@@ -1313,7 +1694,7 @@ describe("ptt adapter module", () => {
   });
 
   it("parses favorite board names from the PTT favorite screen without ptt-client Board.fromLine", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const screen = [
       "【看板列表】                     批踢踢實業坊                     我的最愛",
       "[←][q]回上層 [→][r]閱讀 [↑↓]選擇 [PgUp][PgDn]翻頁 [c]新文章 [/]搜尋 [h]求助",
@@ -1333,7 +1714,7 @@ describe("ptt adapter module", () => {
   });
 
   it("reads favorites from the terminal screen instead of ptt-client getFavorite", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const calls: string[] = [];
     const rows = [
       "【看板列表】                     批踢踢實業坊                     我的最愛",
@@ -1369,7 +1750,7 @@ describe("ptt adapter module", () => {
   });
 
   it("resets to the PTT index before reading favorites", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const calls: string[] = [];
     const rows = [
       "【看板列表】                     批踢踢實業坊                     我的最愛",
@@ -1398,7 +1779,7 @@ describe("ptt adapter module", () => {
   });
 
   it("leaves an article reader before reading favorites", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const calls: string[] = [];
     let inArticle = true;
     const bot = {
@@ -1443,7 +1824,7 @@ describe("ptt adapter module", () => {
   });
 
   it("continues manual favorite parsing across multiple favorite pages", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const calls: string[] = [];
     let page = 0;
     const pages = [
@@ -1536,7 +1917,7 @@ describe("ptt adapter module", () => {
   });
 
   it("opens an article through explicit board navigation using the same open sequence as ptt-client", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const calls: string[] = [];
     const bot = {
       async enterBoardByName(boardName: string) {
@@ -1585,7 +1966,7 @@ describe("ptt adapter module", () => {
   });
 
   it("reads an article manually without relying on bot.getArticle", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const calls: string[] = [];
     const bot = {
       async enterBoardByName(boardName: string) {
@@ -1634,7 +2015,7 @@ describe("ptt adapter module", () => {
   });
 
   it("extracts a partial article immediately from the current terminal snapshot", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
 
     const partial = mod.parsePartialScreen(
       [
@@ -1661,7 +2042,7 @@ describe("ptt adapter module", () => {
   });
 
   it("waits for the first article screen before progressive paging", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const calls: string[] = [];
     const page1 = [
       "作者  poggssi (冠軍車手321)                 看板  Gossiping",
@@ -1755,11 +2136,12 @@ describe("ptt adapter module", () => {
   });
 
   it("emits progressively larger partial article bodies while manually paging", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const partials: Array<{
       body: string;
       pushes?: Array<{ author: string; content: string }>;
     }> = [];
+    const rawSnapshots: Array<{ rawText: string; completeness: string }> = [];
     let currentPage = 0;
     const pages = [
       [
@@ -1843,6 +2225,9 @@ describe("ptt adapter module", () => {
       }) => {
         partials.push(partial);
       },
+      (rawText: string, completeness: string) => {
+        rawSnapshots.push({ rawText, completeness });
+      },
     );
 
     expect(partials.length).toBeGreaterThanOrEqual(2);
@@ -1854,10 +2239,14 @@ describe("ptt adapter module", () => {
       expect.objectContaining({ author: "user1", content: "hi" }),
     ]);
     expect(article?.body).toContain("第二頁第二行");
+    expect(rawSnapshots[0]).toMatchObject({ completeness: "incomplete" });
+    expect(rawSnapshots[0]?.rawText).toContain("第一頁第一行");
+    expect(rawSnapshots.at(-1)).toMatchObject({ completeness: "final" });
+    expect(rawSnapshots.at(-1)?.rawText).toContain("第二頁第二行");
   });
 
   it("continues from the first detected screen without re-emitting the first page", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const partialBodies: string[] = [];
     let currentPage = 0;
     const pages = [
@@ -1944,7 +2333,7 @@ describe("ptt adapter module", () => {
   });
 
   it("emits the second body page immediately after the first PgDn screen change", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const events: string[] = [];
     let currentPage = 0;
     const pages = [
@@ -2045,7 +2434,7 @@ describe("ptt adapter module", () => {
   });
 
   it("emits the first screen partial before sending the first PgDn", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const events: string[] = [];
     let currentPage = 0;
     const pages = [
@@ -2142,7 +2531,7 @@ describe("ptt adapter module", () => {
   });
 
   it("keeps partial pushes grouped while progressive reading is still in flight", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const partialPushContents: string[][] = [];
     let currentPage = 0;
     const pages = [
@@ -2238,7 +2627,7 @@ describe("ptt adapter module", () => {
   });
 
   it("continues emitting partial pushes across screens that already show 100 percent", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const pushCounts: number[] = [];
     let currentPage = 0;
     const pages = [
@@ -2330,7 +2719,7 @@ describe("ptt adapter module", () => {
   });
 
   it("opens article by aid through the same progressive manual flow", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const partialBodies: string[] = [];
     const sentCommands: string[] = [];
     let currentPage = -1;
@@ -2429,7 +2818,7 @@ describe("ptt adapter module", () => {
   });
 
   it("includes a dev debug dump with raw line and parsed push summaries", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
 
     const bot = {
       async getArticle(_boardName: string, _articleIndex: number) {
@@ -2473,7 +2862,7 @@ describe("ptt adapter module", () => {
   });
 
   it("parses padded Stock-style push author columns throughout article reading", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
 
     const bot = {
       async getArticle(_boardName: string, _articleIndex: number) {
@@ -2514,7 +2903,7 @@ describe("ptt adapter module", () => {
   });
 
   it("keeps edit records article-level while threading OP edited text when reading an article", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
 
     const bot = {
       async getArticle(_boardName: string, _articleIndex: number) {
@@ -2567,7 +2956,7 @@ describe("ptt adapter module", () => {
   });
 
   it("keeps edit-note attachment stable when ANSI bytes appear before a later push", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
 
     const bot = {
       async getArticle(_boardName: string, _articleIndex: number) {
@@ -2605,7 +2994,7 @@ describe("ptt adapter module", () => {
   });
 
   it("preserves compressed same-line pushes when reading an article", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
 
     const bot = {
       async getArticle(_boardName: string, _articleIndex: number) {
@@ -2636,7 +3025,7 @@ describe("ptt adapter module", () => {
   });
 
   it("attaches OP edited text after compressed same-line pushes to the later push", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
 
     const bot = {
       async getArticle(_boardName: string, _articleIndex: number) {
@@ -2675,7 +3064,7 @@ describe("ptt adapter module", () => {
   });
 
   it("treats the paragraph immediately before an edit marker as reply content when no trailing edit content exists", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
 
     const bot = {
       async getArticle(_boardName: string, _articleIndex: number) {
@@ -2721,7 +3110,7 @@ describe("ptt adapter module", () => {
   });
 
   it("keeps OP edited text between normal pushes out of the previous push block", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
 
     const bot = {
       async getArticle(_boardName: string, _articleIndex: number) {
@@ -2761,7 +3150,7 @@ describe("ptt adapter module", () => {
   });
 
   it("parses article headers even when author and board share the same line", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const article = mod.parseArticleHeaderBlock(
       [
         "作者  poggssi (冠軍車手321) 看板  Gossiping",
@@ -2782,7 +3171,7 @@ describe("ptt adapter module", () => {
   });
 
   it("prefers the library getArticle flow while neutralizing its unsafe enterIndex step", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     let dangerousEnterIndexCalls = 0;
 
     const bot = {
@@ -2821,7 +3210,7 @@ describe("ptt adapter module", () => {
   });
 
   it("emits progressive partials from the fast library getArticle path", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const partialSnapshots: Array<{ body: number; pushes: number }> = [];
 
     const bot = {
@@ -2859,7 +3248,7 @@ describe("ptt adapter module", () => {
   });
 
   it("returns the current article screen even when its fingerprint matches the previous snapshot", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const oldScreen = [
       "作者  olduser (舊文章作者)                 看板  Gossiping",
       "標題  [問卦] 舊文章",
@@ -2909,7 +3298,7 @@ describe("ptt adapter module", () => {
   });
 
   it("records article open timing trace during manual fetch", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     mod.clearLastArticleOpenTrace();
 
     const bot = {
@@ -2964,7 +3353,7 @@ describe("ptt adapter module", () => {
   });
 
   it("recognizes article editor and save confirmation screens", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
 
     expect(mod.isArticleEditorScreen("文章編輯  離開[Ctrl-X]  插入模式")).toBe(true);
     expect(mod.isArticleEditorScreen("文章發表綱領")).toBe(false);
@@ -2982,7 +3371,7 @@ describe("ptt adapter module", () => {
   });
 
   it("edits the expected article and preserves structured revision history", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     const articleRows = [
       "作者 alice 看板 Test",
@@ -3038,7 +3427,7 @@ describe("ptt adapter module", () => {
       editSummary: "第二次修正",
     });
 
-    expect(result).toEqual({ ok: true });
+    expect(result).toEqual({ ok: true, outcome: "sent" });
     expect(sent).toContain("E");
     expect(sent).toContain("\x1b,");
     expect(sent).toContain("舊簽名\r");
@@ -3061,8 +3450,55 @@ describe("ptt adapter module", () => {
     expect(sent).toContain("y\r");
   });
 
+  it("locates and reopens an editable article by AID", async () => {
+    const mod = await import("./terminalDriver.js");
+    const sent: string[] = [];
+    const articleRows = [
+      "作者 alice 看板 Test",
+      "標題 [測試] AID 編輯",
+      "時間 Thu Jul 16 10:00:00 2026",
+      "───────────────────────────────────────",
+      "舊正文",
+    ];
+    let screenRows = ["看板《Test》"];
+    let inInfo = false;
+    const bot = {
+      enterBoardByName: async () => true,
+      getLines: async () => articleRows,
+      getLine: (index: number) => ({ str: screenRows[index] ?? "" }),
+      send: async (command: string) => {
+        sent.push(command);
+        if (command === "#1AbCd\r") screenRows = articleRows;
+        else if (command === "Q") {
+          inInfo = true;
+          screenRows = ["文章代碼(AID): #1AbCd (Test)"];
+        } else if (command === "q" && inInfo) {
+          inInfo = false;
+          screenRows = articleRows;
+        } else if (command === "q") screenRows = ["看板《Test》"];
+        else if (command === "E") screenRows = ["文章編輯  離開[Ctrl-X]  插入模式"];
+        else if (command === "\x18") screenRows = ["確定要儲存檔案嗎? [Y/n]"];
+        else if (command === "y\r") screenRows = [
+          "文章已更新", "作者 alice 看板 Test", "標題 [測試] AID 編輯",
+        ];
+        return true;
+      },
+    };
+    await expect(mod.submitArticleEditFromBot(bot, {
+      boardName: "Test",
+      articleIndex: 0,
+      articleAid: "#1AbCd",
+      expectedAuthor: "alice",
+      expectedTitle: "[測試] AID 編輯",
+      body: "新正文",
+      editSummary: "AID 修正",
+    })).resolves.toEqual({ ok: true, outcome: "sent" });
+    expect(sent.filter((command) => command === "#1AbCd\r")).toHaveLength(2);
+    expect(sent).toContain("※ PTTzzz 編輯摘要：AID 修正\r");
+  });
+
   it("does not enter the editor when the article identity is stale", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     const articleRows = [
       "作者 alice 看板 Test",
@@ -3093,12 +3529,14 @@ describe("ptt adapter module", () => {
       editSummary: "修正",
     });
 
-    expect(result).toEqual({ ok: false, reason: "文章身分已變更，請重新載入" });
+    expect(result).toEqual({
+      ok: false, outcome: "not-sent", reason: "文章身分已變更，請重新載入",
+    });
     expect(sent).not.toContain("E");
   });
 
   it("refuses an article edit that exceeds the safe line limit", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     const articleRows = [
       "作者 alice 看板 Test",
@@ -3126,13 +3564,15 @@ describe("ptt adapter module", () => {
       editSummary: "修正",
     });
 
-    expect(result).toEqual({ ok: false, reason: "文章行數超過安全編輯上限" });
+    expect(result).toEqual({
+      ok: false, outcome: "not-sent", reason: "文章行數超過安全編輯上限",
+    });
     expect(sent).not.toContain("E");
     expect(sent.some((command) => command.includes("\x19"))).toBe(false);
   });
 
   it("does not delete an article when its identity is stale", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     const articleRows = [
       "作者 alice 看板 Test",
@@ -3164,13 +3604,15 @@ describe("ptt adapter module", () => {
       expectedTitle: "[測試] 原標題",
     });
 
-    expect(result).toEqual({ ok: false, reason: "文章身分已變更，請重新載入" });
+    expect(result).toEqual({
+      ok: false, outcome: "not-sent", reason: "文章身分已變更，請重新載入",
+    });
     expect(sent).not.toContain("d");
     expect(sent).not.toContain("y\r");
   });
 
   it("does not confirm deletion without a PTT delete prompt", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     const articleRows = [
       "作者 alice 看板 Test",
@@ -3203,13 +3645,15 @@ describe("ptt adapter module", () => {
       expectedTitle: "[測試] 原標題",
     });
 
-    expect(result).toEqual({ ok: false, reason: "PTT 拒絕刪除這篇文章" });
+    expect(result).toEqual({
+      ok: false, outcome: "not-sent", reason: "PTT 拒絕刪除這篇文章",
+    });
     expect(sent).toContain("d");
     expect(sent).not.toContain("y\r");
   });
 
   it("deletes a verified article through the PTT terminal", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     const articleRows = [
       "作者 alice 看板 Test",
@@ -3254,13 +3698,13 @@ describe("ptt adapter module", () => {
       expectedTitle: "[測試] 原標題",
     });
 
-    expect(result).toEqual({ ok: true });
+    expect(result).toEqual({ ok: true, outcome: "sent" });
     expect(sent.filter((command) => command === "d")).toHaveLength(1);
     expect(sent.indexOf("d")).toBeLessThan(sent.indexOf("y\r"));
   });
 
   it("does not treat an off-screen index as deleted when the article still opens", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     const articleRows = [
       "作者 alice 看板 Test",
@@ -3302,13 +3746,14 @@ describe("ptt adapter module", () => {
     expect(deletionConfirmed).toBe(true);
     expect(result).toEqual({
       ok: false,
+      outcome: "uncertain",
       reason: "無法確認文章是否刪除成功，請重新整理看板檢查",
     });
     expect(sent.filter((command) => command === "123\r\r")).toHaveLength(2);
   });
 
   it("locates an article by AID before deleting it", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     const articleRows = [
       "作者 alice 看板 Test",
@@ -3324,6 +3769,7 @@ describe("ptt adapter module", () => {
     ];
     let screenRows = boardRows;
     let aidOpenCount = 0;
+    let inInfo = false;
     const bot = {
       enterBoardByName: async () => true,
       getLines: async () => articleRows,
@@ -3334,7 +3780,13 @@ describe("ptt adapter module", () => {
           aidOpenCount += 1;
           screenRows = aidOpenCount === 1 ? articleRows : ["無此文章代碼(AID)", ...boardRows];
         }
-        if (command === "q") screenRows = boardRows;
+        if (command === "Q") {
+          inInfo = true;
+          screenRows = ["文章代碼(AID): #1AbCdEf (Test)"];
+        } else if (command === "q" && inInfo) {
+          inInfo = false;
+          screenRows = articleRows;
+        } else if (command === "q") screenRows = boardRows;
         if (command === "d") screenRows = ["確定要刪除這篇文章嗎? [y/N]"];
         if (command === "y\r") screenRows = boardRows;
         return true;
@@ -3349,14 +3801,14 @@ describe("ptt adapter module", () => {
       expectedTitle: "[測試] AID 原標題",
     });
 
-    expect(result).toEqual({ ok: true });
+    expect(result).toEqual({ ok: true, outcome: "sent" });
     expect(sent.filter((command) => command === "#1AbCdEf\r")).toHaveLength(2);
     expect(sent).toContain("d");
     expect(sent).toContain("y\r");
   });
 
   it("replies to a verified article through the native PTT board flow", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     const articleRows = [
       "作者 alice 看板 Test",
@@ -3402,7 +3854,7 @@ describe("ptt adapter module", () => {
       body: "回應第一行\n回應第二行",
     });
 
-    expect(result).toEqual({ ok: true });
+    expect(result).toEqual({ ok: true, outcome: "sent" });
     expect(sent).toContain("y");
     expect(sent).toContain("f\r");
     expect(sent).toContain("\r");
@@ -3418,7 +3870,7 @@ describe("ptt adapter module", () => {
   });
 
   it("restores the board without resending an uncertain native reply", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     const articleRows = [
       "作者 alice 看板 Test",
@@ -3470,6 +3922,7 @@ describe("ptt adapter module", () => {
 
     expect(result).toEqual({
       ok: false,
+      outcome: "uncertain",
       reason: "無法確認回應是否送出，已返回看板，請重新整理檢查",
     });
     expect(restoredBoard).toBe(true);
@@ -3477,7 +3930,7 @@ describe("ptt adapter module", () => {
   });
 
   it("does not treat a board return before save confirmation as success", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     const articleRows = [
       "作者 alice 看板 Test",
@@ -3522,13 +3975,14 @@ describe("ptt adapter module", () => {
 
     expect(result).toEqual({
       ok: false,
+      outcome: "not-sent",
       reason: "PTT 未顯示回應儲存確認",
     });
     expect(sent).not.toContain("y\r");
   });
 
   it("does not enter native reply when the source identity is stale", async () => {
-    const mod = await import("../adapter");
+    const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     const articleRows = [
       "作者 alice 看板 Test",
@@ -3555,7 +4009,9 @@ describe("ptt adapter module", () => {
       body: "不應送出",
     });
 
-    expect(result).toEqual({ ok: false, reason: "文章身分已變更，請重新載入" });
+    expect(result).toEqual({
+      ok: false, outcome: "not-sent", reason: "文章身分已變更，請重新載入",
+    });
     expect(sent).not.toContain("y");
     expect(sent).not.toContain("不應送出\r");
   });

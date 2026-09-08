@@ -66,9 +66,18 @@ export type BoardListEntry =
   | { kind: "category"; title: string; categoryCursor: string };
 
 export interface BoardPage {
+  kind: "boards";
+  items: readonly Board[];
+  nextCursor?: string;
+}
+
+export interface BoardDirectoryPage {
+  kind: "directory";
   items: readonly BoardListEntry[];
   nextCursor?: string;
 }
+
+export type BoardListPage = BoardPage | BoardDirectoryPage;
 
 export interface ArticleRef {
   key: ArticleKey;
@@ -184,17 +193,18 @@ type BoardFilterPage = { cursor?: string; limit?: number };
 
 export type FilterBoardsInput = BoardFilterPage &
   (
-    | { favorite: boolean; categoryCursor?: string }
-    | { favorite?: boolean; categoryCursor: string }
+    | { favorite: true; categoryCursor?: string }
+    | { favorite?: true; categoryCursor: string }
   );
 export interface ListArticlesInput { board: string; cursor?: string; limit?: number }
 export interface SearchArticlesInput { board: string; query: string; cursor?: string; limit?: number }
 export interface FilterArticlesInput { board: string; author?: string; keyword?: string; cursor?: string; limit?: number }
 export interface GetArticleInput { article: ArticleKey; includeDebugMetadata?: boolean }
-export interface CreateArticleInput { board: string; title: string; content: string }
-export interface EditArticleInput { article: ArticleKey; content: string }
+export interface CreateArticleInput { board: string; category?: string; title: string; content: string }
+export interface EditArticleInput { article: ArticleKey; content: string; editSummary: string }
 export interface DeleteArticleInput { article: ArticleKey }
 export interface ReplyToArticleInput { article: ArticleKey; content: string; pushType: PushType }
+export interface ReplyArticleToBoardInput { article: ArticleKey; content: string }
 export interface ReplyToReplyInput { article: ArticleKey; replyId: ReplyId; content: string; pushType: PushType }
 export interface EditReplyInput { article: ArticleKey; replyId: ReplyId; mode: "append" | "replace"; content: string }
 export interface WithdrawReplyInput { article: ArticleKey; replyId: ReplyId }
@@ -207,7 +217,7 @@ export interface PttzzzClient {
   connect(): Promise<Result<void>>;
   login(input: LoginInput): Promise<Result<Session>>;
   disconnect(): Promise<void>;
-  listBoards(input?: ListBoardsInput): Promise<Result<BoardPage>>;
+  listBoards(input?: ListBoardsInput): Promise<Result<BoardListPage>>;
   searchBoards(input: SearchBoardsInput): Promise<Result<BoardPage>>;
   filterBoards(input: FilterBoardsInput): Promise<Result<BoardPage>>;
   listArticles(input: ListArticlesInput): Promise<Result<ArticlePage>>;
@@ -218,6 +228,7 @@ export interface PttzzzClient {
   editArticle(input: EditArticleInput): Promise<Result<void>>;
   deleteArticle(input: DeleteArticleInput): Promise<Result<void>>;
   replyToArticle(input: ReplyToArticleInput): Promise<Result<void>>;
+  replyArticleToBoard(input: ReplyArticleToBoardInput): Promise<Result<void>>;
   replyToReply(input: ReplyToReplyInput): Promise<Result<void>>;
   editReply(input: EditReplyInput): Promise<Result<void>>;
   withdrawReply(input: WithdrawReplyInput): Promise<Result<void>>;
@@ -241,13 +252,14 @@ export type GatewayEvent =
   | { type: "article.source"; source: RawArticleSource };
 
 export type PttCommand =
-  | { type: "create-article"; board: string; title: string; content: string }
-  | { type: "edit-article"; article: ArticleKey; content: string }
+  | { type: "create-article"; board: string; category?: string; title: string; content: string }
+  | { type: "edit-article"; article: ArticleKey; content: string; editSummary: string }
   | { type: "delete-article"; article: ArticleKey }
   | { type: "reply-article"; article: ArticleKey; content: string; pushType: PushType }
+  | { type: "reply-article-to-board"; article: ArticleKey; content: string }
   | { type: "reply-floor"; article: ArticleKey; floor: number; content: string; pushType: PushType }
-  | { type: "edit-floor"; article: ArticleKey; floors: readonly number[]; mode: "append" | "replace"; content: string }
-  | { type: "withdraw-floor"; article: ArticleKey; floors: readonly number[] }
+  | { type: "edit-floor"; article: ArticleKey; floor: number; mode: "append" | "replace"; content: string }
+  | { type: "withdraw-floor"; article: ArticleKey; ranges: readonly { start: number; end: number }[] }
   | { type: "vote-article"; article: ArticleKey; direction: VoteDirection }
   | { type: "withdraw-article-vote"; article: ArticleKey; direction: VoteDirection }
   | { type: "vote-floor"; article: ArticleKey; floor: number; direction: VoteDirection }
@@ -278,7 +290,7 @@ export interface PttGateway {
   connect(): Promise<void>;
   login(input: LoginInput): Promise<Session>;
   disconnect(): Promise<void>;
-  listBoards(input?: ListBoardsInput): Promise<BoardPage>;
+  listBoards(input?: ListBoardsInput): Promise<BoardListPage>;
   searchBoards(input: SearchBoardsInput): Promise<BoardPage>;
   filterBoards(input: FilterBoardsInput): Promise<BoardPage>;
   listArticles(input: ListArticlesInput): Promise<ArticlePage>;

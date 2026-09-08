@@ -71,11 +71,14 @@ else {
 
 ```ts
 const boards = await client.searchBoards({ prefix: "Gossip", limit: 20 });
-if (boards.ok) {
-  for (const entry of boards.value.items) {
-    if (entry.kind === "board") renderBoard(entry.board);
-    else renderCategory(entry.title, entry.categoryCursor);
-  }
+if (boards.ok) renderBoards(boards.value.items);
+
+const directory = await client.listBoards({
+  source: { kind: "category", categoryCursor: selectedCategoryCursor },
+});
+if (directory.ok) {
+  if (directory.value.kind === "boards") renderBoards(directory.value.items);
+  else renderDirectoryEntries(directory.value.items);
 }
 
 const favoritesInCategory = await client.filterBoards({
@@ -108,9 +111,11 @@ if (requestGeneration === articleRequestGeneration && activeArticleKey === reque
 
 `getArticle()` Promise 成功值是 final `Article`；讀取途中由 subscription 接收 partial。
 
-`listBoards()` 預設列熱門看板，也可指定 `{ source: { kind: "favorite" } }` 或 category source。看板搜尋的 `prefix` 只比對看板名稱前綴，不是全文 query。`filterBoards()` 至少要傳 `favorite` 或 `categoryCursor`；兩者並存表示取交集。
+`listBoards()` 預設列熱門看板，也可指定 `{ source: { kind: "favorite" } }` 或 category source；先依 `kind` 判斷普通看板頁或分類目錄頁。`searchBoards()`／`filterBoards()` 的 items 永遠都是 `Board[]`，不需處理 category entry。看板搜尋的 `prefix` 只比對看板名稱前綴，不是全文 query。`filterBoards()` 至少要傳 `favorite: true` 或 `categoryCursor`；兩者並存表示取交集，請勿傳 `favorite: false`。
 
-所有 `cursor`／`categoryCursor` 都是 opaque、session-scoped token。只可把 gateway 回傳值原樣交回同一登入 session；不要解析、改寫、持久化或當成 terminal offset。
+`searchArticles()` 需要非空 query；`filterArticles()` 至少提供非空 author 或 keyword。兩者同時提供表示交集，不要用空 filter 代替 `listArticles()`。
+
+所有 `cursor`／`categoryCursor` 都是 opaque、gateway-instance/session-scoped token。只可把 gateway 回傳值原樣交回同一成功登入 session；不要解析、改寫、持久化或當成 terminal offset。登入失敗不會輪替現有 session 的 cursor；成功登入與 disconnect 會使舊 cursor 失效。
 
 ## 6. Render partial / final
 
@@ -151,6 +156,27 @@ const vote = await client.voteReply({
 
 發文、文章回覆、編輯、撤回與文章投票也只傳 contracts 定義的語意 input；core/browser 負責正確 transport formatting。
 
+```ts
+await client.createArticle({
+  board: "Test",
+  category: "問卦", // 看板不需分類時可省略
+  title: "標題",
+  content: "正文",
+});
+
+await client.editArticle({
+  article: articleKey,
+  content: revisedBody,
+  editSummary: "修正第二段錯字", // 必填且不可為空
+});
+
+// PTT 原生「回應至看板」，會建立另一篇文章；不是推文。
+await client.replyArticleToBoard({
+  article: articleKey,
+  content: responseBody,
+});
+```
+
 ## 8. Error / outcome
 
 ```ts
@@ -183,6 +209,8 @@ function handleWrite(result: Result<void>): void {
 unsubscribe();
 await client.disconnect();
 ```
+
+`disconnect()` 是 best-effort cleanup：client 即使收到 gateway 的預期 cleanup error，也會清除本地連線／session 狀態並 resolve。未知的程式錯誤仍可能 reject，不能用空的 broad catch 吞掉。
 
 ## 10. 禁止事項
 

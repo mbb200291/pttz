@@ -1,12 +1,34 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from "vitest";
-import { createFakePttAdapter, FAKE_PTT_STORE_KEY } from "../fakeAdapter";
+import {
+  createLegacyFakePttAdapterForUi as createFakePttAdapter,
+  FAKE_PTT_STORE_KEY,
+} from "./fakeTerminalDriver.js";
 
 describe("fake PTT adapter", () => {
   beforeEach(() => {
     localStorage.clear();
     sessionStorage.clear();
     window.history.replaceState(null, "", "/");
+  });
+
+  it("migrates legacy records to unique opaque AIDs", async () => {
+    const adapter = createFakePttAdapter();
+    await adapter.listArticles("test");
+    const legacy = JSON.parse(localStorage.getItem(FAKE_PTT_STORE_KEY) ?? "null");
+    for (const board of Object.values(legacy.boards) as Array<{ articles: Array<{ aid?: string }> }>) {
+      for (const article of board.articles) delete article.aid;
+    }
+    localStorage.setItem(FAKE_PTT_STORE_KEY, JSON.stringify(legacy));
+
+    await adapter.listArticles("test");
+    const migrated = JSON.parse(localStorage.getItem(FAKE_PTT_STORE_KEY) ?? "null");
+    const aids = Object.values(migrated.boards).flatMap((board) =>
+      (board as { articles: Array<{ aid: string; index: number }> }).articles.map((article) => article.aid));
+    expect(aids.every((aid) => aid.length > 0 && !/^\d+$/u.test(aid))).toBe(true);
+    expect(new Set(aids)).toHaveLength(aids.length);
+    await expect(adapter.getArticleByAid("test", `#${migrated.boards.test.articles[0].aid}`))
+      .resolves.toMatchObject({ title: "[測試] Fake PTT 多帳號互動測試" });
   });
 
   it("uses the login username as the author for replies", async () => {

@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "build:packages": "npm run build -w @pttzzz/core",
+    "build:packages": "npm run build -w @pttzzz/core && npm run build -w @pttzzz/browser",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run"

@@ -21,7 +21,13 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true
+    "noUncheckedSideEffectImports": true,
+    "baseUrl": ".",
+    "paths": {
+      "@pttzzz/core": ["packages/core/src/index.ts"],
+      "@pttzzz/core/internal": ["packages/core/src/internal.ts"],
+      "@pttzzz/browser": ["packages/browser/src/index.ts"]
+    }
   },
   "include": ["src"]
 }

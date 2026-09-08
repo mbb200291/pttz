@@ -537,9 +537,18 @@ export type BoardListEntry =
   | { kind: "category"; title: string; categoryCursor: string };
 
 export interface BoardPage {
+  kind: "boards";
+  items: readonly Board[];
+  nextCursor?: string;
+}
+
+export interface BoardDirectoryPage {
+  kind: "directory";
   items: readonly BoardListEntry[];
   nextCursor?: string;
 }
+
+export type BoardListPage = BoardPage | BoardDirectoryPage;
 
 export type BoardListSource =
   | { kind: "hot" }
@@ -558,15 +567,13 @@ export interface SearchBoardsInput {
   limit?: number;
 }
 
-export interface FilterBoardsInput {
-  favorite?: boolean;
-  categoryCursor?: string;
-  cursor?: string;
-  limit?: number;
-}
+export type FilterBoardsInput = { cursor?: string; limit?: number } & (
+  | { favorite: true; categoryCursor?: string }
+  | { favorite?: true; categoryCursor: string }
+);
 ```
 
-`filterBoards()` 至少需要 `favorite` 或 `categoryCursor`；兩者同時存在時取交集。所有 cursor 都是不透明、session-scoped routing token，不可持久化或反解。
+`listBoards()` 回傳 `BoardListPage`；`searchBoards()`／`filterBoards()` 只回傳 `BoardPage`，category entry 不得混入搜尋或篩選結果。`filterBoards()` 至少需要 `favorite: true` 或 `categoryCursor`；兩者同時存在時取交集，`favorite: false` 無效。所有 cursor 都是不透明、session-scoped routing token，不可持久化或反解。
 
 - [ ] **Step 2: RED／GREEN contracts**
 
@@ -584,7 +591,7 @@ Expected: 先 FAIL，修改後 PASS。
 - 真實 terminal driver 可有 positional args、raw floor 與 screen helpers，但只存在 `packages/browser/src/internal/`，不從 package exports 公開。
 - `@pttzzz/browser` root 最終只提供 `createBrowserGateway()`、`createBrowserClient()` 與穩定 browser types；一般 UI 不可取得 raw `send()`。
 - `listBoards()` 預設熱門看板；分類目錄可能回傳 category entry；`searchBoards()` 只做 prefix search。
-- Read/lifecycle gateway methods 以 core-owned `GatewayError` 傳遞可預期失敗；`PttzzzClient` 將其正規化成 public `Result<..., CoreError>`。未知 throw 才正規化為 `GATEWAY_FAILURE`。寫入仍只用 discriminated `ActionReceipt`，不得以 throw 取代可判定的送出結果。
+- Connect/login/read gateway methods 以 core-owned `GatewayError` 傳遞可預期失敗；`PttzzzClient` 將其正規化成 public `Result<..., CoreError>`。未知 throw 才正規化為 `GATEWAY_FAILURE`。Gateway disconnect 的預期 `GatewayError` 由 client 在清除 local state 後吸收；未知程式錯誤仍可 throw。寫入仍只用 discriminated `ActionReceipt`，不得以 throw 取代可判定的送出結果。
 
 ```ts
 export class GatewayError extends Error {
@@ -682,6 +689,7 @@ git commit -m "refactor: isolate browser terminal driver"
 - `subscribe()` 回傳 unsubscribe，並把 status 轉成 `GatewayEvent`。
 - `readArticle()` 依序 yield incomplete／final `RawArticleSource`，且完整保留輸入的 `ArticleKey` 表示。
 - `execute(PttCommand)` 分派到 terminal workflow 並正規化 `ActionReceipt`。
+- behavioral contract 必須覆蓋全部 command variant，包含獨立的 `reply-article-to-board`、帶 category 的 create 與帶 `editSummary` 的 index/AID edit。
 - package root 沒有 `send()`、raw screen 或 positional action methods。
 
 Run: `npx vitest run packages/browser/src/gateway.test.ts`
@@ -692,27 +700,29 @@ Expected: FAIL，`BrowserPttGateway` 尚不存在。
 
 `BrowserPttGateway implements PttGateway`，只負責 object/command/event 轉換與錯誤正規化。既有 terminal method 暫時由私有 driver 執行；不可讓新 gateway 同時實作 legacy interface，也不可把 raw floor 暴露到 UI contract。
 
-`readArticle()` 必須在 terminal driver 的原始 snapshot 邊界取得 raw source，不可把已聚合的 `ArticleData` 假裝成 raw。若需修改 driver，只新增取得 incomplete/final raw snapshot 的最小 seam。
+`readArticle()` 必須在 terminal driver 的原始 snapshot 邊界取得 raw source，不可把已聚合的 `ArticleData` 假裝成 raw。stream 只保留最新 incomplete 與 final 的有界 pending 狀態；iterator `return()`／`AbortSignal` 必須停止後續事件、恢復穩定 terminal 狀態並立即釋放 serialized queue。
+
+所有含 `ArticleKey` 的 push／vote／edit／withdraw／delete／回應看板 command，必須在 terminal driver 的同一個 serialized operation 內重新定位 index/AID、驗證開啟文章身分後才送出第一個不可逆按鍵；不得沿用前一次 read 留下的 article screen，也不得在 gateway 先 read、稍後另開 write task。index 的獨立證據來自實際看板分頁 row，AID 的獨立證據來自 `Q` 文章資訊中的 canonical AID／board；同一 locator 自行讀出 expected identity 不算驗證。transcript 至少覆蓋 read → board list → write、較舊 index 的分頁定位，以及錯誤 index/AID 對所有 write family 都不送 `X`／`E`／`d`／`y`。
 
 - [ ] **Step 3: 實作真實看板能力**
 
 - `listBoards()`：以 `ptt-client` Board query／既有 screen parser 實作 hot、favorite、category；預設 hot。
 - `searchBoards()`：使用 PTT prefix search；空 prefix reject core-owned `GatewayError("INVALID_INPUT", ...)`，不得宣稱全文搜尋。
 - `filterBoards()`：favorite、category cursor 或交集；未知／跨 session cursor reject structured `GatewayError`，不把 cursor 當 terminal offset 公開。
-- 分頁 cursor 由 gateway 發行且 session-scoped；測試不得依賴 cursor 內部格式。
+- 分頁 cursor 由 gateway 發行且 session-scoped；cursor 綁定 normalized query 與 limit，保存 immutable remaining snapshot（或等價的穩定 backend continuation），續頁不得重新抓取後套用可變 offset。測試不得依賴 cursor 內部格式。
+- board/article cursor 使用每 instance/session 的隨機 namespace；只有成功登入與 disconnect 輪替，登入失敗不得清除既有 cursor。文章 list/search/filter cursor 不得接受 caller 提供的 terminal index，且必須綁定原查詢 signature 與 limit。
+- article filter 的 author 與 author+keyword 必須映射到真實 terminal search；不可回傳未過濾資料。
 
 以 transcripts 覆蓋熱門、最愛、根分類、子分類、prefix 無結果、invalid cursor、分頁與 terminal 狀態復原。
 
 - [ ] **Step 4: 統一 write receipt**
 
-第一個不可逆按鍵前失敗是 `not-sent`；成功畫面是 `sent`；內容可能已送出但確認 timeout 是 `uncertain`。`sent`／`uncertain` 強制 `retryable: false`，不得自動重送。
+第一個不可逆按鍵前失敗是 `not-sent`；成功畫面是 `sent`；save/delete/content confirmation key 已送出後的 timeout 或模糊結果是 `uncertain`。未標註的 legacy failure 預設 `uncertain`。所有 outcome 預設 `retryable: false`；只有 driver 明確標示的暫時性、安全 pre-send failure 可 opt in true，輸入錯誤、not found、stale identity 與 permission/rejected 不可重試。`sent`／`uncertain` 強制 false，不得自動重送。Listener exception 逐 listener 隔離，不可中止後續 listener 或 gateway 操作。多個 withdraw ranges 必須在同一 terminal `runSerial` 內逐段送出，其他 command 不可插入；部分成功或不確定時保留最保守 outcome 且不可重試。
 
 - [ ] **Step 5: 公開 factory 並驗證**
 
 ```ts
-export function createBrowserGateway(): PttGateway {
-  return new BrowserPttGateway(createTerminalDriver());
-}
+export function createBrowserGateway(): PttGateway;
 ```
 
 ```bash
@@ -722,7 +732,7 @@ npm run build:packages
 npm run lint
 ```
 
-Expected: PASS；`BrowserPttGateway` 是 browser package 唯一公開的真實 gateway，terminal driver 仍不可由 package subpath import。
+Expected: PASS；browser package root 只公開 factory，不公開 `BrowserPttGateway` class、driver 或 internal seam，terminal driver 仍不可由 package subpath import。
 
 ```bash
 git add packages/browser
@@ -791,7 +801,7 @@ git commit -m "refactor: expose fake browser gateway"
 
 - [ ] **Step 1: 用 in-memory gateway 寫 failing tests**
 
-覆蓋 subscribe/unsubscribe、connection event、partial revision 遞增、final updated event、expected failure 轉 `Result`、gateway throw 轉 `CoreError`。
+覆蓋 subscribe/unsubscribe、connection event、partial revision 遞增、final updated event、expected failure 轉 `Result`、gateway throw 轉 `CoreError`。另測 disconnect policy：gateway 以 `GatewayError` 回報預期 cleanup failure 時仍清除 session／connection local state 並 resolve；未知 `Error` 仍 reject，但 local state 同樣清除。
 
 ```ts
 const client = new PttzzzClient(gateway);
@@ -908,6 +918,8 @@ voteReply(push)         → PTT type neutral，content「推x樓」
 voteReply(boo)          → PTT type neutral，content「噓x樓」
 replyToReply            → 依 UI 選擇的 PTT type，content「回x樓：body」
 withdrawReplyVote       → PTT type neutral，content「撤回我對x樓的推／噓」
+editReply               → edit-floor，使用聚合回文的單一 primary source floor
+withdrawReply           → withdraw-floor，將 source floors 分成連續 ranges；不連續樓號不得被擴張
 ```
 
 文章投票與回文投票必須是不同 public methods；不得沿用目前名稱混淆的 floor-based `voteArticle()`。

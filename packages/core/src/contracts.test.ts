@@ -8,14 +8,22 @@ import {
   type Article,
   type ArticleData,
   type ArticleKey,
+  type Board,
+  type BoardDirectoryPage,
   type BoardListEntry,
+  type BoardListPage,
   type BoardListSource,
+  type BoardPage,
   type CoreEvent,
   type FilterBoardsInput,
   GatewayError,
   type ListBoardsInput,
   type PttCommand,
   type PttGateway,
+  type CreateArticleInput,
+  type EditArticleInput,
+  type PttzzzClient,
+  type ReplyArticleToBoardInput,
   type ReplyToReplyInput,
   type Result,
   type SearchBoardsInput,
@@ -51,6 +59,41 @@ describe("core contracts", () => {
     expectTypeOf<Extract<PttCommand, { type: "reply-floor" }>>().toHaveProperty(
       "floor",
     );
+  });
+
+  it("keeps board replies distinct and requires edit metadata", () => {
+    const edit: EditArticleInput = {
+      article: { board: "Test", index: 1 },
+      content: "body",
+      editSummary: "fix typo",
+    };
+    const boardReply: Extract<PttCommand, { type: "reply-article-to-board" }> = {
+      type: "reply-article-to-board",
+      article: { board: "Test", aid: "#aid" },
+      content: "response",
+    };
+    expectTypeOf<ReplyArticleToBoardInput>().toMatchTypeOf<{
+      article: ArticleKey;
+      content: string;
+    }>();
+    expectTypeOf<PttzzzClient>().toHaveProperty("replyArticleToBoard");
+    expectTypeOf<EditArticleInput>().toHaveProperty("editSummary");
+    expectTypeOf<Extract<PttCommand, { type: "edit-article" }>>()
+      .toHaveProperty("editSummary");
+    expectTypeOf<Extract<PttCommand, { type: "reply-article-to-board" }>>()
+      .toHaveProperty("content");
+    expect(edit.editSummary).toBe("fix typo");
+    expect(boardReply.type).toBe("reply-article-to-board");
+  });
+
+  it("passes an optional PTT post category through the public and gateway contracts", () => {
+    const create: CreateArticleInput = {
+      board: "Test", category: "問卦", title: "title", content: "body",
+    };
+    expectTypeOf<CreateArticleInput>().toHaveProperty("category");
+    expectTypeOf<Extract<PttCommand, { type: "create-article" }>>()
+      .toHaveProperty("category");
+    expect(create.category).toBe("問卦");
   });
 
   it("exposes gateway operations without an arbitrary send method", () => {
@@ -105,6 +148,33 @@ describe("core contracts", () => {
       source: { kind: "category", categoryCursor: "opaque-session-token" },
     };
     expect(categoryList.source?.kind).toBe("category");
+
+    expectTypeOf<BoardPage>().toEqualTypeOf<{
+      kind: "boards";
+      items: readonly Board[];
+      nextCursor?: string;
+    }>();
+    expectTypeOf<BoardDirectoryPage>().toEqualTypeOf<{
+      kind: "directory";
+      items: readonly BoardListEntry[];
+      nextCursor?: string;
+    }>();
+    expectTypeOf<PttGateway["listBoards"]>().returns.toEqualTypeOf<
+      Promise<BoardListPage>
+    >();
+    expectTypeOf<PttGateway["searchBoards"]>().returns.toEqualTypeOf<
+      Promise<BoardPage>
+    >();
+    expectTypeOf<PttGateway["filterBoards"]>().returns.toEqualTypeOf<
+      Promise<BoardPage>
+    >();
+
+    const categorySearchPage: BoardPage = {
+      kind: "boards",
+      // @ts-expect-error search/filter board pages never contain category entries
+      items: [{ kind: "category", title: "生活", categoryCursor: "opaque" }],
+    };
+    expect(categorySearchPage.items).toHaveLength(1);
   });
 
   it("uses prefix board search and requires at least one board filter", () => {
@@ -129,9 +199,17 @@ describe("core contracts", () => {
     const textCategory: FilterBoardsInput = { category: "生活" };
     // @ts-expect-error filtering requires favorite or categoryCursor
     const emptyFilter: FilterBoardsInput = {};
+    // @ts-expect-error favorite is an active filter, never a false no-op
+    const disabledFavorite: FilterBoardsInput = { favorite: false };
     // @ts-expect-error terminal offsets are not public routing inputs
     const terminalOffset: ListBoardsInput = { offset: 12 };
-    expect([querySearch, textCategory, emptyFilter, terminalOffset]).toHaveLength(4);
+    expect([
+      querySearch,
+      textCategory,
+      emptyFilter,
+      disabledFavorite,
+      terminalOffset,
+    ]).toHaveLength(5);
   });
 
   it("carries expected read and lifecycle failures as gateway errors", () => {

@@ -179,7 +179,7 @@ interface PttzzzClient {
   login(input: LoginInput): Promise<Result<Session>>;
   disconnect(): Promise<void>;
 
-  listBoards(input?: ListBoardsInput): Promise<Result<BoardPage>>;
+  listBoards(input?: ListBoardsInput): Promise<Result<BoardListPage>>;
   listArticles(input: ListArticlesInput): Promise<Result<ArticlePage>>;
   getArticle(input: GetArticleInput): Promise<Result<Article>>;
 
@@ -187,6 +187,7 @@ interface PttzzzClient {
   editArticle(input: EditArticleInput): Promise<Result<void>>;
   deleteArticle(input: DeleteArticleInput): Promise<Result<void>>;
   replyToArticle(input: ReplyToArticleInput): Promise<Result<void>>;
+  replyArticleToBoard(input: ReplyArticleToBoardInput): Promise<Result<void>>;
 
   replyToReply(input: ReplyToReplyInput): Promise<Result<void>>;
   editReply(input: EditReplyInput): Promise<Result<void>>;
@@ -202,9 +203,11 @@ interface PttzzzClient {
 
 查詢與寫入方法回傳 Promise，適合表示單次操作的最終結果；連線狀態、逐步載入與資料更新使用事件，避免 framework polling，也避免核心綁定任何 store。
 
-看板契約固定如下：`listBoards()` 預設熱門看板，也可選 favorite 或 category source；category page 的 entry 是 board/category discriminated union；`searchBoards()` 只接受名稱 `prefix`；`filterBoards()` 至少提供 `favorite` 或 `categoryCursor`，同時提供時取交集。所有 cursor 都是不透明且只在建立它的 session 有效，UI 不得反解或持久化。
+看板契約固定如下：`listBoards()` 預設熱門看板，也可選 favorite 或 category source，回傳的 `BoardListPage` 以 `kind` 區分普通看板頁與 board/category 目錄頁，即使空頁也不含糊；`searchBoards()`／`filterBoards()` 嚴格只回傳 `BoardPage`。搜尋只接受名稱 `prefix`；filter 至少提供 `favorite: true` 或 `categoryCursor`，同時提供時取交集。所有 board/article cursor 都是不透明、由 gateway instance 的隨機 session namespace 發行；成功登入或 disconnect 使舊 cursor 失效，登入失敗保留既有 cursor，UI 不得反解或持久化。
 
-Gateway read／lifecycle 的可預期失敗使用 core-owned `GatewayError`；高階 client 保留其欄位正規化成 `CoreError`，只有未知 throw 轉為 `GATEWAY_FAILURE`。寫入仍只用 `ActionReceipt` 表達是否送出與不確定性。
+文章推文 `replyToArticle` 與 PTT 原生回應到看板 `replyArticleToBoard` 是不同操作。後者建立另一篇文章，必須保留 index/AID identity 完成來源驗證。文章編輯必須攜帶非空 `editSummary`，發文可選擇性攜帶 PTT category。每個 terminal write workflow 必須標出 confirmation boundary；未標註失敗安全視為 `uncertain`，不得推測未送出。
+
+Gateway connect／login／read 的可預期失敗使用 core-owned `GatewayError`；高階 client 保留其欄位正規化成 `CoreError`，只有未知 throw 轉為 `GATEWAY_FAILURE`。`disconnect()` 保持 `Promise<void>`：client 對預期的 cleanup `GatewayError` 仍清除本地狀態並 resolve，未知程式錯誤可 throw。寫入仍只用 `ActionReceipt` 表達是否送出與不確定性。
 
 ### 6.2 僅供 gateway 實作者公開
 

@@ -5,6 +5,7 @@ import type { Plugin } from 'vite'
 import { WebSocket as WsNode, WebSocketServer } from 'ws'
 import type { Duplex } from 'stream'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
+import { fileURLToPath, URL } from 'node:url'
 
 /**
  * 在 Vite dev server 上攔截 /ptt-ws 的 WebSocket upgrade，
@@ -53,6 +54,13 @@ function pttWsPlugin(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@pttzzz/core/internal': fileURLToPath(new URL('./packages/core/src/internal.ts', import.meta.url)),
+      '@pttzzz/core': fileURLToPath(new URL('./packages/core/src/index.ts', import.meta.url)),
+      '@pttzzz/browser': fileURLToPath(new URL('./packages/browser/src/index.ts', import.meta.url)),
+    },
+  },
   plugins: [
     nodePolyfills({
       globals: {

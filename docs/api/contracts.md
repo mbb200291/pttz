@@ -9,7 +9,7 @@
 一般 UI 只從 `@pttzzz/core` package root 使用：
 
 - `PttzzzClient`
-- `Board`、`BoardListEntry`、`BoardListSource`、`BoardPage`、`ArticleKey`、`ArticleRef`、`ArticleSummary`、`ArticlePage`、`Article`、`PartialArticle`、`Reply` 等 DTO，以及 `articleKeyId`
+- `Board`、`BoardListEntry`、`BoardListSource`、`BoardPage`、`BoardDirectoryPage`、`BoardListPage`、`ArticleKey`、`ArticleRef`、`ArticleSummary`、`ArticlePage`、`Article`、`PartialArticle`、`Reply` 等 DTO，以及 `articleKeyId`
 - 本文件列出的 input DTO
 - `Result`、`CoreError`、`WriteOutcome`
 - `CoreEvent`、`Unsubscribe`
@@ -60,7 +60,7 @@ export class GatewayError extends Error {
 export type Unsubscribe = () => void;
 ```
 
-UI-facing client 的預期 PTT 失敗以 `Result` 表示。Gateway 的 read／lifecycle method 以 `GatewayError` 傳遞可預期失敗；client 保留其 `code`、`message`、`retryable` 與 `cause` 並轉成 `CoreError`。未知 throw 才正規化成 `GATEWAY_FAILURE`。寫入仍只回傳 `ActionReceipt`，不可用 throw 取代已知的送出結果。寫入錯誤的 `outcome`：
+UI-facing client 的預期 PTT 失敗以 `Result` 表示。Gateway 的 connect／login／read method 以 `GatewayError` 傳遞可預期失敗；client 保留其 `code`、`message`、`retryable` 與 `cause` 並轉成 `CoreError`。未知 throw 才正規化成 `GATEWAY_FAILURE`。Disconnect 採下述 best-effort 特例。寫入仍只回傳 `ActionReceipt`，不可用 throw 取代已知的送出結果。寫入錯誤的 `outcome`：
 
 - `not-sent`：確認未送出；只有 `retryable` 也為 `true` 時才適合提供安全重試。
 - `sent`：確認已送出，但後續確認失敗；先重新讀取狀態。
@@ -95,9 +95,18 @@ export type BoardListEntry =
   | { kind: "category"; title: string; categoryCursor: string };
 
 export interface BoardPage {
+  kind: "boards";
+  items: readonly Board[];
+  nextCursor?: string;
+}
+
+export interface BoardDirectoryPage {
+  kind: "directory";
   items: readonly BoardListEntry[];
   nextCursor?: string;
 }
+
+export type BoardListPage = BoardPage | BoardDirectoryPage;
 
 export interface ArticleRef {
   key: ArticleKey;
@@ -220,18 +229,19 @@ export type BoardListSource =
 export interface ListBoardsInput { source?: BoardListSource; cursor?: string; limit?: number }
 export interface SearchBoardsInput { prefix: string; cursor?: string; limit?: number }
 export type FilterBoardsInput = { cursor?: string; limit?: number } & (
-  | { favorite: boolean; categoryCursor?: string }
-  | { favorite?: boolean; categoryCursor: string }
+  | { favorite: true; categoryCursor?: string }
+  | { favorite?: true; categoryCursor: string }
 );
 export interface ListArticlesInput { board: string; cursor?: string; limit?: number }
 export interface SearchArticlesInput { board: string; query: string; cursor?: string; limit?: number }
 export interface FilterArticlesInput { board: string; author?: string; keyword?: string; cursor?: string; limit?: number }
 export interface GetArticleInput { article: ArticleKey; includeDebugMetadata?: boolean }
 
-export interface CreateArticleInput { board: string; title: string; content: string }
-export interface EditArticleInput { article: ArticleKey; content: string }
+export interface CreateArticleInput { board: string; category?: string; title: string; content: string }
+export interface EditArticleInput { article: ArticleKey; content: string; editSummary: string }
 export interface DeleteArticleInput { article: ArticleKey }
 export interface ReplyToArticleInput { article: ArticleKey; content: string; pushType: PushType }
+export interface ReplyArticleToBoardInput { article: ArticleKey; content: string }
 export interface ReplyToReplyInput { article: ArticleKey; replyId: ReplyId; content: string; pushType: PushType }
 export interface EditReplyInput { article: ArticleKey; replyId: ReplyId; mode: "append" | "replace"; content: string }
 export interface WithdrawReplyInput { article: ArticleKey; replyId: ReplyId }
@@ -241,9 +251,11 @@ export interface VoteReplyInput { article: ArticleKey; replyId: ReplyId; directi
 export interface WithdrawReplyVoteInput { article: ArticleKey; replyId: ReplyId; direction: VoteDirection }
 ```
 
-input DTO 不接受 raw floor，也不接受預先格式化的 PTT 控制文字。`listBoards()` 未指定 source 時列熱門看板；favorite 與 category 是不同的 PTT 清單來源，分類頁可同時包含 board 與下一層 category entry。`searchBoards()` 只做看板名稱 prefix search，不是全文 query。`filterBoards()` 至少要有 `favorite` 或 `categoryCursor`，兩者同時存在時取交集。
+input DTO 不接受 raw floor，也不接受預先格式化的 PTT 控制文字。`listBoards()` 未指定 source 時列熱門看板；favorite 與 category 是不同的 PTT 清單來源。它回傳具 discriminant 的 `BoardListPage`，所以即使 items 為空，UI 仍能區分普通看板頁與可能包含下一層 category entry 的目錄頁。`searchBoards()` 與 `filterBoards()` 嚴格只回傳 `BoardPage`，不會混入 category entry。搜尋只做看板名稱 prefix search，不是全文 query。`filterBoards()` 至少要有 `favorite: true` 或 `categoryCursor`，兩者同時存在時取交集；`favorite: false` 不是有效 filter。
 
-`cursor` 與 `categoryCursor` 都是 gateway 發出的 opaque、session-scoped routing token。UI 只能原樣傳回同一 session，不可解析成 terminal offset、跨登入持久化或自行組合。
+`searchArticles.query` 不可為空；`filterArticles()` 至少需要非空 `author` 或 `keyword`。author-only、keyword-only 與兩者交集都由真實 PTT terminal search 執行，不得在不支援時退回未過濾清單。文章頁預設最多 20 筆；指定較大 limit 時 gateway 會續讀 terminal page，公開 cursor 仍只是不透明的下一頁 token。
+
+`cursor` 與 `categoryCursor` 都是 gateway 發出的 opaque、session-scoped routing token。每個 gateway instance/session 使用獨立隨機 namespace；只有成功登入或 disconnect 才輪替 namespace，登入失敗不會破壞原 session 的 cursor。UI 只能原樣傳回同一 session，不可解析成 terminal offset、跨登入持久化或自行組合。文章清單 cursor 同樣由 gateway 發行，內含的 terminal 定位資訊不會直接暴露。
 
 ## `PttzzzClient`
 
@@ -253,7 +265,7 @@ export interface PttzzzClient {
   login(input: LoginInput): Promise<Result<Session>>;
   disconnect(): Promise<void>;
 
-  listBoards(input?: ListBoardsInput): Promise<Result<BoardPage>>;
+  listBoards(input?: ListBoardsInput): Promise<Result<BoardListPage>>;
   searchBoards(input: SearchBoardsInput): Promise<Result<BoardPage>>;
   filterBoards(input: FilterBoardsInput): Promise<Result<BoardPage>>;
   listArticles(input: ListArticlesInput): Promise<Result<ArticlePage>>;
@@ -265,6 +277,7 @@ export interface PttzzzClient {
   editArticle(input: EditArticleInput): Promise<Result<void>>;
   deleteArticle(input: DeleteArticleInput): Promise<Result<void>>;
   replyToArticle(input: ReplyToArticleInput): Promise<Result<void>>;
+  replyArticleToBoard(input: ReplyArticleToBoardInput): Promise<Result<void>>;
   replyToReply(input: ReplyToReplyInput): Promise<Result<void>>;
   editReply(input: EditReplyInput): Promise<Result<void>>;
   withdrawReply(input: WithdrawReplyInput): Promise<Result<void>>;
@@ -283,18 +296,19 @@ export interface PttzzzClient {
 | --- | --- | --- | --- | --- | --- |
 | `connect` | none | `void` | `CONNECTION_LOST`, `TIMEOUT`, `GATEWAY_FAILURE` | no | no |
 | `login` | `LoginInput` | `Session` | `INVALID_INPUT`, `NOT_CONNECTED`, `AUTH_FAILED`, `DUPLICATE_LOGIN`, `CONNECTION_LOST`, `TIMEOUT`, `GATEWAY_FAILURE` | no | no |
-| `disconnect` | none | `void` | best-effort cleanup; programming failures may throw | no | no |
-| `listBoards` | hot（default）、favorite 或 category source + paging | `BoardPage` | `INVALID_INPUT`, `NOT_CONNECTED`, `PERMISSION_DENIED`, `CONNECTION_LOST`, `TIMEOUT`, `GATEWAY_FAILURE` | no | no |
+| `disconnect` | none | `void` | expected gateway cleanup failure is absorbed after local state is cleared; unknown programming failures may throw | no | no |
+| `listBoards` | hot（default）、favorite 或 category source + paging | `BoardListPage` | `INVALID_INPUT`, `NOT_CONNECTED`, `PERMISSION_DENIED`, `CONNECTION_LOST`, `TIMEOUT`, `GATEWAY_FAILURE` | no | no |
 | `searchBoards` | name prefix + paging | `BoardPage` | `INVALID_INPUT`, `NOT_CONNECTED`, `PERMISSION_DENIED`, `CONNECTION_LOST`, `TIMEOUT`, `GATEWAY_FAILURE` | no | no |
 | `filterBoards` | favorite/category cursor + paging；兩者並存取交集 | `BoardPage` | `INVALID_INPUT`, `NOT_CONNECTED`, `PERMISSION_DENIED`, `CONNECTION_LOST`, `TIMEOUT`, `GATEWAY_FAILURE` | no | no |
 | `listArticles` | board + paging | `ArticlePage` | `INVALID_INPUT`, `BOARD_NOT_FOUND`, `PERMISSION_DENIED`, `NOT_CONNECTED`, `CONNECTION_LOST`, `TIMEOUT`, `GATEWAY_FAILURE` | no | no |
 | `searchArticles` | board + query + paging | `ArticlePage` | `INVALID_INPUT`, `BOARD_NOT_FOUND`, `PERMISSION_DENIED`, `NOT_CONNECTED`, `CONNECTION_LOST`, `TIMEOUT`, `GATEWAY_FAILURE` | no | no |
 | `filterArticles` | board + filters + paging | `ArticlePage` | `INVALID_INPUT`, `BOARD_NOT_FOUND`, `PERMISSION_DENIED`, `NOT_CONNECTED`, `CONNECTION_LOST`, `TIMEOUT`, `GATEWAY_FAILURE` | no | no |
 | `getArticle` | `ArticleKey`, debug opt-in | final `Article`; `value.key` preserves the input representation | `INVALID_INPUT`, `ARTICLE_NOT_FOUND`, `PERMISSION_DENIED`, `NOT_CONNECTED`, `CONNECTION_LOST`, `TIMEOUT`, `GATEWAY_FAILURE` | no | yes; partial/updated keys preserve the same input representation |
-| `createArticle` | board, title, content | `void`；目前 gateway 無法可靠取得新文章 identity | `INVALID_INPUT`, `BOARD_NOT_FOUND`, `PERMISSION_DENIED`, `RATE_LIMITED`, `REJECTED`, `NOT_CONNECTED`, `CONNECTION_LOST`, `TIMEOUT`, `GATEWAY_FAILURE` | yes | no |
-| `editArticle` | article, content | `void` | `INVALID_INPUT`, `ARTICLE_NOT_FOUND`, `PERMISSION_DENIED`, `REJECTED`, `NOT_CONNECTED`, `CONNECTION_LOST`, `TIMEOUT`, `GATEWAY_FAILURE` | yes | updated event may follow reload |
+| `createArticle` | board, optional PTT category, title, content | `void`；目前 gateway 無法可靠取得新文章 identity | `INVALID_INPUT`, `BOARD_NOT_FOUND`, `PERMISSION_DENIED`, `RATE_LIMITED`, `REJECTED`, `NOT_CONNECTED`, `CONNECTION_LOST`, `TIMEOUT`, `GATEWAY_FAILURE` | yes | no |
+| `editArticle` | article, content, required nonempty edit summary | `void` | `INVALID_INPUT`, `ARTICLE_NOT_FOUND`, `PERMISSION_DENIED`, `REJECTED`, `NOT_CONNECTED`, `CONNECTION_LOST`, `TIMEOUT`, `GATEWAY_FAILURE` | yes | updated event may follow reload |
 | `deleteArticle` | article | `void` | `INVALID_INPUT`, `ARTICLE_NOT_FOUND`, `PERMISSION_DENIED`, `REJECTED`, `NOT_CONNECTED`, `CONNECTION_LOST`, `TIMEOUT`, `GATEWAY_FAILURE` | yes | no |
 | `replyToArticle` | article, content, push type | `void` | `INVALID_INPUT`, `ARTICLE_NOT_FOUND`, `PERMISSION_DENIED`, `RATE_LIMITED`, `REJECTED`, `NOT_CONNECTED`, `CONNECTION_LOST`, `TIMEOUT`, `GATEWAY_FAILURE` | yes | updated event may follow reload |
+| `replyArticleToBoard` | article, board-post body | `void` | `INVALID_INPUT`, `ARTICLE_NOT_FOUND`, `PERMISSION_DENIED`, `REJECTED`, `NOT_CONNECTED`, `CONNECTION_LOST`, `TIMEOUT`, `GATEWAY_FAILURE` | yes | no |
 | `replyToReply` | article, `replyId`, content, push type | `void` | `INVALID_INPUT`, `ARTICLE_NOT_FOUND`, `REPLY_NOT_FOUND`, `PERMISSION_DENIED`, `RATE_LIMITED`, `REJECTED`, `NOT_CONNECTED`, `CONNECTION_LOST`, `TIMEOUT`, `GATEWAY_FAILURE` | yes | updated event may follow reload |
 | `editReply` | article, `replyId`, mode, content | `void` | `INVALID_INPUT`, `ARTICLE_NOT_FOUND`, `REPLY_NOT_FOUND`, `PERMISSION_DENIED`, `REJECTED`, `NOT_CONNECTED`, `CONNECTION_LOST`, `TIMEOUT`, `GATEWAY_FAILURE` | yes | updated event may follow reload |
 | `withdrawReply` | article, `replyId` | `void` | `INVALID_INPUT`, `ARTICLE_NOT_FOUND`, `REPLY_NOT_FOUND`, `PERMISSION_DENIED`, `REJECTED`, `NOT_CONNECTED`, `CONNECTION_LOST`, `TIMEOUT`, `GATEWAY_FAILURE` | yes | updated event may follow reload |
@@ -305,6 +319,8 @@ export interface PttzzzClient {
 | `subscribe` | `CoreEvent` listener | `Unsubscribe` | listener exceptions are isolated | no | receives partial/update events |
 
 表中的 expected errors 已逐 row 完整列出。`updated event may follow reload` 不保證寫入本身產生 partial；UI 若需確認應重新讀取。
+
+`PttzzzClient.disconnect()` 固定是 `Promise<void>`：它會要求 gateway 盡力釋放資源並清除 client 的 session／connection local state。Gateway 若以 `GatewayError` 回報可預期的 cleanup failure，client 吸收該錯誤；未知的程式錯誤仍可 throw，避免掩蓋 invariant 或實作 bug。
 
 ## Gateway author contract
 
@@ -322,13 +338,14 @@ export type GatewayEvent =
   | { type: "article.source"; source: RawArticleSource };
 
 export type PttCommand =
-  | { type: "create-article"; board: string; title: string; content: string }
-  | { type: "edit-article"; article: ArticleKey; content: string }
+  | { type: "create-article"; board: string; category?: string; title: string; content: string }
+  | { type: "edit-article"; article: ArticleKey; content: string; editSummary: string }
   | { type: "delete-article"; article: ArticleKey }
   | { type: "reply-article"; article: ArticleKey; content: string; pushType: PushType }
+  | { type: "reply-article-to-board"; article: ArticleKey; content: string }
   | { type: "reply-floor"; article: ArticleKey; floor: number; content: string; pushType: PushType }
-  | { type: "edit-floor"; article: ArticleKey; floors: readonly number[]; mode: "append" | "replace"; content: string }
-  | { type: "withdraw-floor"; article: ArticleKey; floors: readonly number[] }
+  | { type: "edit-floor"; article: ArticleKey; floor: number; mode: "append" | "replace"; content: string }
+  | { type: "withdraw-floor"; article: ArticleKey; ranges: readonly { start: number; end: number }[] }
   | { type: "vote-article"; article: ArticleKey; direction: VoteDirection }
   | { type: "withdraw-article-vote"; article: ArticleKey; direction: VoteDirection }
   | { type: "vote-floor"; article: ArticleKey; floor: number; direction: VoteDirection }
@@ -360,7 +377,7 @@ export interface PttGateway {
   login(input: LoginInput): Promise<Session>;
   disconnect(): Promise<void>;
 
-  listBoards(input?: ListBoardsInput): Promise<BoardPage>;
+  listBoards(input?: ListBoardsInput): Promise<BoardListPage>;
   searchBoards(input: SearchBoardsInput): Promise<BoardPage>;
   filterBoards(input: FilterBoardsInput): Promise<BoardPage>;
   listArticles(input: ListArticlesInput): Promise<ArticlePage>;
@@ -377,16 +394,24 @@ export interface PttGateway {
 
 Gateway 可在 `PttCommand` 使用 raw floor，因為它負責 terminal transport；`PttzzzClient` 必須先用內部 map 將 `replyId` 解析成樓號，一般 UI 永遠不能直接提供 raw floor。Gateway 不把 terminal keys 或 prompt 判讀洩漏給 core/UI。
 
+`edit-floor.floor` 必須是單一正整數 anchor。`withdraw-floor.ranges` 必須是非空、正整數且各自連續的閉區間；不連續樓號必須拆成不同 range，例如 2 樓與 4 樓是 `[{ start: 2, end: 2 }, { start: 4, end: 4 }]`，不得格式化成 `2~4`。Gateway 逐 range 送出並保留部分成功的安全 outcome。
+
+`reply-article` 是 PTT 推文／註解操作；`reply-article-to-board` 是 PTT 原生「回應至看板」並建立另一篇文章，兩者不得互相代替。`edit-article` 必須攜帶非空 `editSummary`；index 與 AID article key 都必須保持原表示完成定位。`create-article.category` 可省略，表示使用看板無分類／預設分類流程；若指定則必須原樣傳給 PTT 分類選擇。
+
+每個 terminal write workflow 都必須標出不可逆邊界：確認鍵送出前的失敗為 `not-sent`；送出 save/delete/content confirmation 後但無法確認結果為 `uncertain`；未標註的 legacy/未知失敗一律安全降級為 `uncertain`，不得推測成 `not-sent` 或自動重送。`not-sent` 預設也不可重試，只有 driver 明確標示為安全、暫時性的 pre-send failure（例如尚未取得推文輸入 prompt）才可設 `retryable: true`；輸入錯誤、找不到文章、身分過期與權限拒絕一律為 false。事件 listener 的例外逐 listener 隔離，不得阻止後續 listener、terminal progress 或 gateway operation。
+
+index 寫入必須先從實際看板分頁取得該 index 的作者／標題，再開文比對；不可只檢查目前 24 行。AID 寫入必須從 PTT `Q` 文章資訊畫面解析 canonical AID 與看板並在寫入前核對，返回文章頁後才可送 `X`／`E`／`d`／`y` 等寫入鍵。同一 locator 自行讀出再自行當作 expected identity，不構成獨立驗證。
+
 ### Gateway method behavior matrix
 
-Gateway 的 read／lifecycle method 對可預期失敗 throw `GatewayError`；client 將其正規化為同 code 的 `CoreError`，未知 throw 才成為 `GATEWAY_FAILURE`。可預期的寫入 transport／PTT 拒絕則回傳 `ok: false` 的 `ActionReceipt`；required `code`、`message`、`outcome`、`retryable` 足以讓 core 正規化為 `CoreError`。`ok: true` 只允許 `outcome: "sent"`；失敗結果只有 `outcome: "not-sent"` 可將 `retryable` 設為 `true`，`sent` 與 `uncertain` 在型別上固定為 `false`。下表中的「否」表示該 method 不會產生該性質，「不適用」表示不是寫入。
+Gateway 的 connect／login／read method 對可預期失敗 throw `GatewayError`；client 將其正規化為同 code 的 `CoreError`，未知 throw 才成為 `GATEWAY_FAILURE`。Gateway disconnect 的預期 `GatewayError` 由 client 在清除 local state 後吸收，未知程式錯誤仍可 throw。可預期的寫入 transport／PTT 拒絕則回傳 `ok: false` 的 `ActionReceipt`；required `code`、`message`、`outcome`、`retryable` 足以讓 core 正規化為 `CoreError`。`ok: true` 只允許 `outcome: "sent"`；失敗結果只有 `outcome: "not-sent"` 可將 `retryable` 設為 `true`，`sent` 與 `uncertain` 在型別上固定為 `false`。下表中的「否」表示該 method 不會產生該性質，「不適用」表示不是寫入。
 
 | Method | Input | Success | Expected errors / failures | `uncertain` | Partial |
 | --- | --- | --- | --- | --- | --- |
 | `connect` | none | connection established (`void`) | socket unavailable, handshake rejected, connection loss, timeout, gateway failure | 不適用 | 否 |
 | `login` | `LoginInput` | `Session` | invalid input, not connected, invalid credentials, duplicate login, permission prompt, connection loss, timeout, gateway failure | 不適用 | 否 |
-| `disconnect` | none | resources released (`void`) | cleanup failure；仍須盡力釋放資源 | 不適用 | 否 |
-| `listBoards` | hot（default）、favorite 或 category source + paging | `BoardPage` | invalid source/cursor, not connected, permission denied, connection loss, timeout, terminal state mismatch/gateway failure | 不適用 | 否 |
+| `disconnect` | none | resources released (`void`) | expected cleanup failure uses `GatewayError`; unknown programming failure may throw | 不適用 | 否 |
+| `listBoards` | hot（default）、favorite 或 category source + paging | `BoardListPage` | invalid source/cursor, not connected, permission denied, connection loss, timeout, terminal state mismatch/gateway failure | 不適用 | 否 |
 | `searchBoards` | name prefix + paging | `BoardPage` | invalid prefix/cursor, not connected, permission denied, connection loss, timeout, terminal state mismatch/gateway failure | 不適用 | 否 |
 | `filterBoards` | favorite/category cursor + paging | `BoardPage` | missing filters, invalid cursor, not connected, permission denied, connection loss, timeout, terminal state mismatch/gateway failure | 不適用 | 否 |
 | `listArticles` | board + paging | `ArticlePage` | invalid input, board missing, permission denied, not connected, connection loss, timeout, terminal state mismatch/gateway failure | 不適用 | 否 |
