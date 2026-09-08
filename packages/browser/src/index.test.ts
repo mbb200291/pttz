@@ -13,4 +13,11 @@ describe("@pttzzz/browser package boundary", () => {
     expect(browser).not.toHaveProperty("send");
     expect(packageJson.exports).not.toHaveProperty("./internal");
   });
+
+  it("creates the high-level core client", async () => {
+    const browser = await import("./index.js");
+    const core = await import("@pttzzz/core");
+
+    expect(browser.createBrowserClient()).toBeInstanceOf(core.PttzzzClient);
+  });
 });

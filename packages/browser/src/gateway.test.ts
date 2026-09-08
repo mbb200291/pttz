@@ -88,6 +88,27 @@ describe("BrowserPttGateway", () => {
     expect(execute).toHaveBeenCalledTimes(2);
   });
 
+  it("unwraps the public nested-reply pattern for the private driver to format once", async () => {
+    const execute = vi.fn<BrowserGatewayDriver["execute"]>(async () => ({ ok: true }));
+    const gateway = new BrowserPttGateway(driver({ execute }));
+
+    await gateway.execute({
+      type: "reply-floor",
+      article: articleByIndex,
+      floor: 12,
+      content: "回12樓：同意",
+      pushType: "neutral",
+    });
+
+    expect(execute).toHaveBeenCalledWith({
+      type: "reply-floor",
+      article: articleByIndex,
+      floor: 12,
+      content: "同意",
+      pushType: "neutral",
+    });
+  });
+
   it("maps commands to the private positional terminal workflow", async () => {
     const executeArticleCommand = vi.fn(async () => ({
       ok: false,

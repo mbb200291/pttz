@@ -321,6 +321,54 @@ describe("terminal driver module", () => {
 
     expect(sent.indexOf("SECOND")).toBeGreaterThan(sent.indexOf("撤回我在4樓發言\r"));
     expect(sent.filter((value) => value === "X")).toHaveLength(2);
+    expect(sent).toContain("撤回我在2樓發言\r");
+    expect(sent).toContain("撤回我在4樓發言\r");
+    expect(sent).not.toContain("撤回我在2~4樓發言\r");
+  });
+
+  it("reports uncertain without retry when a later withdrawal content send is ambiguous", async () => {
+    const mod = await import("./terminalDriver.js");
+    const sent: string[] = [];
+    const boardRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 42, date: "08/22", author: "alice", title: "目標文章" }),
+    ];
+    const articleRows = [
+      "作者  alice 看板 Test",
+      "標題  目標文章",
+      "時間  Sat Aug 22 10:00:00 2026",
+      "───────────────────────────────────────",
+      "內容",
+      ...Array.from({ length: 18 }, () => ""),
+      "瀏覽 第 1/1 頁 (100%)",
+    ];
+    let screenRows = boardRows;
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      getLine(index: number) { return { str: screenRows[index] ?? "" }; },
+      async getLines() { return screenRows; },
+      async send(value: string) {
+        sent.push(value);
+        if (value === "42\r\r") screenRows = articleRows;
+        else if (value === "q") screenRows = boardRows;
+        else if (value === "X") screenRows = ["請輸入推文內容:"];
+        else if (value === "撤回我在2樓發言\r") screenRows = ["確定送出推文嗎"];
+        else if (value === "撤回我在4樓發言\r") return false;
+        else if (value === "y\r") screenRows = articleRows;
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+
+    await expect(driver.executeArticleCommand({
+      type: "withdraw-floor",
+      article: { board: "Test", index: 42 },
+      ranges: [{ start: 2, end: 2 }, { start: 4, end: 4 }],
+    })).resolves.toMatchObject({ ok: false, outcome: "uncertain", retryable: false });
+    expect(sent).toContain("撤回我在2樓發言\r");
+    expect(sent).toContain("撤回我在4樓發言\r");
   });
 
   it("aborts a slow article read and releases the serialized queue", async () => {
@@ -2622,7 +2670,7 @@ describe("terminal driver module", () => {
 
     expect(partialPushContents[0]).toEqual([
       "alice:第一段第二段:root",
-      "bob:收到:push-0",
+      "bob:收到:reply:1",
     ]);
   });
 

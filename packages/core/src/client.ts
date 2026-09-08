@@ -1,0 +1,489 @@
+import {
+  GatewayError,
+  articleKeyId,
+  fail,
+  ok,
+  type Article,
+  type ArticleKey,
+  type ArticlePage,
+  type ActionReceipt,
+  type BoardListPage,
+  type BoardPage,
+  type ConnectionStatus,
+  type CoreError,
+  type CoreEvent,
+  type CreateArticleInput,
+  type DeleteArticleInput,
+  type EditArticleInput,
+  type EditReplyInput,
+  type FilterArticlesInput,
+  type FilterBoardsInput,
+  type GetArticleInput,
+  type ListArticlesInput,
+  type ListBoardsInput,
+  type LoginInput,
+  type PartialArticle,
+  type PttCommand,
+  type PttGateway,
+  type PushType,
+  type RawArticleSource,
+  type Reply,
+  type Result,
+  type ReplyArticleToBoardInput,
+  type ReplyToArticleInput,
+  type ReplyToReplyInput,
+  type SearchArticlesInput,
+  type SearchBoardsInput,
+  type Session,
+  type Unsubscribe,
+  type VoteArticleInput,
+  type VoteReplyInput,
+  type WithdrawArticleVoteInput,
+  type WithdrawReplyInput,
+  type WithdrawReplyVoteInput,
+} from "./contracts.js";
+import { formatReplyToReply } from "./actions.js";
+import { extractArticleThreadEvents, parsePushBuffer, splitArticleBody, stripAnsi } from "./parser.js";
+import {
+  aggregatePushes,
+  normalizePttId,
+  type AggregatedPush,
+  type PushEditHistoryRecord,
+} from "./pushAggregator.js";
+
+function coreError(error: unknown): CoreError {
+  if (error instanceof GatewayError) {
+    return {
+      code: error.code,
+      message: error.message,
+      retryable: error.retryable,
+      ...(error.cause === undefined ? {} : { cause: error.cause }),
+    };
+  }
+  return {
+    code: "GATEWAY_FAILURE",
+    message: "PTT gateway 操作失敗",
+    retryable: false,
+    cause: error,
+  };
+}
+
+function parseHeader(raw: string) {
+  const plain = stripAnsi(raw).replace(/\r\n?/gu, "\n");
+  const lines = plain.split("\n");
+  const separator = lines.findIndex((line) => /^─{10,}/u.test(line.trim()));
+  const header = lines.slice(0, separator < 0 ? 8 : separator).join(" ").replace(/\s+/gu, " ");
+  const field = (name: string, next?: string) => header.match(new RegExp(
+    `${name}\\s+(.+?)${next ? `(?=\\s+(?:${next})\\s+|$)` : "$"}`,
+    "u",
+  ))?.[1]?.trim() ?? "";
+  return {
+    author: field("作者", "看板|標題|時間"),
+    title: field("標題", "時間"),
+    publishedAt: field("時間"),
+  };
+}
+
+function pushType(type: AggregatedPush["type"]): PushType {
+  return type === "edit" ? "neutral" : type;
+}
+
+function viewerDirection(
+  viewerId: string | undefined,
+  pushVoters: readonly string[],
+  booVoters: readonly string[],
+) {
+  if (!viewerId) return undefined;
+  const normalized = normalizePttId(viewerId);
+  if (pushVoters.some((author) => normalizePttId(author) === normalized)) return "push" as const;
+  if (booVoters.some((author) => normalizePttId(author) === normalized)) return "boo" as const;
+  return undefined;
+}
+
+function viewerVote(
+  viewerId: string | undefined,
+  pushVoters: readonly string[],
+  booVoters: readonly string[],
+) {
+  const direction = viewerDirection(viewerId, pushVoters, booVoters);
+  return direction ? { viewerVote: direction } : {};
+}
+
+function isOperationEdit(
+  edit: PushEditHistoryRecord,
+): edit is PushEditHistoryRecord & { kind: "append" | "replace" | "withdraw" } {
+  return edit.kind !== "original";
+}
+
+function replyTree(pushes: readonly AggregatedPush[], debug: boolean, viewerId?: string): Reply[] {
+  const children = new Map<string, Reply[]>();
+  const depthOf = (push: AggregatedPush): 1 | 2 | 3 => {
+    let depth = 1;
+    let current = push;
+    const seen = new Set<string>();
+    while (current.replyTo && depth < 3 && !seen.has(current.id)) {
+      seen.add(current.id);
+      const parent = pushes.find((candidate) => candidate.id === current.replyTo);
+      if (!parent) break;
+      depth += 1;
+      current = parent;
+    }
+    return depth as 1 | 2 | 3;
+  };
+  const replies = pushes.map((push): Reply => ({
+    replyId: push.id,
+    author: push.author,
+    content: push.content,
+    pushType: pushType(push.type),
+    ...(push.time ? { createdAt: push.time } : {}),
+    ...(push.replyTo ? { replyTo: push.replyTo } : {}),
+    depth: depthOf(push),
+    score: push.score,
+    ...viewerVote(viewerId, push.pushVoters, push.booVoters),
+    isOp: push.isOP,
+    visible: true,
+    edits: (push.editHistory ?? []).filter(isOperationEdit).map((edit) => ({
+      kind: edit.kind,
+      author: push.author,
+      content: edit.content,
+      ...(edit.time ? { createdAt: edit.time } : {}),
+    })),
+    children: [],
+    ...(debug ? { metadata: { sourceFloors: push.sourceFloors } } : {}),
+  }));
+  const byId = new Map(replies.map((reply) => [reply.replyId, reply]));
+  for (const reply of replies) {
+    if (reply.replyTo && byId.has(reply.replyTo)) {
+      const list = children.get(reply.replyTo) ?? [];
+      list.push(reply);
+      children.set(reply.replyTo, list);
+    }
+  }
+  return replies
+    .filter((reply) => !reply.replyTo || !byId.has(reply.replyTo))
+    .map(function attach(reply): Reply {
+      return { ...reply, children: (children.get(reply.replyId) ?? []).map(attach) };
+    });
+}
+
+function projectSource(
+  source: RawArticleSource,
+  key: ArticleKey,
+  revision: number,
+  debug: boolean,
+  viewerId?: string,
+): { article: PartialArticle | Article; replyFloors: Map<string, readonly number[]> } {
+  const header = parseHeader(source.rawText);
+  const split = splitArticleBody(source.rawText);
+  const events = extractArticleThreadEvents(source.rawText);
+  const thread = aggregatePushes(parsePushBuffer(source.rawText), header.author, events.opReplySegments, events.editRecords);
+  const common = {
+    key,
+    revision,
+    body: separatorBody(split.body),
+    replies: replyTree(thread.pushes, debug, viewerId),
+  };
+  const replyFloors = new Map(thread.pushes.flatMap((push) => {
+    const floors = [...new Set(push.sourceFloors)]
+      .filter((floor) => Number.isInteger(floor) && floor > 0)
+      .sort((left, right) => left - right);
+    return floors.length ? [[push.id, floors] as const] : [];
+  }));
+  if (source.completeness === "incomplete") {
+    return { article: {
+      ...common,
+      completeness: "incomplete",
+      ...(header.title ? { title: header.title } : {}),
+      ...(header.author ? { author: header.author } : {}),
+    }, replyFloors };
+  }
+  return { article: {
+    ...common,
+    completeness: "final",
+    title: header.title,
+    author: header.author,
+    ...(header.publishedAt ? { publishedAt: header.publishedAt } : {}),
+    nativeScore: thread.nativeArticleScore,
+    ...viewerVote(viewerId, thread.articlePushVoters, thread.articleBooVoters),
+    ...(debug ? { metadata: { raw: source.rawText } } : {}),
+  }, replyFloors };
+}
+
+function withdrawalRanges(floors: readonly number[]): readonly { start: number; end: number }[] {
+  const ranges: Array<{ start: number; end: number }> = [];
+  for (const floor of [...new Set(floors)].sort((left, right) => left - right)) {
+    const previous = ranges[ranges.length - 1];
+    if (previous && floor === previous.end + 1) previous.end = floor;
+    else ranges.push({ start: floor, end: floor });
+  }
+  return ranges;
+}
+
+function separatorBody(body: string): string {
+  const plain = stripAnsi(body).replace(/\r\n?/gu, "\n");
+  const lines = plain.split("\n");
+  const separator = lines.findIndex((line) => /^─{10,}/u.test(line.trim()));
+  return (separator < 0 ? body : lines.slice(separator + 1).join("\n")).trim();
+}
+
+export class PttzzzClient {
+  private readonly listeners = new Set<(event: CoreEvent) => void>();
+  private readonly revisions = new Map<string, number>();
+  private readonly generations = new Map<string, number>();
+  private readonly replyTargets = new Map<string, Map<string, readonly number[]>>();
+  private connection: ConnectionStatus = "disconnected";
+  private session: Session | null = null;
+  private gatewayUnsubscribe?: Unsubscribe;
+  private gatewaySubscriptionGeneration = 0;
+
+  constructor(private readonly gateway: PttGateway) {
+    this.attachGateway();
+  }
+
+  private attachGateway(): void {
+    if (this.gatewayUnsubscribe) return;
+    const generation = ++this.gatewaySubscriptionGeneration;
+    this.gatewayUnsubscribe = this.gateway.subscribe((event) => {
+      if (generation !== this.gatewaySubscriptionGeneration) return;
+      if (event.type === "connection.changed") {
+        this.connection = event.status;
+        this.emit(event);
+      } else if (event.type === "session.changed") {
+        this.setSession(event.session);
+      }
+    });
+  }
+
+  private detachGateway(): void {
+    ++this.gatewaySubscriptionGeneration;
+    this.gatewayUnsubscribe?.();
+    this.gatewayUnsubscribe = undefined;
+  }
+
+  subscribe(listener: (event: CoreEvent) => void): Unsubscribe {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  async connect(): Promise<Result<void>> {
+    this.attachGateway();
+    return this.call(() => this.gateway.connect());
+  }
+  async login(input: LoginInput): Promise<Result<Session>> {
+    this.attachGateway();
+    const result = await this.call(() => this.gateway.login(input));
+    if (result.ok) this.setSession(result.value);
+    return result;
+  }
+  async listBoards(input?: ListBoardsInput): Promise<Result<BoardListPage>> { return this.call(() => this.gateway.listBoards(input)); }
+  async searchBoards(input: SearchBoardsInput): Promise<Result<BoardPage>> { return this.call(() => this.gateway.searchBoards(input)); }
+  async filterBoards(input: FilterBoardsInput): Promise<Result<BoardPage>> { return this.call(() => this.gateway.filterBoards(input)); }
+  async listArticles(input: ListArticlesInput): Promise<Result<ArticlePage>> { return this.call(() => this.gateway.listArticles(input)); }
+  async searchArticles(input: SearchArticlesInput): Promise<Result<ArticlePage>> { return this.call(() => this.gateway.searchArticles(input)); }
+  async filterArticles(input: FilterArticlesInput): Promise<Result<ArticlePage>> { return this.call(() => this.gateway.filterArticles(input)); }
+
+  async disconnect(): Promise<void> {
+    let unexpected: unknown;
+    let hasUnexpected = false;
+    this.detachGateway();
+    try {
+      await this.gateway.disconnect();
+    } catch (error) {
+      if (!(error instanceof GatewayError)) {
+        unexpected = error;
+        hasUnexpected = true;
+      }
+    } finally {
+      this.detachGateway();
+      this.revisions.clear();
+      this.generations.clear();
+      this.replyTargets.clear();
+      if (this.connection !== "disconnected") {
+        this.connection = "disconnected";
+        this.emit({ type: "connection.changed", status: "disconnected" });
+      }
+      if (this.session !== null) {
+        this.session = null;
+        this.emit({ type: "session.changed", session: null });
+      }
+    }
+    if (hasUnexpected) throw unexpected;
+  }
+
+  async getArticle(input: GetArticleInput): Promise<Result<Article>> {
+    const id = articleKeyId(input.article);
+    const generation = (this.generations.get(id) ?? 0) + 1;
+    this.generations.set(id, generation);
+    this.replyTargets.delete(id);
+    let sourceRevision = -Infinity;
+    let final: Article | undefined;
+    try {
+      for await (const source of this.gateway.readArticle(input)) {
+        if (source.revision <= sourceRevision) continue;
+        if (final) continue;
+        sourceRevision = source.revision;
+        const revision = (this.revisions.get(id) ?? 0) + 1;
+        this.revisions.set(id, revision);
+        const projection = projectSource(
+          source,
+          input.article,
+          revision,
+          input.includeDebugMetadata ?? false,
+          this.session?.userId,
+        );
+        const article = projection.article;
+        const current = this.generations.get(id) === generation;
+        if (article.completeness === "incomplete") {
+          if (current) this.emit({ type: "article.partial", articleKey: input.article, revision, article });
+        } else {
+          final = article;
+          if (current) this.replyTargets.set(id, projection.replyFloors);
+          if (current) this.emit({ type: "article.updated", articleKey: input.article, revision, article });
+          break;
+        }
+      }
+      return final
+        ? ok(final)
+        : fail({ code: "INCOMPLETE_ARTICLE", message: "文章讀取未完成", retryable: true });
+    } catch (error) {
+      return fail(coreError(error));
+    }
+  }
+
+  createArticle(input: CreateArticleInput): Promise<Result<void>> {
+    return this.write({ type: "create-article", ...input });
+  }
+
+  editArticle(input: EditArticleInput): Promise<Result<void>> {
+    return this.write({ type: "edit-article", ...input });
+  }
+
+  deleteArticle(input: DeleteArticleInput): Promise<Result<void>> {
+    return this.write({ type: "delete-article", ...input });
+  }
+
+  replyToArticle(input: ReplyToArticleInput): Promise<Result<void>> {
+    return this.write({ type: "reply-article", ...input });
+  }
+
+  replyArticleToBoard(input: ReplyArticleToBoardInput): Promise<Result<void>> {
+    return this.write({ type: "reply-article-to-board", ...input });
+  }
+
+  voteArticle(input: VoteArticleInput): Promise<Result<void>> {
+    return this.write({ type: "vote-article", ...input });
+  }
+
+  withdrawArticleVote(input: WithdrawArticleVoteInput): Promise<Result<void>> {
+    return this.write({ type: "withdraw-article-vote", ...input });
+  }
+
+  async replyToReply(input: ReplyToReplyInput): Promise<Result<void>> {
+    const target = this.replyTarget(input.article, input.replyId);
+    if (!target.ok) return target;
+    const floor = target.value[0];
+    return this.write({
+      type: "reply-floor",
+      article: input.article,
+      floor,
+      content: formatReplyToReply(floor, input.content),
+      pushType: input.pushType,
+    });
+  }
+
+  async editReply(input: EditReplyInput): Promise<Result<void>> {
+    const target = this.replyTarget(input.article, input.replyId);
+    if (!target.ok) return target;
+    return this.write({
+      type: "edit-floor",
+      article: input.article,
+      floor: target.value[0],
+      mode: input.mode,
+      content: input.content,
+    });
+  }
+
+  async withdrawReply(input: WithdrawReplyInput): Promise<Result<void>> {
+    const target = this.replyTarget(input.article, input.replyId);
+    if (!target.ok) return target;
+    return this.write({
+      type: "withdraw-floor",
+      article: input.article,
+      ranges: withdrawalRanges(target.value),
+    });
+  }
+
+  async voteReply(input: VoteReplyInput): Promise<Result<void>> {
+    const target = this.replyTarget(input.article, input.replyId);
+    if (!target.ok) return target;
+    return this.write({
+      type: "vote-floor",
+      article: input.article,
+      floor: target.value[0],
+      direction: input.direction,
+    });
+  }
+
+  async withdrawReplyVote(input: WithdrawReplyVoteInput): Promise<Result<void>> {
+    const target = this.replyTarget(input.article, input.replyId);
+    if (!target.ok) return target;
+    return this.write({
+      type: "withdraw-floor-vote",
+      article: input.article,
+      floor: target.value[0],
+      direction: input.direction,
+    });
+  }
+
+  private replyTarget(article: ArticleKey, replyId: string): Result<readonly number[]> {
+    const floors = this.replyTargets.get(articleKeyId(article))?.get(replyId);
+    return floors?.length
+      ? ok(floors)
+      : fail({
+          code: "REPLY_NOT_FOUND",
+          message: "找不到回文，請重新載入文章",
+          retryable: false,
+          outcome: "not-sent",
+        });
+  }
+
+  private async write(command: PttCommand): Promise<Result<void>> {
+    let receipt: ActionReceipt;
+    try {
+      receipt = await this.gateway.execute(command);
+    } catch (cause) {
+      return fail({
+        code: cause instanceof GatewayError ? cause.code : "GATEWAY_FAILURE",
+        message: cause instanceof Error ? cause.message : "無法確認操作是否已送出",
+        retryable: false,
+        outcome: "uncertain",
+        cause,
+      });
+    }
+    if (receipt.ok) return ok(undefined);
+    return fail({
+      code: receipt.code,
+      message: receipt.message,
+      retryable: receipt.retryable,
+      outcome: receipt.outcome,
+      ...(receipt.cause === undefined ? {} : { cause: receipt.cause }),
+    });
+  }
+
+  private async call<T>(operation: () => Promise<T>): Promise<Result<T>> {
+    try { return ok(await operation()); }
+    catch (error) { return fail(coreError(error)); }
+  }
+
+  private emit(event: CoreEvent): void {
+    for (const listener of this.listeners) {
+      try { listener(event); } catch { /* Consumer errors must not break client operations. */ }
+    }
+  }
+
+  private setSession(session: Session | null): void {
+    if (this.session?.userId === session?.userId) return;
+    this.session = session;
+    this.emit({ type: "session.changed", session });
+  }
+}

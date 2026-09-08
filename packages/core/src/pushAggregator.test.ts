@@ -39,6 +39,101 @@ describe("單則推文不聚合", () => {
   });
 });
 
+describe("stable reply identity", () => {
+  it("anchors deterministic ids to the first immutable source floor", () => {
+    const input = [
+      push("alice", "first", "08/12 22:40", "neutral", 10, 1),
+      push("alice", "second.", "08/12 22:41", "neutral", 20, 2),
+    ];
+
+    const first = aggregatePushes(input, OP).pushes[0].id;
+    const second = aggregatePushes(input, OP).pushes[0].id;
+
+    expect(first).toBe("reply:1");
+    expect(second).toBe(first);
+    expect(aggregatePushes([input[0]], OP).pushes[0].id).toBe("reply:1");
+  });
+
+  it("keeps the anchor id when continuation adds another source floor", () => {
+    const partial = aggregatePushes([
+      push("alice", "first", "08/12 22:40", "neutral", 10, 1),
+    ], OP).pushes[0];
+    const final = aggregatePushes([
+      push("alice", "first", "08/12 22:40", "neutral", 10, 1),
+      push("alice", "second.", "08/12 22:41", "neutral", 20, 2),
+    ], OP).pushes[0];
+
+    expect(partial.id).toBe("reply:1");
+    expect(final).toMatchObject({ id: "reply:1", sourceFloors: [1, 2] });
+  });
+
+  it("keeps identity when an edit payload contains a terminator", () => {
+    const before = aggregatePushes([
+      push("alice", "first", "08/12 22:40", "neutral", 10, 1),
+      push("alice", "second.", "08/12 22:41", "neutral", 20, 2),
+    ], OP).pushes[0];
+    const edited = aggregatePushes([
+      push("alice", "first", "08/12 22:40", "neutral", 10, 1),
+      push("alice", "second.", "08/12 22:41", "neutral", 20, 2),
+      push("alice", "更正我在1樓發言：first edited.", "08/12 22:42", "neutral", 30, 3),
+    ], OP).pushes[0];
+
+    expect(edited).toMatchObject({ id: before.id, sourceFloors: [1, 2] });
+  });
+
+  it("does not recycle a withdrawn leading reply id for the following card", () => {
+    const thread = aggregatePushes([
+      push("alice", "withdraw me.", "08/12 22:40", "neutral", 10, 1),
+      push("bob", "keep me.", "08/12 22:41", "neutral", 20, 2),
+      push("alice", "撤回我在1樓的發言", "08/12 22:42", "neutral", 30, 3),
+    ], OP);
+
+    expect(thread.pushes).toHaveLength(1);
+    expect(thread.pushes[0]).toMatchObject({ author: "bob", id: "reply:2" });
+  });
+
+  it("uses target identity and per-target ordinal for synthetic edit replies", () => {
+    const rawPushes = [push("alice", "reply.", "08/12 22:40", "neutral", 10, 1)];
+    const opSegments = [{
+      marker: "作者編輯",
+      content: "補充",
+      rawBlock: "補充",
+      contentAnchorOffset: 20,
+      markerOffset: 15,
+    }];
+    const ids = aggregatePushes(rawPushes, OP, opSegments).pushes.map((item) => item.id);
+
+    expect(ids).toEqual(["reply:1", "edit:reply:1:1"]);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("keeps synthetic ids stable when earlier body length shifts offsets and avoids collisions", () => {
+    const rawPushes = [push("alice", "reply.", "08/12 22:40", "neutral", 10, 1)];
+    const notes = (shift: number) => [
+      {
+        marker: "作者編輯",
+        content: "one",
+        rawBlock: "one",
+        contentAnchorOffset: 20 + shift,
+        markerOffset: 15 + shift,
+      },
+      {
+        marker: "作者編輯",
+        content: "two",
+        rawBlock: "two",
+        contentAnchorOffset: 30 + shift,
+        markerOffset: 25 + shift,
+      },
+    ];
+    const ids = (shift: number) => aggregatePushes(rawPushes, OP, notes(shift))
+      .pushes.filter((item) => item.type === "edit").map((item) => item.id);
+
+    expect(ids(0)).toEqual(["edit:reply:1:1", "edit:reply:1:2"]);
+    expect(ids(100)).toEqual(ids(0));
+    expect(new Set(ids(0)).size).toBe(2);
+  });
+});
+
 describe("thread snapshot status", () => {
   it.each([
     [false, "incomplete"],
@@ -1031,8 +1126,8 @@ describe("HTML vote model alignment", () => {
       content: "回99樓：我改過的文字",
     });
     expect(reply.editHistory).toEqual([
-      expect.objectContaining({ content: "我不同意" }),
-      expect.objectContaining({ content: "回99樓：我改過的文字" }),
+      expect.objectContaining({ kind: "original", content: "我不同意" }),
+      expect.objectContaining({ kind: "replace", content: "回99樓：我改過的文字" }),
     ]);
   });
 
@@ -1065,7 +1160,44 @@ describe("HTML vote model alignment", () => {
 
     expect(reply.replyTo).toBe(target.id);
     expect(reply.content).toBe("原本內容。\n推99樓 只是補充文字");
+    expect(reply.editHistory).toEqual([
+      expect.objectContaining({ kind: "original", content: "原本內容。" }),
+      expect.objectContaining({ kind: "append", content: "推99樓 只是補充文字" }),
+    ]);
     expect(target.score).toBe(0);
+  });
+
+  it("preserves edit kinds and payloads when an edited floor belongs to a group", () => {
+    const thread = aggregatePushes(
+      [
+        push("alice", "first", "08/12 22:40", "neutral", 10, 1),
+        push("alice", "second.", "08/12 22:41", "neutral", 20, 2),
+        push("alice", "補充我在1樓發言：extra", "08/12 22:42", "neutral", 30, 3),
+      ],
+      OP,
+    );
+
+    expect(thread.pushes[0].editHistory).toEqual([
+      expect.objectContaining({ kind: "original", content: "first\nsecond." }),
+      expect.objectContaining({ kind: "append", content: "extra" }),
+    ]);
+  });
+
+  it("orders interleaved grouped edits by raw command chronology", () => {
+    const thread = aggregatePushes(
+      [
+        push("alice", "first", "08/12 22:40", "neutral", 10, 1),
+        push("alice", "second.", "08/12 22:41", "neutral", 20, 2),
+        push("alice", "補充我在2樓發言：edit-second", "08/12 22:42", "neutral", 30, 3),
+        push("alice", "更正我在1樓發言：edit-first", "08/12 22:42", "neutral", 40, 4),
+      ],
+      OP,
+    );
+
+    expect(thread.pushes[0].editHistory?.slice(1).map(({ kind, content }) => ({ kind, content }))).toEqual([
+      { kind: "append", content: "edit-second" },
+      { kind: "replace", content: "edit-first" },
+    ]);
   });
 
   it("withdraws a floor range only for the command author", () => {

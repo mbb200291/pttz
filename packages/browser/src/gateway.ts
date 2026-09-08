@@ -313,7 +313,15 @@ export class BrowserPttGateway implements PttGateway {
     }
     let result: DriverWriteResult;
     try {
-      result = await this.driver.execute(command);
+      const driverCommand = command.type === "reply-floor"
+        ? {
+            ...command,
+            content: command.content.startsWith(`回${command.floor}樓：`)
+              ? command.content.slice(`回${command.floor}樓：`.length)
+              : command.content,
+          }
+        : command;
+      result = await this.driver.execute(driverCommand);
     } catch (cause) {
       return {
         ok: false,

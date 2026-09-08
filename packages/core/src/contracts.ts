@@ -213,32 +213,6 @@ export interface WithdrawArticleVoteInput { article: ArticleKey; direction: Vote
 export interface VoteReplyInput { article: ArticleKey; replyId: ReplyId; direction: VoteDirection }
 export interface WithdrawReplyVoteInput { article: ArticleKey; replyId: ReplyId; direction: VoteDirection }
 
-export interface PttzzzClient {
-  connect(): Promise<Result<void>>;
-  login(input: LoginInput): Promise<Result<Session>>;
-  disconnect(): Promise<void>;
-  listBoards(input?: ListBoardsInput): Promise<Result<BoardListPage>>;
-  searchBoards(input: SearchBoardsInput): Promise<Result<BoardPage>>;
-  filterBoards(input: FilterBoardsInput): Promise<Result<BoardPage>>;
-  listArticles(input: ListArticlesInput): Promise<Result<ArticlePage>>;
-  searchArticles(input: SearchArticlesInput): Promise<Result<ArticlePage>>;
-  filterArticles(input: FilterArticlesInput): Promise<Result<ArticlePage>>;
-  getArticle(input: GetArticleInput): Promise<Result<Article>>;
-  createArticle(input: CreateArticleInput): Promise<Result<void>>;
-  editArticle(input: EditArticleInput): Promise<Result<void>>;
-  deleteArticle(input: DeleteArticleInput): Promise<Result<void>>;
-  replyToArticle(input: ReplyToArticleInput): Promise<Result<void>>;
-  replyArticleToBoard(input: ReplyArticleToBoardInput): Promise<Result<void>>;
-  replyToReply(input: ReplyToReplyInput): Promise<Result<void>>;
-  editReply(input: EditReplyInput): Promise<Result<void>>;
-  withdrawReply(input: WithdrawReplyInput): Promise<Result<void>>;
-  voteArticle(input: VoteArticleInput): Promise<Result<void>>;
-  withdrawArticleVote(input: WithdrawArticleVoteInput): Promise<Result<void>>;
-  voteReply(input: VoteReplyInput): Promise<Result<void>>;
-  withdrawReplyVote(input: WithdrawReplyVoteInput): Promise<Result<void>>;
-  subscribe(listener: (event: CoreEvent) => void): Unsubscribe;
-}
-
 export interface RawArticleSource {
   articleKey: ArticleKey;
   completeness: ArticleCompleteness;

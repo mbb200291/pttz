@@ -41,7 +41,7 @@ docs/fixtures/            rule-ID conformance fixtures
 - Read: `dev-notes/goal-7-vote-model-review.html`
 - Read: `dev-notes/spec.md`
 
-- [ ] **Step 1: 建立分類表**
+- [x] **Step 1: 建立分類表**
 
 ```markdown
 | Prefix | 範圍 |
@@ -53,21 +53,21 @@ docs/fixtures/            rule-ID conformance fixtures
 | `PARTIAL-*` | 漸進載入暫定與最終狀態 |
 ```
 
-- [ ] **Step 2: 逐條寫出輸入、結果與限制**
+- [x] **Step 2: 逐條寫出輸入、結果與限制**
 
 至少固定：`RAW-001` 原始樓號不等於 UI 順序；`THREAD-001` 五分鐘聚合；`THREAD-002` `||`；`THREAD-003` 滿行拼接；`THREAD-004` 各種回樓 pattern；`THREAD-005` 推／噓 x 樓加文字同時回覆與投票；`THREAD-006` 續行不跨 target；`THREAD-007` 最深三層；`VOTE-001` 純文章票；`VOTE-002` 純回文票；`VOTE-003` PTT 類別影響文章原生分數；`VOTE-004` 回文票依內容；`VOTE-005` 同帳號最後方向；`VOTE-006` 撤回；`EDIT-001` outer command；`EDIT-002` opaque payload；`EDIT-003` withdraw 空格；`PARTIAL-001` incomplete/final。
 
-- [ ] **Step 3: 引用 HTML cases**
+- [x] **Step 3: 引用 HTML cases**
 
 每條規則連回對應 HTML case，並明列白皮書是 normative source、HTML 是 review example。
 
-- [ ] **Step 4: 驗證無 placeholder**
+- [x] **Step 4: 驗證無 placeholder**
 
 Run: `rg -n "TODO|TBD|待確認|之後再" docs/whitepaper/pttzzz-core.md`
 
 Expected: 無輸出。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add docs/whitepaper/pttzzz-core.md
@@ -83,7 +83,7 @@ git commit -m "docs: define normative core rules"
 - Create: `docs/fixtures/thread-events/votes-and-edits.json`
 - Create: `src/lib/ptt/__tests__/whitepaperFixtures.test.ts`
 
-- [ ] **Step 1: 寫 fixture runner 測試**
+- [x] **Step 1: 寫 fixture runner 測試**
 
 ```ts
 function stableThread(rawPushes: RawPush[], articleAuthor: string) {
@@ -103,13 +103,13 @@ function stableThread(rawPushes: RawPush[], articleAuthor: string) {
 }
 ```
 
-- [ ] **Step 2: Run to verify fixtures 尚不存在**
+- [x] **Step 2: Run to verify fixtures 尚不存在**
 
 Run: `npx vitest run src/lib/ptt/__tests__/whitepaperFixtures.test.ts`
 
 Expected: FAIL，指出 fixture module 不存在。
 
-- [ ] **Step 3: 加入 schema 與案例**
+- [x] **Step 3: 加入 schema 與案例**
 
 每個 case 必須有 `id`、`rules`、`articleAuthor`、完整 `RawPush[]` 與 `expected`。涵蓋一般／強制聚合、滿行、多 target 交錯、三層與超深回覆、文章票、回文票、帶文字回文票、重複與反向票、撤回、append、replace、withdraw、opaque payload。
 
@@ -132,13 +132,13 @@ Expected: FAIL，指出 fixture module 不存在。
 }
 ```
 
-- [ ] **Step 4: Run fixtures and aggregator regression**
+- [x] **Step 4: Run fixtures and aggregator regression**
 
 Run: `npx vitest run src/lib/ptt/__tests__/whitepaperFixtures.test.ts src/lib/ptt/__tests__/pushAggregator.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add docs/fixtures/thread-events src/lib/ptt/__tests__/whitepaperFixtures.test.ts
@@ -157,15 +157,15 @@ Task 2 首次 RED 揭露一個 normalized-state 可觀察性 gap、一個日期�
 - Modify: `src/lib/ptt/__tests__/pushAggregator.test.ts`
 - Modify: `src/lib/ptt/__tests__/whitepaperFixtures.test.ts`
 
-- [ ] **Step 1: 固定文章反向票的解析慣例**
+- [x] **Step 1: 固定文章反向票的解析慣例**
 
 依 canonical HTML CASE 14，將 VOTE-006 明確寫成：同作者相反方向的連續純文章票，在 raw-only reducer 中視為抵銷，應用層按鈕回到 0/0；兩筆 PTT 類別仍各自影響原生分數。第三筆純票才建立新的目前方向。Fixture expected 必須回復 Alice 不在 push/boo voters，不能把第二筆當成最後方向 boo。
 
-- [ ] **Step 2: 固定 THREAD-001／002 的時間語意**
+- [x] **Step 2: 固定 THREAD-001／002 的時間語意**
 
 依 `spec.md` 與 `reply-handling-rule.md`，同作者片段在「連續，或不連續但時間差 ≤5 分鐘」時符合時間條件。連續片段不因顯示時間超過五分鐘而拆開；不連續片段才必須能解析時間且差值 ≤5 分鐘。`||` 只覆蓋終止符，不能覆蓋作者或 target。
 
-- [ ] **Step 3: 寫日期與 malformed time 的 RED tests**
+- [x] **Step 3: 寫日期與 malformed time 的 RED tests**
 
 加入以下 direct tests：
 
@@ -174,7 +174,7 @@ Task 2 首次 RED 揭露一個 normalized-state 可觀察性 gap、一個日期�
 - 不連續同作者從 `01/31 23:59` 到 `02/01 00:00` 視為一分鐘並可續接。
 - 不連續且任一時間 malformed／缺失時不續接；連續片段仍由連續條件判定。
 
-- [ ] **Step 4: 修正時間解析根因**
+- [x] **Step 4: 修正時間解析根因**
 
 以真正的月日換算取代固定每月 31 天；時間 parser 對 malformed／越界日期回傳 `null`。跨年取最短的年度環狀差。聚合條件保持：
 
@@ -186,7 +186,7 @@ if (canContinueFromPush(lastPush) && (isConsecutive || timeOk)) {
 
 其中 `timeOk` 只在兩個 timestamp 都有效時成立。不要改 terminator、author 或 target guard。
 
-- [ ] **Step 5: GREEN 並更新 fixtures**
+- [x] **Step 5: GREEN 並更新 fixtures**
 
 Normative fixture 必須分別含：連續六分鐘仍合併、不連續六分鐘不合併、marker 後立即同作者不同 target 不合併。
 
@@ -194,11 +194,11 @@ Run: `npx vitest run src/lib/ptt/__tests__/pushAggregator.test.ts src/lib/ptt/__
 
 Expected: THREAD-001／002、日期邊界與文章反向票 cases PASS；只剩 EDIT-003 projection 尚待完成。
 
-- [ ] **Step 6: 先寫 EDIT-003 normalized-event failing test**
+- [x] **Step 6: 先寫 EDIT-003 normalized-event failing test**
 
 新增 `normalizeThreadEvents(rawPushes)` 的測試，輸入一則內容與同作者 Withdraw command，期待原事件保留原始樓號、`content: " "`、`withdrawn: true`、`visible: false`。Run focused test，Expected: FAIL，function 尚不存在。
 
-- [ ] **Step 7: 抽出最小 normalized-event projection**
+- [x] **Step 7: 抽出最小 normalized-event projection**
 
 將 aggregate 目前既有的 parse-intent + `applyPushEdits()` 初始化抽成共用內部 helper；公開純函式只回傳 conformance/debug 所需欄位，不暴露 mutable `ParsedRawPush`：
 
@@ -214,15 +214,15 @@ export interface NormalizedThreadEvent {
 
 Withdraw 的 `content` 從最後一筆 edit history 取得單一空格；一般內容取 outer edit 後 body。`aggregatePushes()` 重用同一 helper，避免測試與實際聚合產生兩套 parser。
 
-- [ ] **Step 8: 讓 EDIT-003 fixture 斷言完整 normalized projection**
+- [x] **Step 8: 讓 EDIT-003 fixture 斷言完整 normalized projection**
 
 Fixture 增加 `expectedNormalizedEvents`；runner 呼叫 `normalizeThreadEvents()` 比較完整陣列，不以 expected floors 過濾實際輸出。Visible aggregate 仍排除 withdrawn event，不建立空白卡片。
 
-- [ ] **Step 9: 執行 fixture schema validation**
+- [x] **Step 9: 執行 fixture schema validation**
 
 不新增 dependency。以 `unknown` 輸入的 runtime validator 檢查三份 fixture arrays：required fields、push type enum、string/number/boolean、expected/stages/normalized shapes，並拒絕未宣告欄位。移除 `as FixtureCase[]` unchecked cast；加入一個缺少 `id` 或錯誤 push type 的 negative test，確認 validator throw。JSON Schema 保留為跨語言契約，TypeScript validator 是 test runner 的 executable boundary。
 
-- [ ] **Step 10: 完整驗證與 commit**
+- [x] **Step 10: 完整驗證與 commit**
 
 ```bash
 npx vitest run src/lib/ptt/__tests__/pushAggregator.test.ts src/lib/ptt/__tests__/whitepaperFixtures.test.ts
@@ -249,19 +249,19 @@ git commit -m "fix: close core conformance gaps"
 - Create: `docs/examples/rendering/README.md`
 - Create: `docs/examples/error-handling/README.md`
 
-- [ ] **Step 1: 寫完整 contracts**
+- [x] **Step 1: 寫完整 contracts**
 
 依設計文件定義 `Result`、`CoreError`、`WriteOutcome`、`CoreEvent`、`PttGateway` 與 `PttzzzClient`。每個 method 記錄 input、success value、expected errors、是否可能 `uncertain` 及是否產生 partial event。
 
-- [ ] **Step 2: 寫 AI interface guide**
+- [x] **Step 2: 寫 AI interface guide**
 
 順序固定為：安裝、建立 client、登入、讀看板、讀文章、subscribe/unsubscribe、寫入、錯誤、partial、禁止事項。禁止 deep import、自行格式化控制 pattern、用顯示順序當樓號、自動 retry uncertain、重算 score/tree、正常 UI 顯示 source floor、把 partial 當 complete。
 
-- [ ] **Step 3: 建立五個最小範例**
+- [x] **Step 3: 建立五個最小範例**
 
 所有範例使用同一組 public API 名稱；Vue 只示範 composable，不宣告官方 Vue package。
 
-- [ ] **Step 4: 驗證名稱一致**
+- [x] **Step 4: 驗證名稱一致**
 
 ```bash
 rg -n "PttzzzClient|PttGateway|WriteOutcome|CoreEvent|replyId" docs/api docs/examples
@@ -270,7 +270,7 @@ rg -n "TODO|TBD|待確認|from .*/src/" docs/api docs/examples
 
 Expected: 第一個命令在 contracts 與 examples 有命中；第二個無輸出。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add docs/api docs/examples
@@ -290,7 +290,7 @@ git commit -m "docs: define public and AI interface contracts"
 - Create: `packages/core/src/index.ts`
 - Create: `packages/core/src/index.test.ts`
 
-- [ ] **Step 1: 寫 failing public-entry test**
+- [x] **Step 1: 寫 failing public-entry test**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -301,17 +301,17 @@ describe("@pttzzz/core public entry", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify package 尚未建立**
+- [x] **Step 2: Run to verify package 尚未建立**
 
 Run: `npx vitest run packages/core/src/index.test.ts`
 
 Expected: FAIL，找不到 package test。
 
-- [ ] **Step 3: 建立最小 workspace**
+- [x] **Step 3: 建立最小 workspace**
 
 Root 加 `workspaces: ["packages/*", "apps/*"]` 與暫時只執行 core build 的 `build:packages`。Task 9 建立 browser package時再把 browser build 接在後面，避免不存在的 workspace 令 Task 4 失敗。`packages/core/package.json` 使用 `@pttzzz/core@0.1.0`、ESM、`files: ["dist"]`、root export 指向 dist、scripts `build: tsc -p tsconfig.json` 與 `test: vitest run src`。`tsconfig.base.json` 使用 ES2020、ESNext、bundler、strict、`resolveJsonModule: true`，不能包含 DOM lib。Package tsconfig 排除 `src/**/*.test.ts`，避免把 Vitest 與 repo 外 fixtures 納入發布 build。
 
-- [ ] **Step 4: 建立空 entry 並驗證**
+- [x] **Step 4: 建立空 entry 並驗證**
 
 ```ts
 export {};
@@ -325,7 +325,7 @@ npm run build -w @pttzzz/core
 
 Expected: PASS，產生 core dist JS 與 declarations。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add package.json package-lock.json tsconfig.json tsconfig.base.json packages/core
@@ -340,7 +340,7 @@ git commit -m "build: add core workspace package"
 - Create: `src/lib/ptt/parser.ts`
 - Modify: `packages/core/src/index.ts`
 
-- [ ] **Step 1: 先讓 public-entry test 要求 parser export**
+- [x] **Step 1: 先讓 public-entry test 要求 parser export**
 
 在既有 `packages/core/src/index.test.ts` 加入：
 
@@ -356,7 +356,7 @@ Run: `npx vitest run packages/core/src/index.test.ts`
 
 Expected: FAIL，`stripAnsi` 尚未由 core export。
 
-- [ ] **Step 2: Mechanical move only**
+- [x] **Step 2: Mechanical move only**
 
 ```bash
 git mv src/lib/ptt/parser.ts packages/core/src/parser.ts
@@ -365,7 +365,7 @@ git mv src/lib/ptt/__tests__/parser.test.ts packages/core/src/parser.test.ts
 
 搬移後把 parser test import 改成 `./parser.js`。不得修改 regex、樓號、byte 或文章切割語意。
 
-- [ ] **Step 3: 建 public 與 compatibility export**
+- [x] **Step 3: 建 public 與 compatibility export**
 
 所有 package-local ESM specifier 都使用 `.js` 後綴，使 `tsc` 產物可直接由 Node ESM 載入。Core index 加 `export * from "./parser.js";`；舊檔完整內容：
 
@@ -373,7 +373,7 @@ git mv src/lib/ptt/__tests__/parser.test.ts packages/core/src/parser.test.ts
 export * from "../../../packages/core/src/parser";
 ```
 
-- [ ] **Step 4: 驗證**
+- [x] **Step 4: 驗證**
 
 ```bash
 npx vitest run packages/core/src/parser.test.ts src/lib/ptt/__tests__/adapter.test.ts
@@ -382,7 +382,7 @@ npm run build -w @pttzzz/core
 
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/core/src src/lib/ptt/parser.ts
@@ -402,7 +402,7 @@ git commit -m "refactor: move parser into core package"
 - Modify: `src/hooks/usePttActions.ts`
 - Modify: `packages/core/src/index.ts`
 
-- [ ] **Step 1: 寫 formatter failing tests**
+- [x] **Step 1: 寫 formatter failing tests**
 
 ```ts
 expect(formatReplyToReply(12, " 同意 ")).toBe("回12樓：同意");
@@ -413,17 +413,17 @@ expect(canVote(1, "push")).toBe(false);
 expect(canVote(1, "boo")).toBe(true);
 ```
 
-- [ ] **Step 2: Run to verify missing actions**
+- [x] **Step 2: Run to verify missing actions**
 
 Run: `npx vitest run packages/core/src/actions.test.ts`
 
 Expected: FAIL。
 
-- [ ] **Step 3: Move pure files without semantic edits**
+- [x] **Step 3: Move pure files without semantic edits**
 
 用 `git mv` 搬移四個檔案，改 package-local imports。舊檔僅 re-export core。
 
-- [ ] **Step 4: 實作最小 actions**
+- [x] **Step 4: 實作最小 actions**
 
 ```ts
 export type VoteDirection = "push" | "boo";
@@ -439,7 +439,7 @@ export const canVote = (current: -1 | 0 | 1, direction: VoteDirection) =>
   !((current === 1 && direction === "push") || (current === -1 && direction === "boo"));
 ```
 
-- [ ] **Step 5: 移除 hook 重複 formatter 並驗證**
+- [x] **Step 5: 移除 hook 重複 formatter 並驗證**
 
 `usePttActions.ts` 先從 core import/re-export 相同名稱 alias，避免同 task 修改 component。
 
@@ -451,7 +451,7 @@ npm run build -w @pttzzz/core
 
 Expected: PASS。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add packages/core src/lib/ptt src/hooks/usePttActions.ts
@@ -467,7 +467,7 @@ git commit -m "refactor: extract thread rules into core"
 - Create: `packages/core/src/contracts.test.ts`
 - Modify: `packages/core/src/index.ts`
 
-- [ ] **Step 1: 寫 helper failing tests**
+- [x] **Step 1: 寫 helper failing tests**
 
 ```ts
 expect(ok(42)).toEqual({ ok: true, value: 42 });
@@ -477,13 +477,13 @@ expect(fail({ code: "NOT_FOUND", message: "missing", retryable: false })).toEqua
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `npx vitest run packages/core/src/contracts.test.ts`
 
 Expected: FAIL。
 
-- [ ] **Step 3: 實作固定型別**
+- [x] **Step 3: 實作固定型別**
 
 ```ts
 export type Result<T, E = CoreError> =
@@ -502,7 +502,7 @@ export type Unsubscribe = () => void;
 
 同檔定義 `CoreEvent`、公開 DTO 與目前 `PttAdapter` 能力的 `PttGateway`；排除任意 `send()`。將目前 adapter 內的 `AdapterArticleData` 正式改名為 `ArticleData`，並連同 `PartialArticleData`、login/action request shapes 移成 core-owned DTO；compatibility export 暫時提供 `type AdapterArticleData = ArticleData`。Browser adapter 後續只能 import，不能再定義副本。Gateway 寫入可接受 transport floor，公開 client input 不可接受。
 
-- [ ] **Step 4: Run tests/build and commit**
+- [x] **Step 4: Run tests/build and commit**
 
 ```bash
 npx vitest run packages/core/src/contracts.test.ts
@@ -527,7 +527,7 @@ Task 7 的型別先依設計稿建立；實作前必須以現有 adapter 與 `pt
 - Modify: `docs/api/AI-INTERFACE.md`
 - Modify: `dev-notes/goal-9-core-architecture-design.md`
 
-- [ ] **Step 1: 用 type tests 固定看板語意**
+- [x] **Step 1: 用 type tests 固定看板語意**
 
 看板清單必須區分 PTT 的熱門、我的最愛與分類目錄；搜尋明定為看板名稱 prefix search，不宣稱全文搜尋。分類位置以 session-scoped opaque cursor 表示，UI 不得解析 terminal offsets。
 
@@ -575,7 +575,7 @@ export type FilterBoardsInput = { cursor?: string; limit?: number } & (
 
 `listBoards()` 回傳 `BoardListPage`；`searchBoards()`／`filterBoards()` 只回傳 `BoardPage`，category entry 不得混入搜尋或篩選結果。`filterBoards()` 至少需要 `favorite: true` 或 `categoryCursor`；兩者同時存在時取交集，`favorite: false` 無效。所有 cursor 都是不透明、session-scoped routing token，不可持久化或反解。
 
-- [ ] **Step 2: RED／GREEN contracts**
+- [x] **Step 2: RED／GREEN contracts**
 
 先加入 `expectTypeOf` 與 `@ts-expect-error` cases，證明 `query`、自由文字 `category` 與 terminal offsets 不能進入 public input；再修改型別與文件。
 
@@ -583,7 +583,7 @@ Run: `npx vitest run packages/core/src/contracts.test.ts --typecheck`
 
 Expected: 先 FAIL，修改後 PASS。
 
-- [ ] **Step 3: 固定實作邊界**
+- [x] **Step 3: 固定實作邊界**
 
 文件明列：
 
@@ -606,7 +606,7 @@ export class GatewayError extends Error {
 }
 ```
 
-- [ ] **Step 4: 驗證並 commit**
+- [x] **Step 4: 驗證並 commit**
 
 ```bash
 npx vitest run packages/core/src/contracts.test.ts --typecheck
@@ -630,7 +630,7 @@ git commit -m "refactor: align gateway with ptt capabilities"
 - Modify: `tsconfig.app.json`
 - Modify: root `package.json` and `package-lock.json`
 
-- [ ] **Step 1: 寫 package-boundary failing test**
+- [x] **Step 1: 寫 package-boundary failing test**
 
 測試 browser root 不 export `PttAdapter`、raw `send` 或 terminal driver；internal test 可直接建立 driver 以保留現有 UI 的過渡相容性。
 
@@ -638,21 +638,21 @@ Run: `npx vitest run packages/browser/src/index.test.ts`
 
 Expected: FAIL，browser package 尚未完成。
 
-- [ ] **Step 2: 建立 package manifest**
+- [x] **Step 2: 建立 package manifest**
 
 使用 `@pttzzz/browser@0.1.0`、ESM、dist root、dependency `@pttzzz/core: 0.1.0` 與直接宣告的 `ptt-client: ^0.9.0`。不發布 `./internal` subpath；package root 暫時可以是空的穩定入口，Task 10 再加入 gateway factory，Task 12 加入 client factory。
 
-- [ ] **Step 3: Mechanical move only**
+- [x] **Step 3: Mechanical move only**
 
 搬移 3,700 行 workflow 與原測試，不改 prompt regex、terminal keys 或成功／失敗判讀。將現有 `PttAdapter` 重新命名為 package-private `TerminalDriver`；它可以暫時保留 positional methods、raw floor 與 `send()`，但不得由 `packages/browser/src/index.ts` 或 package exports 暴露。
 
 DTO 從 `@pttzzz/core` import；parser、aggregator、editing 與 actions 從 `@pttzzz/core/internal` import。所有 package-local ESM specifier 使用 `.js`。將未直接宣告的 `sleep-promise` 改為原生 `new Promise((resolve) => setTimeout(resolve, ms))` helper。
 
-- [ ] **Step 4: 保留 repo 內過渡 shim**
+- [x] **Step 4: 保留 repo 內過渡 shim**
 
 現有 `src/lib/ptt/adapter.ts` 只為尚未遷移的 React hooks 轉接到 workspace source，不成為 npm export；Task 17 遷移完 UI 後刪除。不得為此新增已發布的 legacy subpath。
 
-- [ ] **Step 5: 建 aliases 與驗證**
+- [x] **Step 5: 建 aliases 與驗證**
 
 Vite／TypeScript aliases 同時解析 `@pttzzz/core`、`@pttzzz/core/internal` 與 `@pttzzz/browser`；publish exports 仍指 dist。Root `build:packages` 依序 build core、browser。
 
@@ -665,7 +665,7 @@ npm run lint
 
 Expected: PASS；browser root 沒有 legacy API，dist 無 React/Zustand import。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add package.json package-lock.json packages/browser src/lib/ptt/adapter.ts vite.config.ts tsconfig.app.json
@@ -681,7 +681,7 @@ git commit -m "refactor: isolate browser terminal driver"
 - Modify: `packages/browser/src/internal/terminalDriver.ts`
 - Modify: `packages/browser/src/index.ts`
 
-- [ ] **Step 1: 寫新 gateway failing tests**
+- [x] **Step 1: 寫新 gateway failing tests**
 
 以 stub Bot／terminal transcripts 建立真實 gateway 測試，不連 live PTT。至少覆蓋：
 
@@ -696,7 +696,7 @@ Run: `npx vitest run packages/browser/src/gateway.test.ts`
 
 Expected: FAIL，`BrowserPttGateway` 尚不存在。
 
-- [ ] **Step 2: 實作薄 gateway，不重寫 terminal workflow**
+- [x] **Step 2: 實作薄 gateway，不重寫 terminal workflow**
 
 `BrowserPttGateway implements PttGateway`，只負責 object/command/event 轉換與錯誤正規化。既有 terminal method 暫時由私有 driver 執行；不可讓新 gateway 同時實作 legacy interface，也不可把 raw floor 暴露到 UI contract。
 
@@ -704,7 +704,7 @@ Expected: FAIL，`BrowserPttGateway` 尚不存在。
 
 所有含 `ArticleKey` 的 push／vote／edit／withdraw／delete／回應看板 command，必須在 terminal driver 的同一個 serialized operation 內重新定位 index/AID、驗證開啟文章身分後才送出第一個不可逆按鍵；不得沿用前一次 read 留下的 article screen，也不得在 gateway 先 read、稍後另開 write task。index 的獨立證據來自實際看板分頁 row，AID 的獨立證據來自 `Q` 文章資訊中的 canonical AID／board；同一 locator 自行讀出 expected identity 不算驗證。transcript 至少覆蓋 read → board list → write、較舊 index 的分頁定位，以及錯誤 index/AID 對所有 write family 都不送 `X`／`E`／`d`／`y`。
 
-- [ ] **Step 3: 實作真實看板能力**
+- [x] **Step 3: 實作真實看板能力**
 
 - `listBoards()`：以 `ptt-client` Board query／既有 screen parser 實作 hot、favorite、category；預設 hot。
 - `searchBoards()`：使用 PTT prefix search；空 prefix reject core-owned `GatewayError("INVALID_INPUT", ...)`，不得宣稱全文搜尋。
@@ -715,11 +715,11 @@ Expected: FAIL，`BrowserPttGateway` 尚不存在。
 
 以 transcripts 覆蓋熱門、最愛、根分類、子分類、prefix 無結果、invalid cursor、分頁與 terminal 狀態復原。
 
-- [ ] **Step 4: 統一 write receipt**
+- [x] **Step 4: 統一 write receipt**
 
 第一個不可逆按鍵前失敗是 `not-sent`；成功畫面是 `sent`；save/delete/content confirmation key 已送出後的 timeout 或模糊結果是 `uncertain`。未標註的 legacy failure 預設 `uncertain`。所有 outcome 預設 `retryable: false`；只有 driver 明確標示的暫時性、安全 pre-send failure 可 opt in true，輸入錯誤、not found、stale identity 與 permission/rejected 不可重試。`sent`／`uncertain` 強制 false，不得自動重送。Listener exception 逐 listener 隔離，不可中止後續 listener 或 gateway 操作。多個 withdraw ranges 必須在同一 terminal `runSerial` 內逐段送出，其他 command 不可插入；部分成功或不確定時保留最保守 outcome 且不可重試。
 
-- [ ] **Step 5: 公開 factory 並驗證**
+- [x] **Step 5: 公開 factory 並驗證**
 
 ```ts
 export function createBrowserGateway(): PttGateway;
@@ -748,7 +748,7 @@ git commit -m "feat: implement browser ptt gateway"
 - Modify: `packages/browser/src/gatewayContract.test.ts`
 - Create: `src/lib/ptt/fakeAdapter.ts`
 
-- [ ] **Step 1: 讓共同 contract test 對 fake 失敗**
+- [x] **Step 1: 讓共同 contract test 對 fake 失敗**
 
 共同 suite 只接受 `PttGateway`，驗證 lifecycle、board list/search/filter、partial/final、ActionReceipt、event unsubscribe 與 exact operation key。真實 gateway 使用 transcript driver；fake 使用 jsdom storage。
 
@@ -756,7 +756,7 @@ Run: `npx vitest run packages/browser/src/gatewayContract.test.ts`
 
 Expected: FAIL，fake 尚未能建立新 gateway。
 
-- [ ] **Step 2: 搬移 fake driver 並重用 BrowserPttGateway**
+- [x] **Step 2: 搬移 fake driver 並重用 BrowserPttGateway**
 
 Fake terminal data source 實作與真實 driver 相同的 package-private seam，再由相同的 gateway contract 包裝；不得再公開 legacy `createFakePttAdapter()`。`@pttzzz/browser/testing` 只 export：
 
@@ -771,7 +771,7 @@ export {
 
 舊 `src/lib/ptt/fakeAdapter.ts` 僅提供 UI 尚未遷移期間的 repo-local shim，Task 17 刪除。
 
-- [ ] **Step 3: 驗證並 commit**
+- [x] **Step 3: 驗證並 commit**
 
 ```bash
 npx vitest run packages/browser/src/internal/fakeTerminalDriver.test.ts packages/browser/src/gatewayContract.test.ts
@@ -799,7 +799,7 @@ git commit -m "refactor: expose fake browser gateway"
 - Create: `packages/browser/src/createBrowserClient.ts`
 - Modify: `packages/browser/src/index.ts`
 
-- [ ] **Step 1: 用 in-memory gateway 寫 failing tests**
+- [x] **Step 1: 用 in-memory gateway 寫 failing tests**
 
 覆蓋 subscribe/unsubscribe、connection event、partial revision 遞增、final updated event、expected failure 轉 `Result`、gateway throw 轉 `CoreError`。另測 disconnect policy：gateway 以 `GatewayError` 回報預期 cleanup failure 時仍清除 session／connection local state 並 resolve；未知 `Error` 仍 reject，但 local state 同樣清除。
 
@@ -816,13 +816,13 @@ expect(events.map((event) => event.type)).toEqual([
 ]);
 ```
 
-- [ ] **Step 2: Run to verify missing client**
+- [x] **Step 2: Run to verify missing client**
 
 Run: `npx vitest run packages/core/src/client.test.ts`
 
 Expected: FAIL。
 
-- [ ] **Step 3: 實作最小 client 與 event emitter**
+- [x] **Step 3: 實作最小 client 與 event emitter**
 
 ```ts
 export class PttzzzClient {
@@ -846,7 +846,7 @@ export class PttzzzClient {
 
 實作設計文件列出的 connect/login/disconnect、board list/search/filter 與 article read methods；Promise 表示單次結果，events 表示狀態與 partial 更新。
 
-- [ ] **Step 4: 建立 browser factory**
+- [x] **Step 4: 建立 browser factory**
 
 ```ts
 export function createBrowserClient(): PttzzzClient {
@@ -856,7 +856,7 @@ export function createBrowserClient(): PttzzzClient {
 
 Core 不得 import browser factory。
 
-- [ ] **Step 5: 驗證並 commit**
+- [x] **Step 5: 驗證並 commit**
 
 ```bash
 npx vitest run packages/core/src/client.test.ts

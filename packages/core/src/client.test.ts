@@ -1,0 +1,676 @@
+import { describe, expect, it } from "vitest";
+import {
+  GatewayError,
+  PttzzzClient,
+  type CoreEvent,
+  type GatewayEvent,
+  type PttGateway,
+  type PttCommand,
+  type RawArticleSource,
+  type ActionReceipt,
+} from "./index.js";
+
+const indexKey = { board: "Test", index: 1 } as const;
+const aidKey = { board: "Test", aid: "#1ABC" } as const;
+
+const raw = (title: string, body: string, push = "") => [
+  "作者  alice (Alice)                 看板  Test",
+  `標題  ${title}`,
+  "時間  Sat Aug 22 10:00:00 2026",
+  "───────────────────────────────────────",
+  body,
+  push,
+].filter(Boolean).join("\n");
+
+class MemoryGateway implements PttGateway {
+  listeners = new Set<(event: GatewayEvent) => void>();
+  lastRemovedListener?: (event: GatewayEvent) => void;
+  sources: RawArticleSource[] = [];
+  error?: unknown;
+  disconnectError?: unknown;
+  disconnectShouldThrow = false;
+  commands: PttCommand[] = [];
+  receipt: ActionReceipt = { ok: true, outcome: "sent" };
+  executeError?: unknown;
+
+  async connect() { if (this.error) throw this.error; }
+  async login(input: { username: string }) {
+    if (this.error) throw this.error;
+    return { userId: input.username };
+  }
+  async disconnect() {
+    if (this.disconnectShouldThrow || this.disconnectError !== undefined) {
+      throw this.disconnectError;
+    }
+  }
+  async listBoards() { if (this.error) throw this.error; return { kind: "boards" as const, items: [] }; }
+  async searchBoards() { if (this.error) throw this.error; return { kind: "boards" as const, items: [] }; }
+  async filterBoards() { if (this.error) throw this.error; return { kind: "boards" as const, items: [] }; }
+  async listArticles() { if (this.error) throw this.error; return { items: [] }; }
+  async searchArticles() { if (this.error) throw this.error; return { items: [] }; }
+  async filterArticles() { if (this.error) throw this.error; return { items: [] }; }
+  async *readArticle() {
+    if (this.error) throw this.error;
+    for (const source of this.sources) yield source;
+  }
+  async execute(command: PttCommand) {
+    this.commands.push(command);
+    if (this.executeError !== undefined) throw this.executeError;
+    return this.receipt;
+  }
+  subscribe(listener: (event: GatewayEvent) => void) {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+      this.lastRemovedListener = listener;
+    };
+  }
+  emit(event: GatewayEvent) { for (const listener of this.listeners) listener(event); }
+}
+
+describe("PttzzzClient lifecycle", () => {
+  it("normalizes expected and unknown gateway failures into Result", async () => {
+    const gateway = new MemoryGateway();
+    const cause = new Error("socket closed");
+    gateway.error = new GatewayError("TIMEOUT", "逾時", true, cause);
+    const client = new PttzzzClient(gateway);
+
+    await expect(client.connect()).resolves.toEqual({
+      ok: false,
+      error: { code: "TIMEOUT", message: "逾時", retryable: true, cause },
+    });
+
+    gateway.error = cause;
+    await expect(client.listBoards()).resolves.toEqual({
+      ok: false,
+      error: {
+        code: "GATEWAY_FAILURE",
+        message: "PTT gateway 操作失敗",
+        retryable: false,
+        cause,
+      },
+    });
+  });
+
+  it("forwards lifecycle events, isolates listeners, and unsubscribes", async () => {
+    const gateway = new MemoryGateway();
+    const client = new PttzzzClient(gateway);
+    const events: CoreEvent[] = [];
+    client.subscribe(() => { throw new Error("consumer bug"); });
+    const unsubscribe = client.subscribe((event) => events.push(event));
+
+    gateway.emit({ type: "connection.changed", status: "connecting" });
+    expect(events).toEqual([{ type: "connection.changed", status: "connecting" }]);
+    unsubscribe();
+    gateway.emit({ type: "connection.changed", status: "connected" });
+    expect(events).toHaveLength(1);
+  });
+
+  it("cleans local state and absorbs expected disconnect failure", async () => {
+    const gateway = new MemoryGateway();
+    const client = new PttzzzClient(gateway);
+    const events: CoreEvent[] = [];
+    client.subscribe((event) => events.push(event));
+    gateway.emit({ type: "connection.changed", status: "connected" });
+    gateway.emit({ type: "session.changed", session: { userId: "alice" } });
+    gateway.disconnectError = new GatewayError("TIMEOUT", "cleanup timed out", true);
+
+    await expect(client.disconnect()).resolves.toBeUndefined();
+    expect(events.slice(-2)).toEqual([
+      { type: "connection.changed", status: "disconnected" },
+      { type: "session.changed", session: null },
+    ]);
+  });
+
+  it("cleans local state before rethrowing an unknown disconnect failure", async () => {
+    const gateway = new MemoryGateway();
+    const client = new PttzzzClient(gateway);
+    const events: CoreEvent[] = [];
+    client.subscribe((event) => events.push(event));
+    gateway.emit({ type: "connection.changed", status: "connected" });
+    gateway.emit({ type: "session.changed", session: { userId: "alice" } });
+    gateway.disconnectError = new Error("invariant broken");
+
+    await expect(client.disconnect()).rejects.toThrow("invariant broken");
+    expect(events.slice(-2)).toEqual([
+      { type: "connection.changed", status: "disconnected" },
+      { type: "session.changed", session: null },
+    ]);
+  });
+
+  it.each([undefined, null, 0, ""])("rethrows falsy unknown disconnect failure %p after cleanup", async (thrown) => {
+    const gateway = new MemoryGateway();
+    const client = new PttzzzClient(gateway);
+    const events: CoreEvent[] = [];
+    client.subscribe((event) => events.push(event));
+    gateway.emit({ type: "connection.changed", status: "connected" });
+    gateway.emit({ type: "session.changed", session: { userId: "alice" } });
+    gateway.disconnectShouldThrow = true;
+    gateway.disconnectError = thrown;
+
+    let caught = false;
+    try { await client.disconnect(); }
+    catch (error) {
+      caught = true;
+      expect(error).toBe(thrown);
+    }
+    expect(caught).toBe(true);
+    expect(events.slice(-2)).toEqual([
+      { type: "connection.changed", status: "disconnected" },
+      { type: "session.changed", session: null },
+    ]);
+  });
+
+  it("unsubscribes on disconnect and ignores a late event from the removed callback", async () => {
+    const gateway = new MemoryGateway();
+    const client = new PttzzzClient(gateway);
+    const events: CoreEvent[] = [];
+    client.subscribe((event) => events.push(event));
+    gateway.emit({ type: "connection.changed", status: "connected" });
+    gateway.emit({ type: "session.changed", session: { userId: "alice" } });
+
+    await client.disconnect();
+    const eventCount = events.length;
+    expect(gateway.listeners.size).toBe(0);
+    gateway.lastRemovedListener?.({ type: "session.changed", session: { userId: "late" } });
+    gateway.lastRemovedListener?.({ type: "connection.changed", status: "connected" });
+    expect(events).toHaveLength(eventCount);
+  });
+
+  it("reattaches exactly one gateway listener when reconnecting", async () => {
+    const gateway = new MemoryGateway();
+    const client = new PttzzzClient(gateway);
+    const events: CoreEvent[] = [];
+    client.subscribe((event) => events.push(event));
+    await client.disconnect();
+
+    await client.connect();
+    await client.connect();
+    expect(gateway.listeners.size).toBe(1);
+    gateway.emit({ type: "connection.changed", status: "connected" });
+    expect(events.filter((event) => event.type === "connection.changed" && event.status === "connected")).toHaveLength(1);
+  });
+});
+
+describe("PttzzzClient article reads", () => {
+  it("parses partial and final raw sources into nested public DTOs", async () => {
+    const gateway = new MemoryGateway();
+    gateway.sources = [
+      { articleKey: indexKey, completeness: "incomplete", revision: 4, rawText: raw("主題", "正文") },
+      { articleKey: indexKey, completeness: "final", revision: 5, rawText: raw("主題", "正文", "→ bob: 第一則 08/22 10:01\n→ carol: 回1樓：收到 08/22 10:02") },
+    ];
+    const client = new PttzzzClient(gateway);
+    const events: CoreEvent[] = [];
+    client.subscribe((event) => events.push(event));
+
+    const result = await client.getArticle({ article: indexKey });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toMatchObject({
+      key: indexKey,
+      title: "主題",
+      author: "alice (Alice)",
+      body: "正文",
+      completeness: "final",
+      revision: 2,
+    });
+    expect(result.value.replies).toHaveLength(1);
+    expect(result.value.replies[0]).toMatchObject({ author: "bob", depth: 1 });
+    expect(result.value.replies[0].children[0]).toMatchObject({ author: "carol", depth: 2 });
+    expect(events.map((event) => event.type)).toEqual(["article.partial", "article.updated"]);
+    expect(events.filter((event) => "articleKey" in event).map((event) => event.articleKey)).toEqual([indexKey, indexKey]);
+  });
+
+  it("preserves exact aid keys and ignores stale or duplicate source revisions", async () => {
+    const gateway = new MemoryGateway();
+    gateway.sources = [
+      { articleKey: indexKey, completeness: "incomplete", revision: 8, rawText: raw("new", "new") },
+      { articleKey: indexKey, completeness: "incomplete", revision: 7, rawText: raw("old", "old") },
+      { articleKey: indexKey, completeness: "incomplete", revision: 8, rawText: raw("duplicate", "duplicate") },
+      { articleKey: indexKey, completeness: "final", revision: 9, rawText: raw("final", "final") },
+    ];
+    const client = new PttzzzClient(gateway);
+    const revisions: number[] = [];
+    client.subscribe((event) => {
+      if (event.type.startsWith("article.")) revisions.push(event.revision);
+    });
+
+    const first = await client.getArticle({ article: aidKey });
+    expect(first.ok && first.value.key).toEqual(aidKey);
+    expect(revisions).toEqual([1, 2]);
+  });
+
+  it("returns an error when a stream ends without a final source", async () => {
+    const gateway = new MemoryGateway();
+    gateway.sources = [
+      { articleKey: indexKey, completeness: "incomplete", revision: 1, rawText: raw("partial", "body") },
+    ];
+
+    await expect(new PttzzzClient(gateway).getArticle({ article: indexKey })).resolves.toEqual({
+      ok: false,
+      error: expect.objectContaining({ code: "INCOMPLETE_ARTICLE" }),
+    });
+  });
+
+  it("lets a superseded request finish without emitting its stale update", async () => {
+    const resolvers: Array<(source: RawArticleSource) => void> = [];
+    const gateway = new MemoryGateway();
+    gateway.readArticle = async function* () {
+      yield await new Promise<RawArticleSource>((resolve) => resolvers.push(resolve));
+    };
+    const client = new PttzzzClient(gateway);
+    const titles: string[] = [];
+    client.subscribe((event) => {
+      if (event.type === "article.updated") titles.push(event.article.title);
+    });
+
+    const older = client.getArticle({ article: indexKey });
+    const newer = client.getArticle({ article: indexKey });
+    resolvers[1]({ articleKey: indexKey, completeness: "final", revision: 1, rawText: raw("newer", "body") });
+    await newer;
+    resolvers[0]({ articleKey: indexKey, completeness: "final", revision: 1, rawText: raw("older", "body") });
+
+    await expect(older).resolves.toMatchObject({ ok: true, value: { title: "older" } });
+    expect(titles).toEqual(["newer"]);
+  });
+
+  it("does not regress from a final source back to an incomplete source", async () => {
+    const gateway = new MemoryGateway();
+    gateway.sources = [
+      { articleKey: indexKey, completeness: "final", revision: 4, rawText: raw("final", "final") },
+      { articleKey: indexKey, completeness: "incomplete", revision: 5, rawText: raw("late partial", "partial") },
+    ];
+    const client = new PttzzzClient(gateway);
+    const events: string[] = [];
+    client.subscribe((event) => events.push(event.type));
+
+    const result = await client.getArticle({ article: indexKey });
+
+    expect(result).toMatchObject({ ok: true, value: { title: "final" } });
+    expect(events).toEqual(["article.updated"]);
+  });
+
+  it("projects article and reply viewer votes from the current session case-insensitively", async () => {
+    const gateway = new MemoryGateway();
+    gateway.sources = [{
+      articleKey: indexKey,
+      completeness: "final",
+      revision: 1,
+      rawText: raw("votes", "body", [
+        "推 ALICE: 推 08/22 10:01",
+        "→ bob: reply 08/22 10:02",
+        "噓 alice: 噓2樓 08/22 10:03",
+      ].join("\n")),
+    }];
+    const client = new PttzzzClient(gateway);
+    const sessionEvents: CoreEvent[] = [];
+    client.subscribe((event) => sessionEvents.push(event));
+
+    await client.login({ username: "Alice", password: "secret" });
+    const mine = await client.getArticle({ article: indexKey });
+    expect(mine).toMatchObject({
+      ok: true,
+      value: {
+        viewerVote: "push",
+        replies: [{ viewerVote: "boo" }],
+      },
+    });
+    expect(sessionEvents.filter((event) => event.type === "session.changed")).toEqual([
+      { type: "session.changed", session: { userId: "Alice" } },
+    ]);
+
+    gateway.emit({ type: "session.changed", session: { userId: "bob" } });
+    gateway.sources[0] = { ...gateway.sources[0], revision: 2 };
+    const other = await client.getArticle({ article: indexKey });
+    expect(other.ok && other.value.viewerVote).toBeUndefined();
+    expect(other.ok && other.value.replies[0].viewerVote).toBeUndefined();
+
+    gateway.emit({ type: "session.changed", session: null });
+    gateway.sources[0] = { ...gateway.sources[0], revision: 3 };
+    const loggedOut = await client.getArticle({ article: indexKey });
+    expect(loggedOut.ok && loggedOut.value.viewerVote).toBeUndefined();
+    expect(sessionEvents.filter((event) => event.type === "session.changed").at(-1)).toEqual({
+      type: "session.changed",
+      session: null,
+    });
+  });
+
+  it("stops consuming and closes the source iterator immediately after final", async () => {
+    const gateway = new MemoryGateway();
+    let cleaned = false;
+    gateway.readArticle = async function* () {
+      try {
+        yield { articleKey: indexKey, completeness: "final", revision: 1, rawText: raw("final", "body") };
+        await new Promise(() => {});
+      } finally {
+        cleaned = true;
+      }
+    };
+    const result = await Promise.race([
+      new PttzzzClient(gateway).getArticle({ article: indexKey }),
+      new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 30)),
+    ]);
+
+    expect(result).not.toBe("timeout");
+    expect(result).toMatchObject({ ok: true, value: { title: "final" } });
+    expect(cleaned).toBe(true);
+  });
+
+  it("does not observe a gateway throw after the first final source", async () => {
+    const gateway = new MemoryGateway();
+    gateway.readArticle = async function* () {
+      yield { articleKey: indexKey, completeness: "final", revision: 1, rawText: raw("final", "body") };
+      throw new Error("must not be observed");
+    };
+
+    await expect(new PttzzzClient(gateway).getArticle({ article: indexKey })).resolves.toMatchObject({
+      ok: true,
+      value: { title: "final" },
+    });
+  });
+
+  it("maps real append and replace edit kinds while excluding the original snapshot", async () => {
+    const gateway = new MemoryGateway();
+    gateway.sources = [{
+      articleKey: indexKey,
+      completeness: "final",
+      revision: 1,
+      rawText: raw("edits", "body", [
+        "→ alice: original. 08/22 10:01",
+        "→ alice: 補充我在1樓發言：more 08/22 10:02",
+        "→ alice: 更正我在1樓發言：replacement 08/22 10:03",
+      ].join("\n")),
+    }];
+
+    const result = await new PttzzzClient(gateway).getArticle({ article: indexKey });
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: { replies: [{ edits: [
+        { kind: "append", content: "more" },
+        { kind: "replace", content: "replacement" },
+      ] }] },
+    });
+  });
+
+  it("publishes grouped edits in raw command order instead of constituent floor order", async () => {
+    const gateway = new MemoryGateway();
+    gateway.sources = [{
+      articleKey: indexKey,
+      completeness: "final",
+      revision: 1,
+      rawText: raw("grouped edits", "body", [
+        "→ alice: first 08/22 10:01",
+        "→ alice: second. 08/22 10:02",
+        "→ alice: 補充我在2樓發言：edit-second 08/22 10:03",
+        "→ alice: 更正我在1樓發言：edit-first 08/22 10:03",
+      ].join("\n")),
+    }];
+
+    const result = await new PttzzzClient(gateway).getArticle({ article: indexKey });
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: { replies: [{ edits: [
+        { kind: "append", content: "edit-second" },
+        { kind: "replace", content: "edit-first" },
+      ] }] },
+    });
+  });
+});
+
+describe("PttzzzClient writes", () => {
+  it("maps every article-level write to one gateway command", async () => {
+    const gateway = new MemoryGateway();
+    const client = new PttzzzClient(gateway);
+
+    await client.createArticle({ board: "Test", category: "閒聊", title: "title", content: "body" });
+    await client.editArticle({ article: indexKey, content: "updated", editSummary: "fix" });
+    await client.deleteArticle({ article: indexKey });
+    await client.replyToArticle({ article: indexKey, content: "comment", pushType: "neutral" });
+    await client.replyArticleToBoard({ article: indexKey, content: "board reply" });
+    await client.voteArticle({ article: indexKey, direction: "push" });
+    await client.withdrawArticleVote({ article: indexKey, direction: "boo" });
+
+    expect(gateway.commands).toEqual([
+      { type: "create-article", board: "Test", category: "閒聊", title: "title", content: "body" },
+      { type: "edit-article", article: indexKey, content: "updated", editSummary: "fix" },
+      { type: "delete-article", article: indexKey },
+      { type: "reply-article", article: indexKey, content: "comment", pushType: "neutral" },
+      { type: "reply-article-to-board", article: indexKey, content: "board reply" },
+      { type: "vote-article", article: indexKey, direction: "push" },
+      { type: "withdraw-article-vote", article: indexKey, direction: "boo" },
+    ]);
+  });
+
+  it("resolves a replyId to the primary source floor for reply, edit, and votes", async () => {
+    const gateway = new MemoryGateway();
+    gateway.sources = [{
+      articleKey: indexKey, completeness: "final", revision: 1,
+      rawText: raw("thread", "body", "→ bob: first 08/22 10:01\n→ bob: second. 08/22 10:02"),
+    }];
+    const client = new PttzzzClient(gateway);
+    const article = await client.getArticle({ article: indexKey });
+    if (!article.ok) throw new Error("fixture article missing");
+    const replyId = article.value.replies[0].replyId;
+
+    await client.replyToReply({ article: indexKey, replyId, content: " 同意 ", pushType: "push" });
+    await client.editReply({ article: indexKey, replyId, mode: "append", content: "more" });
+    await client.voteReply({ article: indexKey, replyId, direction: "boo" });
+    await client.withdrawReplyVote({ article: indexKey, replyId, direction: "push" });
+    await client.withdrawReply({ article: indexKey, replyId });
+
+    expect(gateway.commands).toEqual([
+      { type: "reply-floor", article: indexKey, floor: 1, content: "回1樓：同意", pushType: "push" },
+      { type: "edit-floor", article: indexKey, floor: 1, mode: "append", content: "more" },
+      { type: "vote-floor", article: indexKey, floor: 1, direction: "boo" },
+      { type: "withdraw-floor-vote", article: indexKey, floor: 1, direction: "push" },
+      { type: "withdraw-floor", article: indexKey, ranges: [{ start: 1, end: 2 }] },
+    ]);
+  });
+
+  it("splits noncontiguous aggregate source floors into safe withdrawal ranges", async () => {
+    const gateway = new MemoryGateway();
+    gateway.sources = [{
+      articleKey: indexKey, completeness: "final", revision: 1,
+      rawText: raw("thread", "body", [
+        "→ bob: first 08/22 10:01",
+        "→ alice: other. 08/22 10:02",
+        "→ bob: last. 08/22 10:03",
+      ].join("\n")),
+    }];
+    const client = new PttzzzClient(gateway);
+    const article = await client.getArticle({ article: indexKey });
+    if (!article.ok) throw new Error("fixture article missing");
+    const bob = article.value.replies.find((reply) => reply.author === "bob")!;
+
+    await client.withdrawReply({ article: indexKey, replyId: bob.replyId });
+
+    expect(gateway.commands).toEqual([{
+      type: "withdraw-floor",
+      article: indexKey,
+      ranges: [{ start: 1, end: 1 }, { start: 3, end: 3 }],
+    }]);
+  });
+
+  it("returns REPLY_NOT_FOUND without executing for missing or invalidated mappings", async () => {
+    const gateway = new MemoryGateway();
+    gateway.sources = [{
+      articleKey: indexKey, completeness: "final", revision: 1,
+      rawText: raw("thread", "body", "→ bob: reply. 08/22 10:01"),
+    }];
+    const client = new PttzzzClient(gateway);
+    const article = await client.getArticle({ article: indexKey });
+    if (!article.ok) throw new Error("fixture article missing");
+    const replyId = article.value.replies[0].replyId;
+
+    await expect(client.voteReply({ article: indexKey, replyId: "missing", direction: "push" })).resolves.toEqual({
+      ok: false,
+      error: expect.objectContaining({ code: "REPLY_NOT_FOUND", outcome: "not-sent", retryable: false }),
+    });
+    gateway.sources = [{
+      articleKey: indexKey, completeness: "incomplete", revision: 2,
+      rawText: raw("partial", "body"),
+    }];
+    await client.getArticle({ article: indexKey });
+    await expect(client.voteReply({ article: indexKey, replyId, direction: "push" })).resolves.toEqual({
+      ok: false,
+      error: expect.objectContaining({ code: "REPLY_NOT_FOUND" }),
+    });
+    expect(gateway.commands).toEqual([]);
+  });
+
+  it("clears reply mappings on disconnect", async () => {
+    const gateway = new MemoryGateway();
+    gateway.sources = [{
+      articleKey: indexKey, completeness: "final", revision: 1,
+      rawText: raw("thread", "body", "→ bob: reply. 08/22 10:01"),
+    }];
+    const client = new PttzzzClient(gateway);
+    const article = await client.getArticle({ article: indexKey });
+    if (!article.ok) throw new Error("fixture article missing");
+    await client.disconnect();
+
+    const result = await client.editReply({
+      article: indexKey, replyId: article.value.replies[0].replyId, mode: "replace", content: "x",
+    });
+    expect(result).toMatchObject({ ok: false, error: { code: "REPLY_NOT_FOUND" } });
+    expect(gateway.commands).toEqual([]);
+  });
+
+  it("does not let a superseded final overwrite the newer reply mapping", async () => {
+    const resolvers: Array<(source: RawArticleSource) => void> = [];
+    const gateway = new MemoryGateway();
+    gateway.readArticle = async function* () {
+      yield await new Promise<RawArticleSource>((resolve) => resolvers.push(resolve));
+    };
+    const client = new PttzzzClient(gateway);
+    const older = client.getArticle({ article: indexKey });
+    const newer = client.getArticle({ article: indexKey });
+    resolvers[1]({
+      articleKey: indexKey, completeness: "final", revision: 1,
+      rawText: raw("new", "body", "→ alice: first. 08/22 10:01\n→ bob: target. 08/22 10:02"),
+    });
+    const newArticle = await newer;
+    if (!newArticle.ok) throw new Error("new fixture missing");
+    const bob = newArticle.value.replies.find((reply) => reply.author === "bob")!;
+    resolvers[0]({
+      articleKey: indexKey, completeness: "final", revision: 1,
+      rawText: raw("old", "body", "→ bob: stale target. 08/22 10:01"),
+    });
+    await older;
+
+    await client.voteReply({ article: indexKey, replyId: bob.replyId, direction: "push" });
+    expect(gateway.commands).toEqual([{
+      type: "vote-floor", article: indexKey, floor: 2, direction: "push",
+    }]);
+  });
+
+  it("never rebinds an old replyId when a leading card is withdrawn on reload", async () => {
+    const gateway = new MemoryGateway();
+    gateway.sources = [{
+      articleKey: indexKey, completeness: "final", revision: 1,
+      rawText: raw("before", "body", "→ alice: remove me. 08/22 10:01\n→ bob: keep me. 08/22 10:02"),
+    }];
+    const client = new PttzzzClient(gateway);
+    const before = await client.getArticle({ article: indexKey });
+    if (!before.ok) throw new Error("before fixture missing");
+    const removedId = before.value.replies[0].replyId;
+    expect(removedId).toBe("reply:1");
+
+    gateway.sources = [{
+      articleKey: indexKey, completeness: "final", revision: 2,
+      rawText: raw("after", "body", [
+        "→ alice: remove me. 08/22 10:01",
+        "→ bob: keep me. 08/22 10:02",
+        "→ alice: 撤回我在1樓的發言 08/22 10:03",
+      ].join("\n")),
+    }];
+    const after = await client.getArticle({ article: indexKey });
+    if (!after.ok) throw new Error("after fixture missing");
+    expect(after.value.replies).toMatchObject([{ author: "bob", replyId: "reply:2" }]);
+
+    await expect(client.voteReply({ article: indexKey, replyId: removedId, direction: "push" })).resolves.toMatchObject({
+      ok: false,
+      error: { code: "REPLY_NOT_FOUND" },
+    });
+    expect(gateway.commands).toEqual([]);
+  });
+
+  it("keeps replyId stable when the raw source-floor membership is unchanged", async () => {
+    const gateway = new MemoryGateway();
+    gateway.sources = [{
+      articleKey: indexKey, completeness: "final", revision: 1,
+      rawText: raw("same", "body", "→ alice: same. 08/22 10:01"),
+    }];
+    const client = new PttzzzClient(gateway);
+    const first = await client.getArticle({ article: indexKey });
+    gateway.sources = [{ ...gateway.sources[0], revision: 2 }];
+    const second = await client.getArticle({ article: indexKey });
+
+    expect(first.ok && first.value.replies[0].replyId).toBe("reply:1");
+    expect(second.ok && second.value.replies[0].replyId).toBe("reply:1");
+  });
+
+  it("keeps the anchor replyId while continuation expands its target floors", async () => {
+    const gateway = new MemoryGateway();
+    gateway.sources = [{
+      articleKey: indexKey, completeness: "final", revision: 1,
+      rawText: raw("partial group", "body", "→ alice: first 08/22 10:01"),
+    }];
+    const client = new PttzzzClient(gateway);
+    const first = await client.getArticle({ article: indexKey });
+    if (!first.ok) throw new Error("first fixture missing");
+    const replyId = first.value.replies[0].replyId;
+
+    gateway.sources = [{
+      articleKey: indexKey, completeness: "final", revision: 2,
+      rawText: raw("full group", "body", "→ alice: first 08/22 10:01\n→ alice: second. 08/22 10:02"),
+    }];
+    const expanded = await client.getArticle({ article: indexKey });
+    expect(expanded.ok && expanded.value.replies[0]).toMatchObject({ replyId });
+
+    await client.withdrawReply({ article: indexKey, replyId });
+    expect(gateway.commands).toEqual([{
+      type: "withdraw-floor", article: indexKey, ranges: [{ start: 1, end: 2 }],
+    }]);
+  });
+
+  it("preserves write outcomes and never retries uncertain or thrown writes", async () => {
+    const gateway = new MemoryGateway();
+    const client = new PttzzzClient(gateway);
+    const cause = new Error("confirmation timeout");
+    gateway.receipt = {
+      ok: false, code: "TIMEOUT", message: "請重新載入確認", outcome: "uncertain", retryable: false, cause,
+    };
+
+    await expect(client.voteArticle({ article: indexKey, direction: "push" })).resolves.toEqual({
+      ok: false,
+      error: { code: "TIMEOUT", message: "請重新載入確認", outcome: "uncertain", retryable: false, cause },
+    });
+    expect(gateway.commands).toHaveLength(1);
+
+    gateway.executeError = new Error("unknown transport failure");
+    await expect(client.deleteArticle({ article: indexKey })).resolves.toEqual({
+      ok: false,
+      error: expect.objectContaining({ code: "GATEWAY_FAILURE", outcome: "uncertain", retryable: false }),
+    });
+    expect(gateway.commands).toHaveLength(2);
+  });
+
+  it("preserves safe not-sent retryability from the receipt", async () => {
+    const gateway = new MemoryGateway();
+    gateway.receipt = {
+      ok: false, code: "NOT_CONNECTED", message: "尚未連線", outcome: "not-sent", retryable: true,
+    };
+
+    await expect(new PttzzzClient(gateway).createArticle({
+      board: "Test", title: "title", content: "body",
+    })).resolves.toEqual({
+      ok: false,
+      error: { code: "NOT_CONNECTED", message: "尚未連線", outcome: "not-sent", retryable: true },
+    });
+    expect(gateway.commands).toHaveLength(1);
+  });
+});

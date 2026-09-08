@@ -342,4 +342,21 @@ describe("whitepaper conformance fixtures", () => {
       expect(normalizeThreadEvents(rawPushes)).toEqual(expectedNormalizedEvents);
     },
   );
+
+  it("preserves the whitepaper append and replace operations in edit history", () => {
+    const historyFor = (id: string) => {
+      const fixture = cases.find((candidate) => candidate.id === id)!;
+      return aggregatePushes(fixture.rawPushes, fixture.articleAuthor).pushes
+        .find((reply) => reply.author === "alice")?.editHistory;
+    };
+
+    expect(historyFor("edits-append-opaque-payload")).toEqual([
+      expect.objectContaining({ kind: "original", content: "原文。" }),
+      expect.objectContaining({ kind: "append", content: "推99樓 只是文字" }),
+    ]);
+    expect(historyFor("edits-replace-preserves-structure")).toEqual([
+      expect.objectContaining({ kind: "original", content: "原回覆。" }),
+      expect.objectContaining({ kind: "replace", content: "回99樓：opaque" }),
+    ]);
+  });
 });

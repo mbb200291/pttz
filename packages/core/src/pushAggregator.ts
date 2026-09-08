@@ -40,6 +40,7 @@ interface ParsedPushIntent {
 }
 
 type ParsedRawPush = AnchoredRawPush & {
+  commandOrder: number;
   intent: ParsedPushIntent;
   originalContent: string;
   structuralContent: string;
@@ -48,8 +49,14 @@ type ParsedRawPush = AnchoredRawPush & {
 };
 
 export interface PushEditHistoryRecord {
+  kind: "original" | "append" | "replace" | "withdraw";
+  /** Zero-based raw command order; authoritative when PTT timestamps tie. */
+  commandOrder: number;
   time: string;
+  /** Operation payload; original and withdraw use their visible snapshot. */
   content: string;
+  /** Content after this operation was applied. */
+  resultContent: string;
 }
 
 export interface NormalizedThreadEvent {
@@ -182,12 +189,18 @@ function buildGroupEditHistory(group: PushGroup): PushEditHistoryRecord[] | unde
       intent: { ...push.intent, visibleContent: push.structuralContent },
     })),
   );
-  const editRecords = editedPushes.flatMap((push) => push.editHistory.slice(1));
-  const latestEdit = editRecords[editRecords.length - 1];
-  const lastPush = group.pushes[group.pushes.length - 1];
+  const editRecords = editedPushes
+    .flatMap((push) => push.editHistory.slice(1))
+    .sort((left, right) => left.commandOrder - right.commandOrder);
   return [
-    { time: group.pushes[0].time, content: originalContent },
-    { time: latestEdit?.time ?? lastPush?.time ?? "", content: mergePushContents(group.pushes) },
+    {
+      kind: "original",
+      commandOrder: Math.min(...group.pushes.map((push) => push.commandOrder)),
+      time: group.pushes[0].time,
+      content: originalContent,
+      resultContent: originalContent,
+    },
+    ...editRecords,
   ];
 }
 
@@ -595,14 +608,23 @@ function applyPushEdits(pushes: ParsedRawPush[]): void {
 
       if (target.editHistory.length === 0) {
         target.editHistory.push({
+          kind: "original",
+          commandOrder: target.commandOrder,
           time: target.time,
           content: target.intent.visibleContent,
+          resultContent: target.intent.visibleContent,
         });
       }
 
       if (command.intent.editMode === "withdraw") {
         target.withdrawn = true;
-        target.editHistory.push({ time: command.time, content: " " });
+        target.editHistory.push({
+          kind: "withdraw",
+          commandOrder: command.commandOrder,
+          time: command.time,
+          content: " ",
+          resultContent: " ",
+        });
         continue;
       }
 
@@ -615,8 +637,11 @@ function applyPushEdits(pushes: ParsedRawPush[]): void {
         target.intent.visibleContent = command.intent.visibleContent;
       }
       target.editHistory.push({
+        kind: command.intent.editMode === "append" ? "append" : "replace",
+        commandOrder: command.commandOrder,
         time: command.time,
-        content: target.intent.visibleContent,
+        content: command.intent.visibleContent,
+        resultContent: target.intent.visibleContent,
       });
     }
   }
@@ -627,6 +652,7 @@ function parseAndApplyPushEdits(rawPushes: AnchoredRawPush[]): ParsedRawPush[] {
     const intent = parsePushIntent(push.content);
     return {
       ...push,
+      commandOrder: index,
       rawFloor: push.rawFloor ?? index + 1,
       intent,
       originalContent: push.content,
@@ -659,6 +685,10 @@ function extractAuthorId(author: string): string {
 
 export function normalizePttId(author: string): string {
   return extractAuthorId(author).toLowerCase();
+}
+
+function replyIdFromAnchorFloor(floors: readonly number[]): string {
+  return `reply:${Math.min(...floors)}`;
 }
 
 function getReplyDepth(
@@ -723,6 +753,7 @@ export function aggregatePushes(
   for (let i = 0; i < groups.length; i++) {
     const g = groups[i];
     const rep = g.pushes[0]; // 代表型別與作者取第一則
+    const sourceFloors = g.pushes.map((push, index) => push.rawFloor ?? i + index + 1);
     const mergedContent = mergePushContents(g.pushes);
     const lastTime = g.pushes[g.pushes.length - 1].time;
     const ipAddresses = Array.from(
@@ -730,7 +761,7 @@ export function aggregatePushes(
     ) as string[];
 
     firstLayer.push({
-      id: `push-${i}`,
+      id: replyIdFromAnchorFloor(sourceFloors),
       type: rep.type,
       author: rep.author,
       content: mergedContent,
@@ -741,7 +772,7 @@ export function aggregatePushes(
       score: 0,
       floorNumber: i, // 暫定，後面篩掉嵌套後重排
       anchorOrder: g.anchorOrder,
-      sourceFloors: g.pushes.map((push, index) => push.rawFloor ?? i + index + 1),
+      sourceFloors,
       pushVoters: [],
       booVoters: [],
       editHistory: buildGroupEditHistory(g),
@@ -855,6 +886,8 @@ export function aggregatePushes(
     return a.contentAnchorOffset - b.contentAnchorOffset;
   });
   const threadPushes = [...firstLayer];
+  // A target-local event ordinal is stable when earlier article text changes byte offsets.
+  const editOrdinalByTarget = new Map<string, number>();
 
   for (const note of sortedEditNotes) {
     let target: AggregatedPush | undefined;
@@ -877,8 +910,10 @@ export function aggregatePushes(
     }
 
     if (target) {
+      const ordinal = (editOrdinalByTarget.get(target.id) ?? 0) + 1;
+      editOrdinalByTarget.set(target.id, ordinal);
       threadPushes.push({
-        id: `edit-${threadPushes.length}`,
+        id: `edit:${target.id}:${ordinal}`,
         type: "edit",
         author: articleAuthor,
         content: note.content,

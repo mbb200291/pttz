@@ -84,8 +84,8 @@ describe("Article push editing", () => {
             ...article.pushes[0],
             content: "更新後推文",
             editHistory: [
-              { time: "12:00", content: "原推文" },
-              { time: "12:05", content: "更新後推文" },
+              { kind: "original", commandOrder: 0, time: "12:00", content: "原推文", resultContent: "原推文" },
+              { kind: "replace", commandOrder: 1, time: "12:05", content: "更新後推文", resultContent: "更新後推文" },
             ],
           }],
         }}
