@@ -9,12 +9,13 @@
   ],
   "scripts": {
     "dev": "npm run dev -w @pttzzz/web-example",
-    "build": "npm run build:packages && npm run build -w @pttzzz/web-example",
+    "dev:threads": "npm run dev -w @pttzzz/threads-example --",
+    "build": "npm run build:packages && npm run build -w @pttzzz/web-example && npm run build -w @pttzzz/threads-example",
     "build:packages": "npm run build -w @pttzzz/core && npm run build -w @pttzzz/browser",
     "lint": "eslint .",
     "preview": "npm run preview -w @pttzzz/web-example",
     "verify": "npm test && node --test scripts/smoke-helpers.test.mjs && npm run build && npm run lint && node scripts/smoke-packages.mjs",
-    "test": "npm test -w @pttzzz/core && npm test -w @pttzzz/browser && npm test -w @pttzzz/web-example"
+    "test": "npm test -w @pttzzz/core && npm test -w @pttzzz/browser && npm test -w @pttzzz/web-example && npm test -w @pttzzz/threads-example"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

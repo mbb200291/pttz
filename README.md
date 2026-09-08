@@ -128,6 +128,8 @@ npm run dev
 
 - **目前 Web 介面範例**：呈現深度、UI 取捨與開發預覽工具集中在[Web 介面層實作說明](apps/web/docs/README.md)。這些內容只約束此 Web 範例，不會改變白皮書或核心資料語意。
 
+- **Threads 風格唯讀範例**：獨立的 [PTTZ 串流](apps/threads/README.md)，以熱門看板精選文章作為入口；執行 `npm run dev:threads`，不影響原有 Web UI。
+
 常用指令：
 
 ```bash

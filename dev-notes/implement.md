@@ -75,6 +75,10 @@ npm run verify    # tests + helper tests + build + lint + pack/example smoke
 - 可發布 `@pttzzz/core@0.1.0` 與 `@pttzzz/browser@0.1.0`，以及 isolated `npm pack` consumer smoke。
 - 人類／AI API 文件與可執行 minimal browser alternate UI。
 
+## Goal 12：Threads 風格唯讀介面
+
+`apps/threads` 為獨立的原生 TypeScript/Vite 介面，透過公開 core/browser 契約取得熱門看板精選、逐步讀取文章、呈現巢狀回覆與編輯歷程。第一版以五個熱門看板、每板最多六篇及原生推數門檻 20 組成有限串流，不另建推薦引擎；保留原 Web UI，新增 `npm run dev:threads` 入口。詳見 [plan](goal-12-implementation-plan.md)、[notes](goal-12-implementation-notes.md) 及 [UI README](../apps/threads/README.md)。
+
 ## 目前限制
 
 - 推文聚合仍是依時間、終止符、`||` 與 PTT 右側資訊欄剩餘空間判斷的 deterministic heuristic；原始欄距不可用時保守換行。
