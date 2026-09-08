@@ -1,16 +1,18 @@
 # AI 建立 PTTzzz UI 的最短正確路徑
 
-此頁描述 0.1 proposed API，尚未表示 package 已發布或完成實作。完整型別見 [public contracts](./contracts.md)，討論串語意見[核心規則白皮書](../whitepaper/pttzzz-core.md)，套件邊界見[核心架構設計](../../dev-notes/goal-9-core-architecture-design.md)。
+此頁描述 repository 內已實作並通過 packed-consumer 驗證的 0.1 API；是否已發布至 npm registry 是另一件事。完整型別見 [public contracts](./contracts.md)，討論串語意見[核心規則白皮書](../whitepaper/pttzzz-core.md)，套件邊界見[核心架構設計](../../dev-notes/goal-9-core-architecture-design.md)。
 
 ## 1. 安裝
 
-規劃中的瀏覽器 UI 依賴兩個 package：
+瀏覽器 UI 依賴兩個 package：
 
 ```bash
 npm install @pttzzz/core @pttzzz/browser
 ```
 
 `@pttzzz/core` 可在 Node-like 環境載入純規則，但 0.1 真實 PTT 連線只保證 browser，不提供 Node gateway 保證。
+
+`@pttzzz/browser` 目前包裝 legacy `ptt-client`，因此 browser bundler 必須提供 `Buffer`。所有要實際連線的 host（開發、preview 與 production）都必須提供同源 `/ptt-ws` WebSocket proxy，轉送至 `wss://ws.ptt.cc/bbs` 並注入 PTT 接受的 Origin；這是 host/server 責任，不應由 UI 呼叫 terminal API 解決。
 
 ## 2. Create client
 

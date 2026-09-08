@@ -8,18 +8,13 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
+    "dev": "npm run dev -w @pttzzz/web-example",
+    "build": "npm run build:packages && npm run build -w @pttzzz/web-example",
     "build:packages": "npm run build -w @pttzzz/core && npm run build -w @pttzzz/browser",
     "lint": "eslint .",
-    "preview": "vite preview",
-    "test": "vitest run"
-  },
-  "dependencies": {
-    "ptt-client": "^0.9.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "zustand": "^5.0.0"
+    "preview": "npm run preview -w @pttzzz/web-example",
+    "verify": "npm test && node --test scripts/smoke-helpers.test.mjs && npm run build && npm run lint && node scripts/smoke-packages.mjs",
+    "test": "npm test -w @pttzzz/core && npm test -w @pttzzz/browser && npm test -w @pttzzz/web-example"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

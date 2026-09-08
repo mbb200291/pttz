@@ -1107,6 +1107,40 @@ describe("HTML vote model alignment", () => {
     });
   });
 
+  it("keeps a fully withdrawn aggregate as one hidden reply", () => {
+    const thread = aggregatePushes([
+      push("alice", "first", "08/12 22:40", "neutral", 10, 1),
+      push("alice", "second.", "08/12 22:41", "neutral", 20, 2),
+      push("alice", "撤回我在1~2樓的發言", "08/12 22:42", "neutral", 30, 3),
+    ], OP);
+
+    expect(thread.pushes).toEqual([]);
+    expect(thread.withdrawnPushes).toHaveLength(1);
+    expect(thread.withdrawnPushes[0]).toMatchObject({
+      id: "reply:1",
+      sourceFloors: [1, 2],
+      content: " ",
+      visible: false,
+      editHistory: [
+        expect.objectContaining({ kind: "original" }),
+        expect.objectContaining({ kind: "withdraw", content: " ", resultContent: " " }),
+      ],
+    });
+    expect(thread.withdrawnPushes[0].editHistory).toHaveLength(2);
+  });
+
+  it("regroups surviving lines and creates no duplicate hidden reply after a partial withdraw", () => {
+    const thread = aggregatePushes([
+      push("alice", "first", "08/12 22:40", "neutral", 10, 1),
+      push("alice", "second.", "08/12 22:41", "neutral", 20, 2),
+      push("alice", "撤回我在1樓的發言", "08/12 22:42", "neutral", 30, 3),
+    ], OP);
+
+    expect(thread.pushes).toHaveLength(1);
+    expect(thread.pushes[0]).toMatchObject({ id: "reply:2", sourceFloors: [2] });
+    expect(thread.withdrawnPushes).toEqual([]);
+  });
+
   it("applies Replace to body as opaque text without changing structure or vote", () => {
     const thread = aggregatePushes(
       [

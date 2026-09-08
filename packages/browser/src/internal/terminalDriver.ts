@@ -22,6 +22,8 @@ import {
   aggregatePushes,
   type AggregatedPush,
   extractArticleThreadEvents,
+  formatEditPushCommand,
+  formatReplyPush,
   formatPttzzzEditSummary,
   parsePushBuffer,
   splitArticleBody,
@@ -1024,7 +1026,7 @@ class PttClientTerminalDriver implements TerminalDriver {
     pushType: PushType,
     boardName?: string,
   ): Promise<ActionResult> {
-    return this.replyToArticle(formatReplyToFloor(floor, content), pushType, boardName);
+    return this.replyToArticle(formatReplyPush(floor, content), pushType, boardName);
   }
 
   async voteArticle(
@@ -1141,7 +1143,7 @@ class PttClientTerminalDriver implements TerminalDriver {
           case "reply-article":
             ({ content, pushType } = command); break;
           case "reply-floor":
-            content = formatReplyToFloor(command.floor, command.content); pushType = command.pushType; break;
+            content = formatReplyPush(command.floor, command.content); pushType = command.pushType; break;
           case "vote-article":
             content = command.direction === "push" ? "推" : "噓"; pushType = command.direction; break;
           case "withdraw-article-vote":
@@ -1153,7 +1155,7 @@ class PttClientTerminalDriver implements TerminalDriver {
             content = `撤回我對${command.floor}樓的${command.direction === "push" ? "推" : "噓"}`;
             pushType = "neutral"; break;
           case "edit-floor":
-            content = `${command.mode === "append" ? "補充" : "更正"}我在${command.floor}樓發言：${command.content}`;
+            content = formatEditPushCommand(command.floor, command.mode, command.content);
             pushType = "neutral"; break;
           case "withdraw-floor": {
             const range = command.ranges[0];
@@ -2131,10 +2133,6 @@ export async function fetchPostCategoryOptionsFromBot(
   await cancelPostComposeFlow(bot, boardName);
 
   return options;
-}
-
-function formatReplyToFloor(floor: number, content: string): string {
-  return `回${floor}樓：${content.trim()}`;
 }
 
 function formatVoteForFloor(floor: number, kind: "push" | "boo"): string {

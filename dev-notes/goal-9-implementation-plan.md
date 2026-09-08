@@ -879,7 +879,7 @@ git commit -m "feat: add high-level pttzzz client"
 - Modify: `packages/browser/src/gateway.ts`
 - Modify: `packages/browser/src/gateway.test.ts`
 
-- [ ] **Step 1: 寫 identity failing tests**
+- [x] **Step 1: 寫 identity failing tests**
 
 ```ts
 const article = await client.getArticle({ board: "Test", index: 1 });
@@ -901,13 +901,13 @@ expect(gateway.execute).toHaveBeenCalledWith({
 
 另測不存在 replyId → `REPLY_NOT_FOUND`、聚合卡多個 source floor、以及 `uncertain` 保留 outcome 且不重送。
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `npx vitest run packages/core/src/client.test.ts`
 
 Expected: FAIL，client 尚未解析 replyId。
 
-- [ ] **Step 3: 實作 mapping 與高階 writes**
+- [x] **Step 3: 實作 mapping 與高階 writes**
 
 每次 final article 建立 `Map<articleKey, Map<replyId, number[]>>`。`replyToReply`、`voteReply`、`withdrawReplyVote`、`editReply` 先解析 target；公開 input 不接受 raw floor。寫入映射固定如下：
 
@@ -924,11 +924,11 @@ withdrawReply           → withdraw-floor，將 source floors 分成連續 rang
 
 文章投票與回文投票必須是不同 public methods；不得沿用目前名稱混淆的 floor-based `voteArticle()`。
 
-- [ ] **Step 4: 驗證 browser receipt 符合既有 discriminated contract**
+- [x] **Step 4: 驗證 browser receipt 符合既有 discriminated contract**
 
 不得在 browser 重定義 `ActionReceipt`。第一個不可逆按鍵前失敗回 core-owned `{ ok: false, outcome: "not-sent", retryable }`；成功是 `{ ok: true, outcome: "sent" }`；已送內容但確認 timeout 是 `{ ok: false, outcome: "uncertain", retryable: false }`。加入 type/runtime tests，確保 `sent`／`uncertain` 無法標成可重試且 client 永不自動重送。
 
-- [ ] **Step 5: 驗證並 commit**
+- [x] **Step 5: 驗證並 commit**
 
 ```bash
 npx vitest run packages/core/src/client.test.ts packages/browser/src/gateway.test.ts
@@ -949,21 +949,21 @@ git commit -m "feat: target replies by stable identity"
 - Modify: `src/hooks/__tests__/usePttSocket.test.ts`
 - Modify: `src/lib/ptt/viewState.ts`
 
-- [ ] **Step 1: 更新 tests 使用 public client stub**
+- [x] **Step 1: 更新 tests 使用 public client stub**
 
 Stub 只實作 public methods 與 `subscribe()`，不得有 `send()`、`getLastScreen()` 或 terminal method；加入 unsubscribe 與 connection/session event 驗證。
 
-- [ ] **Step 2: Run to verify hook still expects adapter**
+- [x] **Step 2: Run to verify hook still expects adapter**
 
 Run: `npx vitest run src/hooks/__tests__/usePttSocket.test.ts`
 
 Expected: FAIL。
 
-- [ ] **Step 3: 改 store 與 singleton**
+- [x] **Step 3: 改 store 與 singleton**
 
 `client` 改為 `PttzzzClient | null`；正式模式用 `createBrowserClient()`，fake 模式用 `new PttzzzClient(createFakeBrowserGateway())`。`wsStatus`、`pttState`、登入錯誤由 event/Result 更新；terminal screen 只留 debug，不作正常狀態來源。
 
-- [ ] **Step 4: 驗證並 commit**
+- [x] **Step 4: 驗證並 commit**
 
 Run: `npx vitest run src/hooks/__tests__/usePttSocket.test.ts src/__tests__/appState.test.ts`
 
@@ -985,24 +985,24 @@ git commit -m "refactor: bridge connection state from core client"
 - Modify: `src/components/Article.tsx`
 - Modify: `src/components/ArticleList.tsx`
 
-- [ ] **Step 1: 更新 tests 期待 Result 與 events**
+- [x] **Step 1: 更新 tests 期待 Result 與 events**
 
 Board stub 回傳 `ok({ items, nextCursor })`；article 以 `article.partial`／`article.updated` 推進，並測 stale revision 不覆蓋新 revision。
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `npx vitest run src/hooks/__tests__/useBoard.test.ts src/hooks/__tests__/useArticle.test.ts`
 
 Expected: FAIL，hooks 仍直接使用 array/null adapter API 或 screen parser。
 
-- [ ] **Step 3: 改 hooks 只使用 public DTO**
+- [x] **Step 3: 改 hooks 只使用 public DTO**
 
 - `useBoard` 處理 Result 與 core pagination DTO。
 - `useArticle` 訂閱 matching article key，以 revision 排除 stale event。
 - 移除 hooks 對 `parsePartialScreen`、fake storage key、fake-mode 判斷與 adapter debug function 的 import。
 - `viewCache` 型別改從 `@pttzzz/core` 匯入。
 
-- [ ] **Step 4: 驗證並 commit**
+- [x] **Step 4: 驗證並 commit**
 
 Run: `npx vitest run src/hooks/__tests__/useBoard.test.ts src/hooks/__tests__/useArticle.test.ts src/components/__tests__/Article.test.tsx src/components/__tests__/ArticleList.test.tsx`
 
@@ -1023,25 +1023,25 @@ git commit -m "refactor: read boards and articles through core client"
 - Modify: `src/components/Composer.tsx`
 - Modify: action/edit/vote tests under `src/components/__tests__/`
 
-- [ ] **Step 1: 更新 tests 使用 replyId**
+- [x] **Step 1: 更新 tests 使用 replyId**
 
 回覆、投票、撤回、編輯 assert high-level input DTO，不 assert raw command。加入 uncertain 顯示「可能已送出，請重新載入確認」且 client 只呼叫一次的測試。
 
-- [ ] **Step 2: Run to verify floor-based API failure**
+- [x] **Step 2: Run to verify floor-based API failure**
 
 Run: `npx vitest run src/hooks/__tests__/usePttActions.test.ts src/components/__tests__/ArticlePushVoting.test.tsx`
 
 Expected: FAIL。
 
-- [ ] **Step 3: 改 hook 成 thin delegation layer**
+- [x] **Step 3: 改 hook 成 thin delegation layer**
 
 Hook 不再格式化控制文字，只轉成 `PttzzzClient` input DTO。`PushThread` callback 用 `push.id`；`Article` 不用 `getPushEditFloorRange()` 當 transport target；`Composer` 只提交內容與 mode。
 
-- [ ] **Step 4: 加入 outcome UI**
+- [x] **Step 4: 加入 outcome UI**
 
 `uncertain`、`not-sent` 與 expected PTT errors 分開顯示；只有 `not-sent && retryable` 可安全重試。
 
-- [ ] **Step 5: 驗證並 commit**
+- [x] **Step 5: 驗證並 commit**
 
 ```bash
 npx vitest run src/hooks/__tests__/usePttActions.test.ts src/components/__tests__
@@ -1073,15 +1073,15 @@ git commit -m "refactor: write through stable core actions"
 - Modify: `eslint.config.js`
 - Delete: compatibility re-exports under `src/lib/ptt/`
 
-- [ ] **Step 1: 建 app manifest**
+- [x] **Step 1: 建 app manifest**
 
 使用 `@pttzzz/web-example`、`private: true`；dependencies 包含 core、browser、React、React DOM、Zustand；保留 dev/build/test scripts。
 
-- [ ] **Step 2: 先移除 app 對相容入口的依賴**
+- [x] **Step 2: 先移除 app 對相容入口的依賴**
 
 以 `rg` 找出 app 與 UI tests 對舊 parser、aggregator、editing、adapter、fakeAdapter 的 import。正常 UI 必須已在 Tasks 14–16 改成只用 `@pttzzz/core`、`@pttzzz/browser` 或 `@pttzzz/browser/testing`；不得把舊 parser／aggregator deep import 改成新的 internal deep import。`Article.tsx` 的 `getLastArticleOpenTrace()` 改讀 article DTO 的 opt-in debug metadata，不直接 import browser terminal driver。執行 `npm test` 通過後，刪除所有 repo-local compatibility re-export。
 
-- [ ] **Step 3: Mechanical move**
+- [x] **Step 3: Mechanical move**
 
 ```bash
 mkdir -p apps/web
@@ -1107,7 +1107,7 @@ Root `tsconfig.json` 最終只負責 project references：
 }
 ```
 
-- [ ] **Step 4: 更新 root scripts**
+- [x] **Step 4: 更新 root scripts**
 
 ```json
 {
@@ -1118,7 +1118,7 @@ Root `tsconfig.json` 最終只負責 project references：
 }
 ```
 
-- [ ] **Step 5: 驗證完整 workspace**
+- [x] **Step 5: 驗證完整 workspace**
 
 ```bash
 npm install
@@ -1129,7 +1129,7 @@ npm run lint
 
 Expected: tests/build PASS，lint 0 errors；不得增加 warning 類別。
 
-- [ ] **Step 6: 驗證無 deep import 並 commit**
+- [x] **Step 6: 驗證無 deep import 並 commit**
 
 Run: `rg -n "packages/(core|browser)/src|@pttzzz/(core|browser)/src" apps/web/src`
 
@@ -1151,7 +1151,7 @@ git commit -m "refactor: move React UI into reference app"
 - Modify: both package manifests
 - Modify: `package.json`
 
-- [ ] **Step 1: 寫 failing smoke script**
+- [x] **Step 1: 寫 failing smoke script**
 
 只用 Node standard library 的 `mkdtemp`、`execFileSync` 與 dynamic import：pack 兩個 package、在暫存目錄安裝 tarballs、import public roots，assert：
 
@@ -1160,17 +1160,17 @@ if (typeof core.PttzzzClient !== "function") throw new Error("core client missin
 if (typeof browser.createBrowserClient !== "function") throw new Error("browser factory missing");
 ```
 
-- [ ] **Step 2: Run before metadata completion**
+- [x] **Step 2: Run before metadata completion**
 
 Run: `node scripts/smoke-packages.mjs`
 
 Expected: FAIL，指出 dist/export/tarball dependency 問題。
 
-- [ ] **Step 3: 完成 manifests**
+- [x] **Step 3: 完成 manifests**
 
 補 description、license、repository、engines、`sideEffects: false`、files/exports。Core tarball 不含 React/Zustand/ptt-client；browser 不複製 core source。
 
-- [ ] **Step 4: 驗證並加入 root verify**
+- [x] **Step 4: 驗證並加入 root verify**
 
 ```bash
 npm run build:packages
@@ -1183,7 +1183,7 @@ Expected: PASS；dry-run 只列 README、package.json、dist。
 
 Root 加：`"verify": "npm test && npm run build && npm run lint && node scripts/smoke-packages.mjs"`。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add scripts packages package.json package-lock.json
@@ -1200,7 +1200,7 @@ git commit -m "build: verify publishable packages"
 - Create: `docs/examples/minimal-browser/main.ts`
 - Modify: `scripts/smoke-packages.mjs`
 
-- [ ] **Step 1: 只用 public roots 寫可執行範例**
+- [x] **Step 1: 只用 public roots 寫可執行範例**
 
 ```ts
 import type { CoreEvent } from "@pttzzz/core";
@@ -1209,19 +1209,19 @@ import { createBrowserClient } from "@pttzzz/browser";
 
 展示 create、subscribe、connect、login、listArticles、getArticle、unsubscribe、disconnect；帳密只從使用者輸入取得。
 
-- [ ] **Step 2: Type-check packed example**
+- [x] **Step 2: Type-check packed example**
 
 Smoke script 將範例複製到暫存 project 後執行 `tsc --noEmit`。
 
 Expected: PASS，無 deep import。
 
-- [ ] **Step 3: 文件一致性檢查**
+- [x] **Step 3: 文件一致性檢查**
 
 Run: `rg -n "TODO|TBD|待確認|/src/" docs/api docs/examples`
 
 Expected: 無輸出。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/api docs/examples scripts/smoke-packages.mjs
@@ -1236,15 +1236,15 @@ git commit -m "docs: verify alternate UI integration guide"
 - Modify: `dev-notes/code-architecture-guide.md`
 - Modify: `dev-notes/goal-9-core-architecture-design.md`
 
-- [ ] **Step 1: 記錄已發生的實作限制**
+- [x] **Step 1: 記錄已發生的實作限制**
 
 只記錄 adapter imports、partial ordering、write outcome、npm pack、compatibility re-export 等實際坑，不複製本計畫。
 
-- [ ] **Step 2: 更新高階文件**
+- [x] **Step 2: 更新高階文件**
 
 改成最終 package paths、依賴方向、commands 與 UI integration；design 狀態標為 implemented，差異以 decision log 說明。
 
-- [ ] **Step 3: Final verification**
+- [x] **Step 3: Final verification**
 
 ```bash
 npm run verify
@@ -1254,7 +1254,7 @@ git status --short
 
 Expected: tests/build/lint/pack smoke PASS；diff check 無輸出；status 只含本 task 文件。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add dev-notes

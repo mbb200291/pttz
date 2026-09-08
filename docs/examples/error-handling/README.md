@@ -1,6 +1,6 @@
 # Result 與 uncertain write
 
-所有預期的 PTT 操作失敗使用 0.1 proposed `Result`。完整 error/outcome 定義見 [contracts](../../api/contracts.md)。
+所有預期的 PTT 操作失敗使用 0.1 `Result`。完整 error/outcome 定義見 [contracts](../../api/contracts.md)。
 
 ```ts
 import type { ArticleKey, PttzzzClient, Result } from "@pttzzz/core";

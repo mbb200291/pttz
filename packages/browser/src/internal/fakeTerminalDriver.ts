@@ -824,6 +824,10 @@ export class FakePttAdapter {
 
 export function createFakeTerminalDriver(): BrowserGatewayDriver {
   const adapter = new FakePttAdapter();
+  return fakeGatewayDriver(adapter);
+}
+
+function fakeGatewayDriver(adapter: FakePttAdapter): BrowserGatewayDriver {
   return {
     connect: () => adapter.connect(),
     login: (username) => adapter.login(username),

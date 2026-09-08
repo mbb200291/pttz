@@ -42,7 +42,12 @@ import {
   type WithdrawReplyInput,
   type WithdrawReplyVoteInput,
 } from "./contracts.js";
-import { formatReplyToReply } from "./actions.js";
+import {
+  approximatePttBytes,
+  formatEditPushCommand,
+  formatReplyPush,
+  MAX_PTT_PUSH_BYTES,
+} from "./pushWire.js";
 import { extractArticleThreadEvents, parsePushBuffer, splitArticleBody, stripAnsi } from "./parser.js";
 import {
   aggregatePushes,
@@ -50,6 +55,17 @@ import {
   type AggregatedPush,
   type PushEditHistoryRecord,
 } from "./pushAggregator.js";
+
+function invalidPushContent(content: string): Result<void> | null {
+  return approximatePttBytes(content) <= MAX_PTT_PUSH_BYTES
+    ? null
+    : fail({
+        code: "INVALID_INPUT",
+        message: "PTT 單行推文不可超過 80 bytes",
+        retryable: false,
+        outcome: "not-sent",
+      });
+}
 
 function coreError(error: unknown): CoreError {
   if (error instanceof GatewayError) {
@@ -117,13 +133,14 @@ function isOperationEdit(
 
 function replyTree(pushes: readonly AggregatedPush[], debug: boolean, viewerId?: string): Reply[] {
   const children = new Map<string, Reply[]>();
+  const pushById = new Map(pushes.map((push) => [push.id, push]));
   const depthOf = (push: AggregatedPush): 1 | 2 | 3 => {
     let depth = 1;
     let current = push;
     const seen = new Set<string>();
     while (current.replyTo && depth < 3 && !seen.has(current.id)) {
       seen.add(current.id);
-      const parent = pushes.find((candidate) => candidate.id === current.replyTo);
+      const parent = pushById.get(current.replyTo);
       if (!parent) break;
       depth += 1;
       current = parent;
@@ -141,11 +158,12 @@ function replyTree(pushes: readonly AggregatedPush[], debug: boolean, viewerId?:
     score: push.score,
     ...viewerVote(viewerId, push.pushVoters, push.booVoters),
     isOp: push.isOP,
-    visible: true,
+    visible: push.visible ?? true,
     edits: (push.editHistory ?? []).filter(isOperationEdit).map((edit) => ({
       kind: edit.kind,
       author: push.author,
       content: edit.content,
+      resultContent: edit.resultContent,
       ...(edit.time ? { createdAt: edit.time } : {}),
     })),
     children: [],
@@ -181,7 +199,19 @@ function projectSource(
     key,
     revision,
     body: separatorBody(split.body),
-    replies: replyTree(thread.pushes, debug, viewerId),
+    replies: replyTree([...thread.pushes, ...thread.withdrawnPushes], debug, viewerId),
+    articleEdits: thread.articleNotes.map((edit, sequence) => ({
+      marker: edit.marker,
+      content: edit.content,
+      sequence,
+    })),
+    revisions: split.revisions.map((revision, sequence) => ({
+      summary: revision.summary,
+      sequence,
+    })),
+    nativePushCount: thread.nativePushCount,
+    nativeBooCount: thread.nativeBooCount,
+    nativeNeutralCount: thread.nativeNeutralCount,
   };
   const replyFloors = new Map(thread.pushes.flatMap((push) => {
     const floors = [...new Set(push.sourceFloors)]
@@ -363,6 +393,8 @@ export class PttzzzClient {
   }
 
   replyToArticle(input: ReplyToArticleInput): Promise<Result<void>> {
+    const invalid = invalidPushContent(input.content);
+    if (invalid) return Promise.resolve(invalid);
     return this.write({ type: "reply-article", ...input });
   }
 
@@ -382,11 +414,13 @@ export class PttzzzClient {
     const target = this.replyTarget(input.article, input.replyId);
     if (!target.ok) return target;
     const floor = target.value[0];
+    const invalid = invalidPushContent(formatReplyPush(floor, input.content));
+    if (invalid) return invalid;
     return this.write({
       type: "reply-floor",
       article: input.article,
       floor,
-      content: formatReplyToReply(floor, input.content),
+      content: input.content,
       pushType: input.pushType,
     });
   }
@@ -394,10 +428,17 @@ export class PttzzzClient {
   async editReply(input: EditReplyInput): Promise<Result<void>> {
     const target = this.replyTarget(input.article, input.replyId);
     if (!target.ok) return target;
+    const floor = target.value[0];
+    const invalid = invalidPushContent(formatEditPushCommand(
+      floor,
+      input.mode,
+      input.content,
+    ));
+    if (invalid) return invalid;
     return this.write({
       type: "edit-floor",
       article: input.article,
-      floor: target.value[0],
+      floor,
       mode: input.mode,
       content: input.content,
     });

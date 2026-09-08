@@ -88,6 +88,9 @@ export interface ArticleSummary extends ArticleRef {
   author: string;
   publishedAt?: string;
   nativeScore?: number;
+  nativeScoreLabel?: string;
+  pinned?: boolean;
+  mark?: string;
 }
 
 export interface ArticlePage {
@@ -99,7 +102,19 @@ export interface EditRecord {
   kind: "append" | "replace" | "withdraw";
   author: string;
   content: string;
+  resultContent: string;
   createdAt?: string;
+}
+
+export interface ArticleEdit {
+  marker: string;
+  content: string;
+  sequence: number;
+}
+
+export interface ArticleRevisionRecord {
+  summary: string;
+  sequence: number;
 }
 
 export interface ReplyMetadata {
@@ -129,6 +144,11 @@ export interface Article extends ArticleSummary {
   revision: number;
   body: string;
   replies: readonly Reply[];
+  articleEdits: readonly ArticleEdit[];
+  revisions: readonly ArticleRevisionRecord[];
+  nativePushCount: number;
+  nativeBooCount: number;
+  nativeNeutralCount: number;
   viewerVote?: VoteDirection;
   metadata?: { raw?: unknown };
 }
@@ -141,6 +161,11 @@ export interface PartialArticle {
   author?: string;
   body?: string;
   replies: readonly Reply[];
+  articleEdits?: readonly ArticleEdit[];
+  revisions?: readonly ArticleRevisionRecord[];
+  nativePushCount?: number;
+  nativeBooCount?: number;
+  nativeNeutralCount?: number;
 }
 
 export type ConnectionStatus = "disconnected" | "connecting" | "connected";
@@ -198,7 +223,7 @@ export type FilterBoardsInput = BoardFilterPage &
   );
 export interface ListArticlesInput { board: string; cursor?: string; limit?: number }
 export interface SearchArticlesInput { board: string; query: string; cursor?: string; limit?: number }
-export interface FilterArticlesInput { board: string; author?: string; keyword?: string; cursor?: string; limit?: number }
+export interface FilterArticlesInput { board: string; author?: string; keyword?: string; minimumNativeScore?: number; cursor?: string; limit?: number }
 export interface GetArticleInput { article: ArticleKey; includeDebugMetadata?: boolean }
 export interface CreateArticleInput { board: string; category?: string; title: string; content: string }
 export interface EditArticleInput { article: ArticleKey; content: string; editSummary: string }

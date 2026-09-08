@@ -88,7 +88,7 @@ describe("BrowserPttGateway", () => {
     expect(execute).toHaveBeenCalledTimes(2);
   });
 
-  it("unwraps the public nested-reply pattern for the private driver to format once", async () => {
+  it("passes raw nested-reply body to the private driver for final formatting", async () => {
     const execute = vi.fn<BrowserGatewayDriver["execute"]>(async () => ({ ok: true }));
     const gateway = new BrowserPttGateway(driver({ execute }));
 
@@ -96,7 +96,7 @@ describe("BrowserPttGateway", () => {
       type: "reply-floor",
       article: articleByIndex,
       floor: 12,
-      content: "回12樓：同意",
+      content: "  同意  ",
       pushType: "neutral",
     });
 
@@ -104,9 +104,25 @@ describe("BrowserPttGateway", () => {
       type: "reply-floor",
       article: articleByIndex,
       floor: 12,
-      content: "同意",
+      content: "  同意  ",
       pushType: "neutral",
     });
+  });
+
+  it("rejects an oversized final wire push before invoking the driver", async () => {
+    const execute = vi.fn<BrowserGatewayDriver["execute"]>(async () => ({ ok: true }));
+    const gateway = new BrowserPttGateway(driver({ execute }));
+
+    await expect(gateway.execute({
+      type: "reply-floor",
+      article: articleByIndex,
+      floor: 1,
+      content: "中".repeat(37),
+      pushType: "neutral",
+    })).resolves.toMatchObject({
+      ok: false, code: "INVALID_INPUT", outcome: "not-sent", retryable: false,
+    });
+    expect(execute).not.toHaveBeenCalled();
   });
 
   it("maps commands to the private positional terminal workflow", async () => {
@@ -232,6 +248,7 @@ describe("BrowserPttGateway", () => {
       beforeIndex?: number;
       author?: string;
       keyword?: string;
+      minimumNativeScore?: number;
     }) => [
       { index: input.beforeIndex ? 8 : 10, title: "one", author: input.author ?? "a", date: "1/1" },
       { index: input.beforeIndex ? 7 : 9, title: input.keyword ?? "two", author: input.author ?? "b", date: "1/1" },
@@ -250,6 +267,10 @@ describe("BrowserPttGateway", () => {
     await gateway.filterArticles({ board: "Test", author: "alice", keyword: "topic", limit: 2 });
     expect(listArticles).toHaveBeenLastCalledWith({
       board: "Test", author: "alice", keyword: "topic", limit: 3,
+    });
+    await gateway.filterArticles({ board: "Test", minimumNativeScore: 10, limit: 2 });
+    expect(listArticles).toHaveBeenLastCalledWith({
+      board: "Test", minimumNativeScore: 10, limit: 3,
     });
 
     await expect(gateway.listArticles({ board: "Test", limit: 2, cursor: first.nextCursor }))

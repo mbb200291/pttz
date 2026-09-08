@@ -1,6 +1,6 @@
-# PTTzzz 0.1 proposed public contracts
+# PTTzzz 0.1 public contracts
 
-本文件描述 Goal 9 設計階段的公開契約，尚不代表套件已發布或介面已實作。後續 Task 會以 TypeScript、gateway contract tests 與現有 PTT workflow 驗證並微調名稱；語意規則以[核心規則白皮書](../whitepaper/pttzzz-core.md)為準，分層決策見[核心架構設計](../../dev-notes/goal-9-core-architecture-design.md)。
+本文件描述 repository 內已實作並由 TypeScript、gateway contract tests 與 packed consumer 驗證的公開契約；npm registry 發布狀態不在此保證。語意規則以[核心規則白皮書](../whitepaper/pttzzz-core.md)為準，分層決策見[核心架構設計](../../dev-notes/goal-9-core-architecture-design.md)。
 
 ## Export 層級
 
@@ -390,7 +390,7 @@ export interface PttGateway {
 }
 ```
 
-`PttGateway` 是真實 browser 與 fake 實作共同遵守的唯一公開 gateway contract。真實 terminal driver 可在 `packages/browser/src/internal/` 使用 positional args、raw floor 與 screen helpers，但不由 package exports 公開。`@pttzzz/browser` root 最終只提供 `createBrowserGateway()`、`createBrowserClient()` 與穩定 browser types；一般 UI 無法取得任意 `send()`。
+`PttGateway` 是真實 browser 與 fake 實作共同遵守的唯一公開 gateway contract。真實 terminal driver 可在 browser package 內部使用 positional args、raw floor 與 screen helpers，但不由 package exports 公開。`@pttzzz/browser` root 只提供 `createBrowserGateway()`、`createBrowserClient()` 與穩定 browser types；一般 UI 無法取得任意 `send()`。
 
 Gateway 可在 `PttCommand` 使用 raw floor，因為它負責 terminal transport；`PttzzzClient` 必須先用內部 map 將 `replyId` 解析成樓號，一般 UI 永遠不能直接提供 raw floor。Gateway 不把 terminal keys 或 prompt 判讀洩漏給 core/UI。
 
@@ -425,4 +425,4 @@ Gateway 的 connect／login／read method 對可預期失敗 throw `GatewayError
 
 ## Stability
 
-0.1 implementation 前，型別名稱可因 TypeScript 驗證或現有 adapter 能力而小幅調整，但三層 export 邊界、stable `replyId`、partial revision、structured `Result`、write uncertainty 與 browser-only real connection 是設計約束。實作後 package root 的公開型別遵循 semantic versioning；`@pttzzz/core/internal`、debug raw shape 與 gateway transport 細節不在一般 UI 相容性承諾內。
+Package root 的公開型別遵循 semantic versioning；三層 export 邊界、stable `replyId`、partial revision、structured `Result`、write uncertainty 與 browser-only real connection 是設計約束。`@pttzzz/core/internal`、debug raw shape 與 gateway transport 細節不在一般 UI 相容性承諾內。

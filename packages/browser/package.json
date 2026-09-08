@@ -1,8 +1,18 @@
 {
   "name": "@pttzzz/browser",
   "version": "0.1.0",
+  "description": "Official browser gateway for @pttzzz/core",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mbb200291/pttzzz.git",
+    "directory": "packages/browser"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "type": "module",
-  "files": ["dist"],
+  "files": ["dist", "LICENSE", "README.md"],
   "sideEffects": false,
   "exports": {
     ".": {

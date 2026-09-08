@@ -1,41 +1,16 @@
-# Minimal browser lifecycle
+# Minimal browser UI
 
-這是 0.1 proposed API 的最小 browser lifecycle；package 尚未代表已發布。型別與錯誤細節見 [contracts](../../api/contracts.md)。真實 PTT 連線第一版只保證 browser。
+這是只使用 `@pttzzz/core` 與 `@pttzzz/browser` 公開入口的可執行替代 UI。型別與錯誤細節見 [contracts](../../api/contracts.md)。真實 PTT 連線第一版只保證 browser。
 
-```ts
-import { createBrowserClient } from "@pttzzz/browser";
-import type { CoreEvent } from "@pttzzz/core";
+`index.html` 與 `main.ts` 展示 connect/login、看板與文章讀取、partial/final revision gate、stale request gate、巢狀回覆 renderer、以 `replyId` 寫入、write outcome，以及 unsubscribe/disconnect lifecycle。
 
-const client = createBrowserClient();
-const unsubscribe = client.subscribe((event: CoreEvent) => {
-  if (event.type === "article.partial" || event.type === "article.updated") {
-    console.log(event.articleKey, event.revision, event.article.completeness);
-  }
-});
+複製此目錄後執行：
 
-const form = document.querySelector<HTMLFormElement>("#login")!;
-form.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const data = new FormData(form);
-  const connected = await client.connect();
-  if (!connected.ok) return showError(connected.error);
-
-  const login = await client.login({
-    username: String(data.get("username") ?? ""),
-    password: String(data.get("password") ?? ""),
-    disconnectExistingSession: data.get("disconnectExistingSession") === "on",
-  });
-  if (!login.ok) return showError(login.error);
-
-  const articles = await client.listArticles({ board: "Gossiping", limit: 20 });
-  if (!articles.ok) return showError(articles.error);
-  renderList(articles.value.items);
-});
-
-window.addEventListener("pagehide", () => {
-  unsubscribe();
-  void client.disconnect();
-});
+```bash
+npm install
+npm run dev
 ```
 
-`showError` 與 `renderList` 是應用自己的 UI functions；credentials 由使用者表單提供。
+`package.json` 與 `vite.config.ts` 是可直接使用的 host setup：Vite 注入 legacy `ptt-client` 所需的 `Buffer`，開發伺服器將同源 `/ptt-ws` WebSocket 代理到 `wss://ws.ptt.cc/bbs` 並設定 `Origin: https://term.ptt.cc`。Production 部署也必須提供完全相同的 `/ptt-ws` proxy；Vite build 只產生靜態檔，不會替 production server 建立 proxy。
+
+Credentials 只由頁面表單取得；範例不含帳密、raw floor、terminal driver 或 internal import。

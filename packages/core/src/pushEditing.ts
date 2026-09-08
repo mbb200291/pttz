@@ -1,12 +1,7 @@
 import type { AggregatedPush } from "./pushAggregator.js";
 
-export function approximatePttBytes(value: string): number {
-  let bytes = 0;
-  for (const character of value) {
-    bytes += character.codePointAt(0)! > 127 ? 2 : 1;
-  }
-  return bytes;
-}
+export { approximatePttBytes } from "./pushWire.js";
+import { formatEditPushCommand } from "./pushWire.js";
 
 export function formatEditPush(
   mode: "補充" | "更正" | "撤回",
@@ -19,7 +14,7 @@ export function formatEditPush(
       ? `撤回我在${startFloor}樓的發言`
       : `撤回我在${startFloor}~${endFloor}樓的發言`;
   }
-  return `${mode}我在${startFloor}樓發言：${content.trim()}`;
+  return formatEditPushCommand(startFloor, mode === "補充" ? "append" : "replace", content);
 }
 
 export function getPushEditFloorRange(push: AggregatedPush): {

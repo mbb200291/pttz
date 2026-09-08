@@ -1,16 +1,16 @@
 # Goal 9：PTTzzz 核心架構設計
 
-狀態：設計已確認，尚未進入 implementation plan 與程式碼遷移。
+狀態：已實作。最終結果與偏離見 `goal-9-implementation-notes.md`。
 
 ## 1. 目標
 
-Goal 9 要把目前集中在單一 React 專案裡的知識分成三層：
+Goal 9 已把原本集中在單一 React 專案裡的知識分成三層：
 
-1. **設計層**：以白皮書定義 PTTzzz 的領域規則，例如推文聚合、巢狀回覆、投票、撤回與編輯重解析。
-2. **核心實作層**：將白皮書實作成不依賴 React 的 JavaScript／TypeScript 套件，並以 `ptt-client` 為低階 PTT 連線引擎。
-3. **介面層**：由不同 UI 消費核心 API；目前的 React UI 是官方參考實作之一，不是核心本身。
+1. **設計層**：白皮書定義 PTTzzz 的領域規則，例如推文聚合、巢狀回覆、投票、撤回與編輯重解析。
+2. **核心實作層**：白皮書已實作成不依賴 React 的 JavaScript／TypeScript 套件，並以 `ptt-client` 為 browser gateway 的低階 PTT 連線引擎。
+3. **介面層**：不同 UI 可消費核心 API；目前的 React UI 是官方參考實作之一，不是核心本身。
 
-核心實作層必須能獨立發布，並提供足夠明確、適合人類與 AI 閱讀的公開介面文件，使其他人能在不理解 terminal 細節與內部 parser 的前提下建立不同 UI。
+核心實作層已可獨立打包，並提供適合人類與 AI 閱讀的公開介面文件，使其他人能在不理解 terminal 細節與內部 parser 的前提下建立不同 UI。
 
 ## 2. 設計原則
 
@@ -38,7 +38,7 @@ ptt-client（第三方低階 terminal 引擎）
 apps/web（現有 React UI；官方介面層範例）
 ```
 
-預計 repository 形狀：
+實際 repository 形狀：
 
 ```text
 packages/
@@ -60,10 +60,6 @@ docs/
     AI-INTERFACE.md
   examples/
     minimal-browser/
-    react-store/
-    vue-composable/
-    rendering/
-    error-handling/
 ```
 
 Repository 先使用 npm workspaces，不引入 Turborepo 或額外 monorepo framework。只有在實際 build graph 或發布流程需要時再評估工具。
@@ -78,7 +74,7 @@ Repository 先使用 npm workspaces，不引入 Turborepo 或額外 monorepo fra
 
 ### 4.2 `@pttzzz/browser`
 
-`@pttzzz/browser` 是瀏覽器環境的 PTT gateway 實作，內部包裝 `ptt-client`。目前 `src/lib/ptt/adapter.ts` 是這一層的雛形。
+`@pttzzz/browser` 是瀏覽器環境的 PTT gateway 實作，內部以 package-private terminal driver 包裝 `ptt-client`。
 
 責任包括：
 
@@ -91,7 +87,7 @@ Repository 先使用 npm workspaces，不引入 Turborepo 或額外 monorepo fra
 
 這個套件第一版只保證瀏覽器執行。它不是另一個 terminal parser，也不應複製核心的討論串規則。
 
-Fake PTT adapter 因使用 browser storage，預計放在 `@pttzzz/browser` 的 testing export，而不是核心正式 runtime。
+Fake PTT gateway 位於 `@pttzzz/browser/testing` export，供 `apps/web` 的 Fake PTT runtime mode 與 tests 使用，而不是核心正式 runtime。
 
 公開的 `PttGateway` 必須依 PTT 真實能力建模：看板清單區分熱門、我的最愛與分類目錄，分類結果可包含下一層分類；看板搜尋是名稱 prefix search，不宣稱全文搜尋。分類位置與分頁只以 session-scoped opaque cursor 暴露，terminal offset 留在 `packages/browser/src/internal/`。真實 terminal driver 可以保留 positional args、raw floor、screen helpers 與 raw `send()`，但不是第二套公開 API，也不從 browser package exports 匯出。
 
@@ -114,7 +110,7 @@ Fake PTT adapter 因使用 browser storage，預計放在 `@pttzzz/browser` 的 
 
 ### 4.4 `apps/web`
 
-現有 UI 最終移入 `apps/web`，作為官方參考介面層：
+現有 UI 已移入 `apps/web`，作為官方參考介面層：
 
 - 透過公開套件入口使用核心，不 import 套件內部檔案。
 - 將 Promise 與事件訂閱橋接到 React／Zustand。
@@ -148,62 +144,13 @@ UI
 - `CoreEvent` 與訂閱方法
 - 必要的 enum、type guard 與 formatter
 
-概念介面如下；實際名稱可在 implementation plan 中依 TypeScript 驗證微調：
-
-```ts
-type Result<T, E = CoreError> =
-  | { ok: true; value: T }
-  | { ok: false; error: E };
-
-type WriteOutcome = "not-sent" | "sent" | "uncertain";
-
-interface CoreError {
-  code: string;
-  message: string;
-  retryable: boolean;
-  outcome?: WriteOutcome;
-  cause?: unknown;
-}
-
-class GatewayError extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-    readonly retryable: boolean,
-    readonly cause?: unknown,
-  );
-}
-
-interface PttzzzClient {
-  connect(): Promise<Result<void>>;
-  login(input: LoginInput): Promise<Result<Session>>;
-  disconnect(): Promise<void>;
-
-  listBoards(input?: ListBoardsInput): Promise<Result<BoardListPage>>;
-  listArticles(input: ListArticlesInput): Promise<Result<ArticlePage>>;
-  getArticle(input: GetArticleInput): Promise<Result<Article>>;
-
-  createArticle(input: CreateArticleInput): Promise<Result<void>>;
-  editArticle(input: EditArticleInput): Promise<Result<void>>;
-  deleteArticle(input: DeleteArticleInput): Promise<Result<void>>;
-  replyToArticle(input: ReplyToArticleInput): Promise<Result<void>>;
-  replyArticleToBoard(input: ReplyArticleToBoardInput): Promise<Result<void>>;
-
-  replyToReply(input: ReplyToReplyInput): Promise<Result<void>>;
-  editReply(input: EditReplyInput): Promise<Result<void>>;
-  withdrawReply(input: WithdrawReplyInput): Promise<Result<void>>;
-  voteArticle(input: VoteArticleInput): Promise<Result<void>>;
-  voteReply(input: VoteReplyInput): Promise<Result<void>>;
-  withdrawArticleVote(input: WithdrawArticleVoteInput): Promise<Result<void>>;
-  withdrawReplyVote(input: WithdrawReplyVoteInput): Promise<Result<void>>;
-
-  subscribe(listener: (event: CoreEvent) => void): () => void;
-}
-```
+公開 client 提供 lifecycle、看板與文章的 list／search／filter/read、文章與回文寫入，以及事件訂閱能力。完整且已由型別與 packed consumer 驗證的介面，以 [`docs/api/contracts.md`](../docs/api/contracts.md) 為唯一 public contract；本設計文件不重複維護 TypeScript 宣告。
 
 查詢與寫入方法回傳 Promise，適合表示單次操作的最終結果；連線狀態、逐步載入與資料更新使用事件，避免 framework polling，也避免核心綁定任何 store。
 
 看板契約固定如下：`listBoards()` 預設熱門看板，也可選 favorite 或 category source，回傳的 `BoardListPage` 以 `kind` 區分普通看板頁與 board/category 目錄頁，即使空頁也不含糊；`searchBoards()`／`filterBoards()` 嚴格只回傳 `BoardPage`。搜尋只接受名稱 `prefix`；filter 至少提供 `favorite: true` 或 `categoryCursor`，同時提供時取交集。所有 board/article cursor 都是不透明、由 gateway instance 的隨機 session namespace 發行；成功登入或 disconnect 使舊 cursor 失效，登入失敗保留既有 cursor，UI 不得反解或持久化。
+
+公開 `Article` 必須保留結構化的 `articleEdits`、`revisions` 與 PTT 原生推／噓／中立計數；UI 不需重新解析 raw text。Append／Replace 的 `Reply.edits.content` 是該次 command payload，`resultContent` 是套用後內容，兩者不可互相冒充；Withdraw 的兩個欄位則都是正規化後的單一空格 snapshot。陣列順序就是原始 command chronology。完整撤回一個聚合回文時，只以撤回前的 aggregation group 產生一個 `visible: false` reply，保留完整 `sourceFloors` 與單份 edit history；部分撤回則由未撤回的 raw events 重新聚合並取得新的 anchor identity，不另產生可能重疊的 hidden reply。Hidden reply 不得留在可寫入的 reply target map，也不計入可見回覆數。`ReplyMetadata.sourceFloors` 只屬明確 opt-in 的 debug／短期相容資料，不是 UI identity。
 
 文章推文 `replyToArticle` 與 PTT 原生回應到看板 `replyArticleToBoard` 是不同操作。後者建立另一篇文章，必須保留 index/AID identity 完成來源驗證。文章編輯必須攜帶非空 `editSummary`，發文可選擇性攜帶 PTT category。每個 terminal write workflow 必須標出 confirmation boundary；未標註失敗安全視為 `uncertain`，不得推測未送出。
 
@@ -291,16 +238,7 @@ interface ReplyMetadata {
 
 ## 10. 事件與 partial data
 
-事件用於長生命週期與漸進資料：
-
-```ts
-type CoreEvent =
-  | { type: "connection.changed"; status: ConnectionStatus }
-  | { type: "session.changed"; session: Session | null }
-  | { type: "article.partial"; articleId: string; patch: ArticlePatch }
-  | { type: "article.updated"; article: Article }
-  | { type: "operation.progress"; operationId: string; phase: string };
-```
+事件用於長生命週期與漸進資料，包括 connection、session，以及帶有 exact `ArticleKey` 與 monotonic revision 的 article partial／updated events。事件的完整 discriminated union 同樣以 [`docs/api/contracts.md`](../docs/api/contracts.md) 為準。
 
 必要約束：
 
@@ -336,7 +274,7 @@ VOTE-001
 EDIT-001
 ```
 
-目前 `dev-notes/reply-handling-rule.md` 與 `dev-notes/goal-7-vote-model-review.html` 是白皮書的起始材料；遷移完成後白皮書成為規範來源，HTML 保留為視覺案例而非另一份相互競爭的規格。
+`dev-notes/reply-handling-rule.md` 與 `dev-notes/goal-7-vote-model-review.html` 是白皮書的起始材料；白皮書現為規範來源，HTML 保留為視覺案例而非另一份相互競爭的規格。
 
 ### 11.2 API 文件
 
@@ -368,56 +306,50 @@ EDIT-001
 
 ### 11.3 範例與 fixture
 
-`docs/examples/` 提供小而完整的範例：
-
-- minimal browser lifecycle
-- React store bridge
-- Vue composable（示範 framework independence，不發布官方 Vue package）
-- thread rendering
-- error and uncertain-write handling
+`docs/examples/` 目前只有 `minimal-browser` 是完整、可 typecheck／bundle／執行的 host 範例，涵蓋 lifecycle、thread rendering 與 uncertain-write handling。完整 React reference app 位於 `apps/web`。其他目錄只保留 React store、Vue composable、rendering 與 error handling 的概念性 README snippets；沒有提供可執行的獨立 integration 或 framework package，兩者屬第一版 non-goal。
 
 白皮書案例另有 machine-readable fixtures。每個 fixture 參照規則編號，至少包含 raw events、options 與預期 normalized／aggregated output。Conformance tests 直接讀取 fixtures，避免文件範例與程式實作漂移。
 
-## 12. 漸進遷移順序
+## 12. 已執行的漸進遷移順序
 
-### Phase 1：固定規則與 contracts
+### Phase 1：固定規則與 contracts（完成）
 
-- 建立白皮書、rule IDs、API contracts 與 AI interface guide。
-- 將既有 HTML 案例轉成或連結到 machine-readable fixtures。
-- 此階段不搬現有 runtime code。
+- 已建立白皮書、rule IDs、API contracts 與 AI interface guide。
+- 已將既有 HTML 案例連結到 machine-readable fixtures。
+- 此階段未搬 runtime code。
 
-### Phase 2：抽出 pure core
+### Phase 2：抽出 pure core（完成）
 
-- 將 parser、aggregator、push editing 與 action formatter 中的純邏輯移入 `packages/core`。
-- 移除 React、DOM、storage 與真實連線相依。
-- 在舊路徑提供暫時 re-export，使 UI 可繼續運作。
+- 已將 parser、aggregator、push editing 與 action formatter 中的純邏輯移入 `packages/core`。
+- Core 已移除 React、DOM、storage 與真實連線相依。
+- 遷移期間使用的暫時 re-export 已在 app 搬移後刪除。
 
-### Phase 3：抽出 browser gateway
+### Phase 3：抽出 browser gateway（完成）
 
-- 先將目前 `adapter.ts` 原樣搬成不公開的 terminal driver，再在其上建立公開 gateway；不重寫大型 terminal workflow。
-- `@pttzzz/browser` 包裝 `ptt-client` 並實作 `PttGateway`。
-- Fake adapter 移到 browser testing entry，並以同一 contract 測試。
+- Legacy adapter 已搬成 package-private terminal driver，再由公開 gateway 包裝；大型 terminal workflow 未重寫。
+- `@pttzzz/browser` 已包裝 `ptt-client` 並實作 `PttGateway`。
+- Fake PTT runtime 已移到 browser testing entry，並與 real gateway 共用 contract suite。
 
-### Phase 4：建立高階 client
+### Phase 4：建立高階 client（完成）
 
-- 實作 `PttzzzClient`、events、Result/error/outcome 與 reply identity map。
-- 將現有 hooks 改成只使用公開 client API。
-- 在這一階段消除 UI 對 terminal 與 raw floor 的知識。
+- 已實作 `PttzzzClient`、events、Result/error/outcome 與 reply identity map。
+- Hooks 已改成只使用公開 client API。
+- 一般 UI 已不接觸 terminal 或 raw floor；raw floor 僅存在 core private target map／`PttCommand`、gateway transport與 opt-in debug metadata。
 
-### Phase 5：移動參考 UI
+### Phase 5：移動參考 UI（完成）
 
-- 公開 import 穩定後，才將現有 React 應用移至 `apps/web`。
-- 保持 preview、fake PTT 與正式 browser gateway 三種模式。
-- 刪除舊 re-export 前，確認 repository 沒有 internal deep import。
+- React 應用已移至 `apps/web`。
+- Preview、Fake PTT 與正式 browser gateway 三種模式均保留。
+- 舊 re-export 已刪除，app boundary tests 禁止 internal deep import。
 
-### Phase 6：發布準備
+### Phase 6：發布準備（完成）
 
-- 明確定義 package `exports`、types 與 browser compatibility。
-- 驗證 build artifacts 不包含 React／Zustand 等意外依賴。
-- 對兩個套件執行 `npm pack` 安裝 smoke test。
-- 從乾淨範例只依照 `AI-INTERFACE.md` 建立最小 UI，驗證文件充分。
+- 已定義 package `exports`、types 與 browser compatibility。
+- Pack smoke 已驗證 artifacts 與 production dependency closure不包含意外 UI dependency。
+- Verify 已對兩個套件實際 `npm pack`、離線安裝並執行 consumer smoke。
+- Minimal browser 範例只依照 public roots 建立，並實際 typecheck、bundle、jsdom execution。
 
-每一 phase 都需有可獨立 review 的 implementation plan；不進行一次性大搬家。
+每一 phase 均以獨立 task、測試與 review 完成，沒有一次性大搬家。
 
 ## 13. 測試策略
 
@@ -451,7 +383,7 @@ EDIT-001
 - `@pttzzz/core@0.1.0`
 - `@pttzzz/browser@0.1.0`
 
-兩者初期採同版本發布，降低相容性理解成本。進入穩定期後才評估獨立版本。`@pttzzz/browser` 以 peer／direct dependency 的具體選擇，留待 implementation plan 依打包與單例需求驗證，但必須宣告可相容的 core 範圍。
+兩者初期採同版本發布，降低相容性理解成本。進入穩定期後才評估獨立版本。`@pttzzz/browser` 最終以 `@pttzzz/core@0.1.0` 作為 direct dependency。
 
 公開 package root exports 視為 API；internal path 不提供相容承諾。0.x 期間仍需 changelog 記錄 DTO、error code、event ordering 與 gateway contract 的破壞性變更。
 
@@ -467,7 +399,7 @@ EDIT-001
 - 自動從程式碼生成整份白皮書。
 - 額外發布名稱重複的 `ptt-client-browser` 套件。
 
-Vue 範例只證明公開 API 沒有綁 React；Node-like 環境只保證 pure core 可用，不代表 browser gateway 能在 Node 連線。
+本版本只有概念性 Vue composable snippet，未提供可執行 Vue app 或官方 Vue package。Node-like 環境只保證 pure core 可用，不代表 browser gateway 能在 Node 連線。
 
 ## 16. 主要風險與限制方式
 
@@ -507,6 +439,15 @@ raw/debug 必須 opt in 且放入明確 metadata；一般操作只接受穩定 I
 - 兩個 package 能從 `npm pack` 產物安裝並通過最小使用範例。
 - AI 只閱讀 `AI-INTERFACE.md` 與 examples，即可建立不依賴 internal imports 的替代 UI。
 
-## 18. 後續工作
+## 18. 實作後 decision log
 
-本文件通過 review 後，下一步才建立 Goal 9 implementation plan。Implementation plan 應將上述 phase 拆成可驗證的小步驟，先從 Phase 1 的白皮書、contracts 與 fixtures 開始，不直接進行完整 monorepo 搬移。
+- 兩個發布套件維持 `@pttzzz/core@0.1.0` 與 `@pttzzz/browser@0.1.0`；React app 已移至 `apps/web`，不另發布 framework package。
+- Temporary compatibility re-export 已在 app 遷移後移除。唯一保留 subpath 是供官方 browser adapter 使用、無一般 UI 相容承諾的 `@pttzzz/core/internal`。
+- `replyId` 最終 anchor 到 immutable raw event，而非 UI index 或完整 aggregation membership；完整 source floors 只存在 private target map/debug metadata。
+- `createArticle()` 維持 `Result<void>`，因 PTT terminal 無法可靠回傳新文章 identity。
+- Fake gateway 由 `@pttzzz/browser/testing` 提供；real/fake 共用 gateway contract suite。
+- 發布驗證不只 build workspace，而是實際 pack、離線安裝 dependency closure、驗 ESM/types/exports，再 bundle 與執行 minimal alternate UI。
+- Browser host 仍需 Buffer polyfill 與具正確 Origin 的 `/ptt-ws` proxy；第一版未新增 Node gateway。
+- Core article maps 第一版沒有 bounded eviction；disconnect 清除。Reference UI 的 editable-body projection 仍是介面層政策。
+
+完整實作紀錄、驗證數字與已接受限制見 [Goal 9 implementation notes](goal-9-implementation-notes.md)。

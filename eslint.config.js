@@ -11,11 +11,13 @@ export default tseslint.config(
       "coverage",
       ".venv",
       "node_modules",
-      "src/lib/ptt/adapter.ts.bak*",
-      "src/lib/ptt/adapter.ts.backup*",
     ],
   },
   js.configs.recommended,
+  {
+    files: ["scripts/**/*.mjs"],
+    languageOptions: { globals: globals.node },
+  },
   ...tseslint.configs.recommended,
   {
     files: ["**/*.{ts,tsx}"],

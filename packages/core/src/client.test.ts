@@ -388,10 +388,36 @@ describe("PttzzzClient article reads", () => {
     expect(result).toMatchObject({
       ok: true,
       value: { replies: [{ edits: [
-        { kind: "append", content: "more" },
-        { kind: "replace", content: "replacement" },
+        { kind: "append", content: "more", resultContent: "original.\nmore" },
+        { kind: "replace", content: "replacement", resultContent: "replacement" },
       ] }] },
     });
+  });
+
+  it("publishes one hidden reply for a withdrawn aggregate with blank withdraw content", async () => {
+    const gateway = new MemoryGateway();
+    gateway.sources = [{
+      articleKey: indexKey,
+      completeness: "final",
+      revision: 1,
+      rawText: raw("withdraw", "body", [
+        "→ alice: first 08/22 10:01",
+        "→ alice: second. 08/22 10:02",
+        "→ alice: 撤回我在1~2樓的發言 08/22 10:03",
+      ].join("\n")),
+    }];
+
+    const result = await new PttzzzClient(gateway).getArticle({
+      article: indexKey,
+      includeDebugMetadata: true,
+    });
+
+    expect(result).toMatchObject({ ok: true, value: { replies: [{
+      replyId: "reply:1",
+      visible: false,
+      metadata: { sourceFloors: [1, 2] },
+      edits: [{ kind: "withdraw", content: " ", resultContent: " " }],
+    }] } });
   });
 
   it("publishes grouped edits in raw command order instead of constituent floor order", async () => {
@@ -413,10 +439,34 @@ describe("PttzzzClient article reads", () => {
     expect(result).toMatchObject({
       ok: true,
       value: { replies: [{ edits: [
-        { kind: "append", content: "edit-second" },
-        { kind: "replace", content: "edit-first" },
+        { kind: "append", content: "edit-second", resultContent: "second.\nedit-second" },
+        { kind: "replace", content: "edit-first", resultContent: "edit-first" },
       ] }] },
     });
+  });
+
+  it("publishes structured article edits, revisions, and native counts", async () => {
+    const gateway = new MemoryGateway();
+    gateway.sources = [{
+      articleKey: indexKey,
+      completeness: "final",
+      revision: 1,
+      rawText: raw("metadata", [
+        "body",
+        "※ PTTzzz 編輯摘要：修正標題",
+        "※ 編輯: alice (1.2.3.4), 08/22/2026 10:03:00",
+      ].join("\n"), "推 bob: hello 08/22 10:04\n噓 carol: no 08/22 10:05\n→ dave: note 08/22 10:06"),
+    }];
+
+    const result = await new PttzzzClient(gateway).getArticle({ article: indexKey });
+
+    expect(result).toMatchObject({ ok: true, value: {
+      articleEdits: [{ marker: expect.stringContaining("編輯"), sequence: 0 }],
+      revisions: [{ summary: "修正標題", sequence: 0 }],
+      nativePushCount: 1,
+      nativeBooCount: 1,
+      nativeNeutralCount: 1,
+    } });
   });
 });
 
@@ -462,11 +512,51 @@ describe("PttzzzClient writes", () => {
     await client.withdrawReply({ article: indexKey, replyId });
 
     expect(gateway.commands).toEqual([
-      { type: "reply-floor", article: indexKey, floor: 1, content: "回1樓：同意", pushType: "push" },
+      { type: "reply-floor", article: indexKey, floor: 1, content: " 同意 ", pushType: "push" },
       { type: "edit-floor", article: indexKey, floor: 1, mode: "append", content: "more" },
       { type: "vote-floor", article: indexKey, floor: 1, direction: "boo" },
       { type: "withdraw-floor-vote", article: indexKey, floor: 1, direction: "push" },
       { type: "withdraw-floor", article: indexKey, ranges: [{ start: 1, end: 2 }] },
+    ]);
+  });
+
+  it("validates the normalized final wire push with the PTT Big5 approximation", async () => {
+    const gateway = new MemoryGateway();
+    gateway.sources = [{
+      articleKey: indexKey, completeness: "final", revision: 1,
+      rawText: raw("thread", "body", "→ bob: target. 08/22 10:01"),
+    }];
+    const client = new PttzzzClient(gateway);
+    const article = await client.getArticle({ article: indexKey });
+    if (!article.ok) throw new Error("fixture article missing");
+    const replyId = article.value.replies[0].replyId;
+
+    await expect(client.replyToReply({
+      article: indexKey, replyId, content: `  ${"中".repeat(36)}  `, pushType: "neutral",
+    })).resolves.toEqual({ ok: true, value: undefined });
+    await expect(client.replyToReply({
+      article: indexKey, replyId, content: "中".repeat(37), pushType: "neutral",
+    })).resolves.toMatchObject({
+      ok: false,
+      error: { code: "INVALID_INPUT", outcome: "not-sent", retryable: false },
+    });
+    await expect(client.editReply({
+      article: indexKey, replyId, mode: "append", content: ` ${"中".repeat(31)} `,
+    })).resolves.toEqual({ ok: true, value: undefined });
+    await expect(client.editReply({
+      article: indexKey, replyId, mode: "append", content: "中".repeat(32),
+    })).resolves.toMatchObject({ ok: false, error: { code: "INVALID_INPUT" } });
+    await expect(client.replyToArticle({
+      article: indexKey, content: "中".repeat(40), pushType: "neutral",
+    })).resolves.toEqual({ ok: true, value: undefined });
+    await expect(client.replyToArticle({
+      article: indexKey, content: "中".repeat(41), pushType: "neutral",
+    })).resolves.toMatchObject({ ok: false, error: { code: "INVALID_INPUT" } });
+
+    expect(gateway.commands).toEqual([
+      expect.objectContaining({ type: "reply-floor", content: `  ${"中".repeat(36)}  ` }),
+      expect.objectContaining({ type: "edit-floor", content: ` ${"中".repeat(31)} ` }),
+      expect.objectContaining({ type: "reply-article" }),
     ]);
   });
 
@@ -589,7 +679,9 @@ describe("PttzzzClient writes", () => {
     }];
     const after = await client.getArticle({ article: indexKey });
     if (!after.ok) throw new Error("after fixture missing");
-    expect(after.value.replies).toMatchObject([{ author: "bob", replyId: "reply:2" }]);
+    expect(after.value.replies.filter((reply) => reply.visible)).toMatchObject([
+      { author: "bob", replyId: "reply:2" },
+    ]);
 
     await expect(client.voteReply({ article: indexKey, replyId: removedId, direction: "push" })).resolves.toMatchObject({
       ok: false,

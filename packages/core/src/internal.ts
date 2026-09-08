@@ -6,3 +6,4 @@ export * from "./actions.js";
 export * from "./parser.js";
 export * from "./pushAggregator.js";
 export * from "./pushEditing.js";
+export * from "./pushWire.js";

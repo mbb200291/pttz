@@ -23,6 +23,12 @@ import {
   type Unsubscribe,
 } from "@pttzzz/core";
 import {
+  approximatePttBytes,
+  formatEditPushCommand,
+  formatReplyPush,
+  MAX_PTT_PUSH_BYTES,
+} from "@pttzzz/core/internal";
+import {
   createTerminalDriver,
   type ActionResult,
   type TerminalDriver,
@@ -41,6 +47,17 @@ export type GatewayTerminalDriver = TerminalDriver & {
     boardName: string,
     author: string,
     keywords: string[],
+    beforeIndex?: number,
+  ): Promise<readonly import("@pttzzz/core/internal").ArticleSummary[]>;
+  filterArticlesByPush(
+    boardName: string,
+    threshold: number,
+    beforeIndex?: number,
+  ): Promise<readonly import("@pttzzz/core/internal").ArticleSummary[]>;
+  filterArticlesByTitleAndPush(
+    boardName: string,
+    keywords: string[],
+    threshold: number,
     beforeIndex?: number,
   ): Promise<readonly import("@pttzzz/core/internal").ArticleSummary[]>;
   readArticleSource(
@@ -73,6 +90,7 @@ type DriverArticleQuery = {
   beforeIndex?: number;
   author?: string;
   keyword?: string;
+  minimumNativeScore?: number;
   limit?: number;
 };
 
@@ -94,6 +112,9 @@ export interface BrowserGatewayDriver {
     title: string;
     author: string;
     date: string;
+    pushCount?: string;
+    fixed?: boolean;
+    mark?: string;
   }[]>;
   execute(command: PttCommand): Promise<DriverWriteResult>;
 }
@@ -110,6 +131,8 @@ const positiveLimit = (limit?: number): number => {
   }
   return limit;
 };
+
+const normalizedPttId = (value: string): string => value.trim().toLowerCase();
 
 function gatewayFailure(error: unknown): GatewayError {
   return error instanceof GatewayError
@@ -311,17 +334,25 @@ export class BrowserPttGateway implements PttGateway {
         retryable: false,
       };
     }
+    const finalPush = command.type === "reply-article"
+      ? command.content
+      : command.type === "reply-floor"
+        ? formatReplyPush(command.floor, command.content)
+        : command.type === "edit-floor"
+          ? formatEditPushCommand(command.floor, command.mode, command.content)
+          : null;
+    if (finalPush !== null && approximatePttBytes(finalPush) > MAX_PTT_PUSH_BYTES) {
+      return {
+        ok: false,
+        code: "INVALID_INPUT",
+        message: "PTT 單行推文不可超過 80 bytes",
+        outcome: "not-sent",
+        retryable: false,
+      };
+    }
     let result: DriverWriteResult;
     try {
-      const driverCommand = command.type === "reply-floor"
-        ? {
-            ...command,
-            content: command.content.startsWith(`回${command.floor}樓：`)
-              ? command.content.slice(`回${command.floor}樓：`.length)
-              : command.content,
-          }
-        : command;
-      result = await this.driver.execute(driverCommand);
+      result = await this.driver.execute(command);
     } catch (cause) {
       return {
         ok: false,
@@ -449,15 +480,19 @@ export class BrowserPttGateway implements PttGateway {
         ? input.keyword
         : undefined)?.trim();
     const author = ("author" in input ? input.author : undefined)?.trim();
+    const normalizedAuthor = author ? normalizedPttId(author) : undefined;
+    const minimumNativeScore = mode === "filter"
+      ? (input as FilterArticlesInput).minimumNativeScore
+      : undefined;
     if (mode === "search" && !keyword) {
       throw new GatewayError("INVALID_INPUT", "文章搜尋 query 不可為空", false);
     }
-    if (mode === "filter" && !author && !keyword) {
-      throw new GatewayError("INVALID_INPUT", "文章篩選至少需要 author 或 keyword", false);
+    if (mode === "filter" && !normalizedAuthor && !keyword && minimumNativeScore === undefined) {
+      throw new GatewayError("INVALID_INPUT", "文章篩選至少需要條件", false);
     }
     const limit = positiveLimit(input.limit ?? 20);
     const signature = JSON.stringify([
-      "articles", mode, input.board, author ?? null, keyword ?? null, limit,
+      "articles", mode, input.board, normalizedAuthor ?? null, keyword ?? null, minimumNativeScore ?? null, limit,
     ]);
     let beforeIndex: number | undefined;
     if (input.cursor) {
@@ -472,6 +507,7 @@ export class BrowserPttGateway implements PttGateway {
       ...(beforeIndex ? { beforeIndex } : {}),
       ...(author ? { author } : {}),
       ...(keyword ? { keyword } : {}),
+      ...(minimumNativeScore === undefined ? {} : { minimumNativeScore }),
       limit: limit + 1,
     }));
     const selected = rows.slice(0, limit);
@@ -482,6 +518,9 @@ export class BrowserPttGateway implements PttGateway {
         title: row.title,
         author: row.author,
         publishedAt: row.date,
+        ...(row.pushCount === undefined ? {} : { nativeScoreLabel: row.pushCount }),
+        ...(row.fixed === undefined ? {} : { pinned: row.fixed }),
+        ...(row.mark === undefined ? {} : { mark: row.mark }),
       })),
       ...(last && rows.length > selected.length
         ? { nextCursor: this.issue({ kind: "article-page", signature, beforeIndex: last.index }) }
@@ -539,7 +578,15 @@ function terminalGatewayDriver(driver: GatewayTerminalDriver): BrowserGatewayDri
       let beforeIndex = input.beforeIndex;
       const target = input.limit ?? 20;
       while (rows.length < target) {
-        const batch = input.author && input.keyword
+        const batch = input.minimumNativeScore !== undefined && input.keyword
+          ? await driver.filterArticlesByTitleAndPush(
+              input.board, [input.keyword], input.minimumNativeScore, beforeIndex,
+            )
+          : input.minimumNativeScore !== undefined
+            ? await driver.filterArticlesByPush(
+                input.board, input.minimumNativeScore, beforeIndex,
+              )
+          : input.author && input.keyword
           ? await driver.searchArticlesByAuthorAndKeywords(
               input.board, input.author, [input.keyword], beforeIndex,
             )
@@ -548,10 +595,14 @@ function terminalGatewayDriver(driver: GatewayTerminalDriver): BrowserGatewayDri
             : input.keyword
               ? await driver.searchArticles(input.board, input.keyword, beforeIndex)
               : await driver.listArticles(input.board, beforeIndex);
-        const fresh = batch.filter((row) => !rows.some((seen) => seen.index === row.index));
+        const fresh = batch.filter((row) =>
+          (!input.author || normalizedPttId(row.author) === normalizedPttId(input.author)) &&
+          !rows.some((seen) => seen.index === row.index)
+        );
         rows.push(...fresh);
         const last = batch[batch.length - 1];
-        if (!last || fresh.length === 0) break;
+        if (!last) break;
+        if (beforeIndex !== undefined && last.index >= beforeIndex) break;
         beforeIndex = last.index;
       }
       return rows;

@@ -84,10 +84,12 @@ export interface AggregatedPush {
   pushVoters: string[]; // 對此聚合推文投「推」的作者（已去重）
   booVoters: string[];  // 對此聚合推文投「噓」的作者（已去重）
   editHistory?: PushEditHistoryRecord[];
+  visible?: boolean;
 }
 
 export interface AggregatedThread {
   pushes: AggregatedPush[];
+  withdrawnPushes: AggregatedPush[];
   articleNotes: ArticleEditRecord[];
   nativeArticleScore: number;
   nativePushCount: number;
@@ -191,7 +193,10 @@ function buildGroupEditHistory(group: PushGroup): PushEditHistoryRecord[] | unde
   );
   const editRecords = editedPushes
     .flatMap((push) => push.editHistory.slice(1))
-    .sort((left, right) => left.commandOrder - right.commandOrder);
+    .sort((left, right) => left.commandOrder - right.commandOrder)
+    .filter((record, index, records) =>
+      index === 0 || record.commandOrder !== records[index - 1].commandOrder
+    );
   return [
     {
       kind: "original",
@@ -950,9 +955,38 @@ export function aggregatePushes(
   const nativePushCount = rawPushes.filter((push) => push.type === "push").length;
   const nativeBooCount = rawPushes.filter((push) => push.type === "boo").length;
   const nativeNeutralCount = rawPushes.filter((push) => push.type === "neutral").length;
+  const withdrawnPushes: AggregatedPush[] = groupPushes(
+    parsedPushes.filter((push) => !push.intent.isControl),
+  )
+    .filter((group) => group.pushes.every((push) => push.withdrawn))
+    .map((group, index) => {
+      const sourceFloors = group.pushes.map((push) => push.rawFloor!);
+      const representative = group.pushes[0];
+      return {
+        id: replyIdFromAnchorFloor(sourceFloors),
+        type: representative.type,
+        author: representative.author,
+        content: " ",
+        time: group.pushes[group.pushes.length - 1].time,
+        ipAddresses: Array.from(new Set(group.pushes.flatMap((push) =>
+          push.ipAddress ? [push.ipAddress] : []
+        ))),
+        isOP: normalizePttId(representative.author) === articleAuthorId,
+        replyTo: null,
+        score: 0,
+        floorNumber: index,
+        anchorOrder: group.anchorOrder,
+        sourceFloors,
+        pushVoters: [],
+        booVoters: [],
+        editHistory: buildGroupEditHistory(group),
+        visible: false,
+      };
+    });
 
   return {
     pushes: threadPushes,
+    withdrawnPushes,
     articleNotes: articleEditRecords,
     nativeArticleScore: nativePushCount - nativeBooCount,
     nativePushCount,

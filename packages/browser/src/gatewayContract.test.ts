@@ -294,6 +294,19 @@ describe("real terminal gateway supplemental contract", () => {
     expect(combined).toHaveBeenCalledWith("Test", "alice", ["topic"], undefined);
   });
 
+  it("routes native score and combined title/score filters", async () => {
+    const score = vi.fn(async () => []);
+    const combined = vi.fn(async () => []);
+    const transport = createTerminalGatewayDriverForTesting({
+      filterArticlesByPush: score,
+      filterArticlesByTitleAndPush: combined,
+    } as unknown as GatewayTerminalDriver);
+    await transport.listArticles?.({ board: "Test", minimumNativeScore: 10, beforeIndex: 20 });
+    await transport.listArticles?.({ board: "Test", keyword: "topic", minimumNativeScore: 5 });
+    expect(score).toHaveBeenCalledWith("Test", 10, 20);
+    expect(combined).toHaveBeenCalledWith("Test", ["topic"], 5, undefined);
+  });
+
   it("continues terminal pages until the requested gateway page is filled", async () => {
     const listArticles = vi.fn(async (_board: string, before?: number) => before
       ? [{ index: 9, title: "older", author: "b", date: "date" }]
@@ -304,6 +317,41 @@ describe("real terminal gateway supplemental contract", () => {
     await expect(transport.listArticles?.({ board: "Test", limit: 2 })).resolves.toHaveLength(2);
     expect(listArticles).toHaveBeenNthCalledWith(1, "Test", undefined);
     expect(listArticles).toHaveBeenNthCalledWith(2, "Test", 10);
+  });
+
+  it("intersects author with native score filtering across terminal pages", async () => {
+    const score = vi.fn(async (_board: string, _keywords: string[], _minimum: number, before?: number) => before
+      ? [
+          { index: 10, title: "topic older", author: "alice", date: "date" },
+          { index: 9, title: "topic other", author: "bob", date: "date" },
+        ]
+      : [
+          { index: 12, title: "topic newest", author: "bob", date: "date" },
+          { index: 11, title: "topic match", author: "alice", date: "date" },
+        ]);
+    const gateway = new BrowserPttGateway(createTerminalGatewayDriverForTesting({
+      filterArticlesByTitleAndPush: score,
+    } as unknown as GatewayTerminalDriver));
+
+    const first = await gateway.filterArticles({
+      board: "Test",
+      author: " Alice ",
+      keyword: "topic",
+      minimumNativeScore: 10,
+      limit: 1,
+    });
+    expect(first.items).toMatchObject([{ key: { index: 11 }, author: "alice" }]);
+    expect(first.nextCursor).toEqual(expect.any(String));
+    await expect(gateway.filterArticles({
+      board: "Test",
+      author: " ALICE ",
+      keyword: "topic",
+      minimumNativeScore: 10,
+      limit: 1,
+      cursor: first.nextCursor,
+    })).resolves.toMatchObject({ items: [{ key: { index: 10 }, author: "alice" }] });
+    expect(score).toHaveBeenNthCalledWith(1, "Test", ["topic"], 10, undefined);
+    expect(score).toHaveBeenNthCalledWith(2, "Test", ["topic"], 10, 11);
   });
 
   it("keeps noncontiguous withdrawal ranges in one atomic driver command", async () => {

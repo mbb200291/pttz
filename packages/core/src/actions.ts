@@ -1,7 +1,6 @@
 export type VoteDirection = "push" | "boo";
 
-export const formatReplyToReply = (floor: number, content: string): string =>
-  `回${floor}樓：${content.trim()}`;
+export { formatReplyPush as formatReplyToReply } from "./pushWire.js";
 
 export const formatReplyVote = (
   floor: number,
