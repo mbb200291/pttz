@@ -309,7 +309,7 @@ Expected: FAIL，找不到 package test。
 
 - [ ] **Step 3: 建立最小 workspace**
 
-Root 加 `workspaces: ["packages/*", "apps/*"]` 與暫時只執行 core build 的 `build:packages`。Task 8 建立 browser package時再把 browser build 接在後面，避免不存在的 workspace 令 Task 4 失敗。`packages/core/package.json` 使用 `@pttzzz/core@0.1.0`、ESM、`files: ["dist"]`、root export 指向 dist、scripts `build: tsc -p tsconfig.json` 與 `test: vitest run src`。`tsconfig.base.json` 使用 ES2020、ESNext、bundler、strict、`resolveJsonModule: true`，不能包含 DOM lib。Package tsconfig 排除 `src/**/*.test.ts`，避免把 Vitest 與 repo 外 fixtures 納入發布 build。
+Root 加 `workspaces: ["packages/*", "apps/*"]` 與暫時只執行 core build 的 `build:packages`。Task 9 建立 browser package時再把 browser build 接在後面，避免不存在的 workspace 令 Task 4 失敗。`packages/core/package.json` 使用 `@pttzzz/core@0.1.0`、ESM、`files: ["dist"]`、root export 指向 dist、scripts `build: tsc -p tsconfig.json` 與 `test: vitest run src`。`tsconfig.base.json` 使用 ES2020、ESNext、bundler、strict、`resolveJsonModule: true`，不能包含 DOM lib。Package tsconfig 排除 `src/**/*.test.ts`，避免把 Vitest 與 repo 外 fixtures 納入發布 build。
 
 - [ ] **Step 4: 建立空 entry 並驗證**
 
@@ -516,119 +516,261 @@ git add packages/core/src
 git commit -m "feat: define core gateway contracts"
 ```
 
-### Task 8: 建立 browser package 並搬移 adapter
+### Task 8: 依真實 PTT 能力收斂 gateway 與看板契約
+
+Task 7 的型別先依設計稿建立；實作前必須以現有 adapter 與 `ptt-client` 能力校正，不能把尚未存在的 terminal workflow 假裝成已支援。0.1 直接採新 `PttGateway` 作為 browser 對外 gateway；舊 positional adapter 只會成為未發布的 terminal driver，不是第二套公開 API。
+
+**Files:**
+- Modify: `packages/core/src/contracts.ts`
+- Modify: `packages/core/src/contracts.test.ts`
+- Modify: `docs/api/contracts.md`
+- Modify: `docs/api/AI-INTERFACE.md`
+- Modify: `dev-notes/goal-9-core-architecture-design.md`
+
+- [ ] **Step 1: 用 type tests 固定看板語意**
+
+看板清單必須區分 PTT 的熱門、我的最愛與分類目錄；搜尋明定為看板名稱 prefix search，不宣稱全文搜尋。分類位置以 session-scoped opaque cursor 表示，UI 不得解析 terminal offsets。
+
+```ts
+export type BoardListEntry =
+  | { kind: "board"; board: Board }
+  | { kind: "category"; title: string; categoryCursor: string };
+
+export interface BoardPage {
+  items: readonly BoardListEntry[];
+  nextCursor?: string;
+}
+
+export type BoardListSource =
+  | { kind: "hot" }
+  | { kind: "favorite" }
+  | { kind: "category"; categoryCursor?: string };
+
+export interface ListBoardsInput {
+  source?: BoardListSource;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface SearchBoardsInput {
+  prefix: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface FilterBoardsInput {
+  favorite?: boolean;
+  categoryCursor?: string;
+  cursor?: string;
+  limit?: number;
+}
+```
+
+`filterBoards()` 至少需要 `favorite` 或 `categoryCursor`；兩者同時存在時取交集。所有 cursor 都是不透明、session-scoped routing token，不可持久化或反解。
+
+- [ ] **Step 2: RED／GREEN contracts**
+
+先加入 `expectTypeOf` 與 `@ts-expect-error` cases，證明 `query`、自由文字 `category` 與 terminal offsets 不能進入 public input；再修改型別與文件。
+
+Run: `npx vitest run packages/core/src/contracts.test.ts --typecheck`
+
+Expected: 先 FAIL，修改後 PASS。
+
+- [ ] **Step 3: 固定實作邊界**
+
+文件明列：
+
+- `PttGateway` 是 browser 與 fake 都必須實作的唯一 gateway contract。
+- 真實 terminal driver 可有 positional args、raw floor 與 screen helpers，但只存在 `packages/browser/src/internal/`，不從 package exports 公開。
+- `@pttzzz/browser` root 最終只提供 `createBrowserGateway()`、`createBrowserClient()` 與穩定 browser types；一般 UI 不可取得 raw `send()`。
+- `listBoards()` 預設熱門看板；分類目錄可能回傳 category entry；`searchBoards()` 只做 prefix search。
+- Read/lifecycle gateway methods 以 core-owned `GatewayError` 傳遞可預期失敗；`PttzzzClient` 將其正規化成 public `Result<..., CoreError>`。未知 throw 才正規化為 `GATEWAY_FAILURE`。寫入仍只用 discriminated `ActionReceipt`，不得以 throw 取代可判定的送出結果。
+
+```ts
+export class GatewayError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly retryable: boolean,
+    readonly cause?: unknown,
+  ) {
+    super(message);
+  }
+}
+```
+
+- [ ] **Step 4: 驗證並 commit**
+
+```bash
+npx vitest run packages/core/src/contracts.test.ts --typecheck
+npm run build -w @pttzzz/core
+git diff --check
+git add packages/core/src/contracts.ts packages/core/src/contracts.test.ts docs/api/contracts.md docs/api/AI-INTERFACE.md dev-notes/goal-9-core-architecture-design.md
+git commit -m "refactor: align gateway with ptt capabilities"
+```
+
+### Task 9: 建立 browser package 並私有化 terminal driver
 
 **Files:**
 - Create: `packages/browser/package.json`
 - Create: `packages/browser/tsconfig.json`
-- Move: `src/lib/ptt/adapter.ts` → `packages/browser/src/adapter.ts`
-- Move: `src/lib/ptt/__tests__/adapter.test.ts` → `packages/browser/src/adapter.test.ts`
+- Create: `packages/browser/vitest.config.ts`
+- Move: `src/lib/ptt/adapter.ts` → `packages/browser/src/internal/terminalDriver.ts`
+- Move: `src/lib/ptt/__tests__/adapter.test.ts` → `packages/browser/src/internal/terminalDriver.test.ts`
 - Create: `packages/browser/src/index.ts`
 - Create: `src/lib/ptt/adapter.ts`
 - Modify: `vite.config.ts`
 - Modify: `tsconfig.app.json`
+- Modify: root `package.json` and `package-lock.json`
 
-- [ ] **Step 1: 寫 browser public-entry failing test**
+- [ ] **Step 1: 寫 package-boundary failing test**
 
-建立 `packages/browser/src/index.test.ts`：
-
-```ts
-import { expect, it } from "vitest";
-import { createPttAdapter } from "./index.js";
-
-it("exports the browser gateway factory", () => {
-  expect(typeof createPttAdapter).toBe("function");
-});
-```
+測試 browser root 不 export `PttAdapter`、raw `send` 或 terminal driver；internal test 可直接建立 driver 以保留現有 UI 的過渡相容性。
 
 Run: `npx vitest run packages/browser/src/index.test.ts`
 
-Expected: FAIL，browser package 尚未建立。
+Expected: FAIL，browser package 尚未完成。
 
 - [ ] **Step 2: 建立 package manifest**
 
-使用 `@pttzzz/browser@0.1.0`、ESM、dist root 與 `./testing` exports、dependency `@pttzzz/core: 0.1.0` 與 `ptt-client: ^0.9.0`。tsconfig extends base 並加入 DOM libs。
+使用 `@pttzzz/browser@0.1.0`、ESM、dist root、dependency `@pttzzz/core: 0.1.0` 與直接宣告的 `ptt-client: ^0.9.0`。不發布 `./internal` subpath；package root 暫時可以是空的穩定入口，Task 10 再加入 gateway factory，Task 12 加入 client factory。
 
 - [ ] **Step 3: Mechanical move only**
 
+搬移 3,700 行 workflow 與原測試，不改 prompt regex、terminal keys 或成功／失敗判讀。將現有 `PttAdapter` 重新命名為 package-private `TerminalDriver`；它可以暫時保留 positional methods、raw floor 與 `send()`，但不得由 `packages/browser/src/index.ts` 或 package exports 暴露。
+
+DTO 從 `@pttzzz/core` import；parser、aggregator、editing 與 actions 從 `@pttzzz/core/internal` import。所有 package-local ESM specifier 使用 `.js`。將未直接宣告的 `sleep-promise` 改為原生 `new Promise((resolve) => setTimeout(resolve, ms))` helper。
+
+- [ ] **Step 4: 保留 repo 內過渡 shim**
+
+現有 `src/lib/ptt/adapter.ts` 只為尚未遷移的 React hooks 轉接到 workspace source，不成為 npm export；Task 17 遷移完 UI 後刪除。不得為此新增已發布的 legacy subpath。
+
+- [ ] **Step 5: 建 aliases 與驗證**
+
+Vite／TypeScript aliases 同時解析 `@pttzzz/core`、`@pttzzz/core/internal` 與 `@pttzzz/browser`；publish exports 仍指 dist。Root `build:packages` 依序 build core、browser。
+
 ```bash
-git mv src/lib/ptt/adapter.ts packages/browser/src/adapter.ts
-git mv src/lib/ptt/__tests__/adapter.test.ts packages/browser/src/adapter.test.ts
-```
-
-Parser/aggregator、DTO 與 gateway types 改由 `@pttzzz/core` import；adapter class 明確 `implements PttGateway`，舊 `PttAdapter` 暫時是 `PttGateway` type alias。Test 改 `./adapter.js`。把目前未直接宣告的 `sleep-promise` import 換成原生 `new Promise((resolve) => setTimeout(resolve, ms))` helper，避免發布套件依賴 `ptt-client` 的 transitive dependency。不拆 3,700 行 workflow、不改 prompt regex。
-
-- [ ] **Step 4: 建 exports 與 aliases**
-
-Browser index export `createPttAdapter` 與必要 types；舊檔只 re-export browser。Adapter 內重複的回樓／投票 formatter 改用 core actions。所有 browser package-local specifier 使用 `.js` 後綴。Vite alias 與 tsconfig paths 將 package names 指到 workspace source；publish exports 仍指 dist。此時 root `build:packages` 更新為依序 build core 與 browser；browser tsconfig 同樣排除 tests。
-
-- [ ] **Step 5: 驗證**
-
-```bash
-npx vitest run packages/browser/src/adapter.test.ts
+npx vitest run packages/browser/src/internal/terminalDriver.test.ts
 npm test
 npm run build:packages
+npm run lint
 ```
 
-Expected: PASS；browser dist 無 React/Zustand import。
+Expected: PASS；browser root 沒有 legacy API，dist 無 React/Zustand import。
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add package.json package-lock.json packages/browser src/lib/ptt/adapter.ts vite.config.ts tsconfig.app.json
-git commit -m "refactor: extract browser ptt adapter"
+git commit -m "refactor: isolate browser terminal driver"
 ```
 
-### Task 9: 搬移 fake adapter 並加入 gateway contract tests
+### Task 10: 實作 BrowserPttGateway 與看板操作
 
 **Files:**
-- Move: `src/lib/ptt/fakeAdapter.ts` → `packages/browser/src/fakeAdapter.ts`
-- Move: `src/lib/ptt/__tests__/fakeAdapter.test.ts` → `packages/browser/src/fakeAdapter.test.ts`
-- Create: `packages/browser/src/testing.ts`
+- Create: `packages/browser/src/gateway.ts`
+- Create: `packages/browser/src/gateway.test.ts`
 - Create: `packages/browser/src/gatewayContract.test.ts`
-- Create: `src/lib/ptt/fakeAdapter.ts`
+- Modify: `packages/browser/src/internal/terminalDriver.ts`
+- Modify: `packages/browser/src/index.ts`
 
-- [ ] **Step 1: 寫共同 contract failing test**
+- [ ] **Step 1: 寫新 gateway failing tests**
+
+以 stub Bot／terminal transcripts 建立真實 gateway 測試，不連 live PTT。至少覆蓋：
+
+- `login(LoginInput)` object API。
+- `subscribe()` 回傳 unsubscribe，並把 status 轉成 `GatewayEvent`。
+- `readArticle()` 依序 yield incomplete／final `RawArticleSource`，且完整保留輸入的 `ArticleKey` 表示。
+- `execute(PttCommand)` 分派到 terminal workflow 並正規化 `ActionReceipt`。
+- package root 沒有 `send()`、raw screen 或 positional action methods。
+
+Run: `npx vitest run packages/browser/src/gateway.test.ts`
+
+Expected: FAIL，`BrowserPttGateway` 尚不存在。
+
+- [ ] **Step 2: 實作薄 gateway，不重寫 terminal workflow**
+
+`BrowserPttGateway implements PttGateway`，只負責 object/command/event 轉換與錯誤正規化。既有 terminal method 暫時由私有 driver 執行；不可讓新 gateway 同時實作 legacy interface，也不可把 raw floor 暴露到 UI contract。
+
+`readArticle()` 必須在 terminal driver 的原始 snapshot 邊界取得 raw source，不可把已聚合的 `ArticleData` 假裝成 raw。若需修改 driver，只新增取得 incomplete/final raw snapshot 的最小 seam。
+
+- [ ] **Step 3: 實作真實看板能力**
+
+- `listBoards()`：以 `ptt-client` Board query／既有 screen parser 實作 hot、favorite、category；預設 hot。
+- `searchBoards()`：使用 PTT prefix search；空 prefix reject core-owned `GatewayError("INVALID_INPUT", ...)`，不得宣稱全文搜尋。
+- `filterBoards()`：favorite、category cursor 或交集；未知／跨 session cursor reject structured `GatewayError`，不把 cursor 當 terminal offset 公開。
+- 分頁 cursor 由 gateway 發行且 session-scoped；測試不得依賴 cursor 內部格式。
+
+以 transcripts 覆蓋熱門、最愛、根分類、子分類、prefix 無結果、invalid cursor、分頁與 terminal 狀態復原。
+
+- [ ] **Step 4: 統一 write receipt**
+
+第一個不可逆按鍵前失敗是 `not-sent`；成功畫面是 `sent`；內容可能已送出但確認 timeout 是 `uncertain`。`sent`／`uncertain` 強制 `retryable: false`，不得自動重送。
+
+- [ ] **Step 5: 公開 factory 並驗證**
 
 ```ts
-function gatewayContract(name: string, create: () => PttGateway) {
-  describe(name, () => {
-    it("returns unsubscribe functions", () => {
-      expect(typeof create().subscribeStatus(() => undefined)).toBe("function");
-    });
-  });
+export function createBrowserGateway(): PttGateway {
+  return new BrowserPttGateway(createTerminalDriver());
 }
 ```
 
-真實 gateway 使用 stub Bot/transcript，不連 live PTT；fake 使用 jsdom storage。
+```bash
+npx vitest run packages/browser/src/gateway.test.ts packages/browser/src/gatewayContract.test.ts
+npm test
+npm run build:packages
+npm run lint
+```
 
-- [ ] **Step 2: Run before move**
+Expected: PASS；`BrowserPttGateway` 是 browser package 唯一公開的真實 gateway，terminal driver 仍不可由 package subpath import。
+
+```bash
+git add packages/browser
+git commit -m "feat: implement browser ptt gateway"
+```
+
+### Task 11: 搬移 fake transport 並以同一 gateway contract 驗證
+
+**Files:**
+- Move: `src/lib/ptt/fakeAdapter.ts` → `packages/browser/src/internal/fakeTerminalDriver.ts`
+- Move: `src/lib/ptt/__tests__/fakeAdapter.test.ts` → `packages/browser/src/internal/fakeTerminalDriver.test.ts`
+- Create: `packages/browser/src/testing.ts`
+- Modify: `packages/browser/src/gatewayContract.test.ts`
+- Create: `src/lib/ptt/fakeAdapter.ts`
+
+- [ ] **Step 1: 讓共同 contract test 對 fake 失敗**
+
+共同 suite 只接受 `PttGateway`，驗證 lifecycle、board list/search/filter、partial/final、ActionReceipt、event unsubscribe 與 exact operation key。真實 gateway 使用 transcript driver；fake 使用 jsdom storage。
 
 Run: `npx vitest run packages/browser/src/gatewayContract.test.ts`
 
-Expected: FAIL，testing export 不存在。
+Expected: FAIL，fake 尚未能建立新 gateway。
 
-- [ ] **Step 3: Move and export testing entry**
+- [ ] **Step 2: 搬移 fake driver 並重用 BrowserPttGateway**
+
+Fake terminal data source 實作與真實 driver 相同的 package-private seam，再由相同的 gateway contract 包裝；不得再公開 legacy `createFakePttAdapter()`。`@pttzzz/browser/testing` 只 export：
 
 ```ts
 export {
-  createFakePttAdapter,
+  createFakeBrowserGateway,
   FAKE_PTT_STORE_KEY,
   getFakePttCurrentUser,
   isFakePttMode,
-} from "./fakeAdapter.js";
+} from "./fakeGateway.js";
 ```
 
-舊 fake path re-export `@pttzzz/browser/testing`。
+舊 `src/lib/ptt/fakeAdapter.ts` 僅提供 UI 尚未遷移期間的 repo-local shim，Task 17 刪除。
 
-- [ ] **Step 4: 驗證並 commit**
+- [ ] **Step 3: 驗證並 commit**
 
 ```bash
-npx vitest run packages/browser/src/fakeAdapter.test.ts packages/browser/src/gatewayContract.test.ts
+npx vitest run packages/browser/src/internal/fakeTerminalDriver.test.ts packages/browser/src/gatewayContract.test.ts
 npm test
+npm run build:packages
+git diff --check
 ```
 
-Expected: PASS。
+Expected: real transcript gateway 與 fake gateway 通過相同契約。
 
 ```bash
 git add packages/browser src/lib/ptt/fakeAdapter.ts
@@ -637,7 +779,7 @@ git commit -m "refactor: expose fake browser gateway"
 
 ## Phase 4：建立高階 PttzzzClient 並遷移 hooks
 
-### Task 10: 實作 lifecycle、events 與 read facade
+### Task 12: 實作 lifecycle、events 與 read facade
 
 **Files:**
 - Create: `packages/core/src/client.ts`
@@ -698,7 +840,7 @@ export class PttzzzClient {
 
 ```ts
 export function createBrowserClient(): PttzzzClient {
-  return new PttzzzClient(createPttAdapter());
+  return new PttzzzClient(createBrowserGateway());
 }
 ```
 
@@ -718,14 +860,14 @@ git add packages/core packages/browser
 git commit -m "feat: add high-level pttzzz client"
 ```
 
-### Task 11: 加入 replyId 映射與 write outcome
+### Task 13: 加入 replyId 映射與 write outcome
 
 **Files:**
 - Modify: `packages/core/src/client.ts`
 - Modify: `packages/core/src/client.test.ts`
 - Modify: `packages/core/src/contracts.ts`
-- Modify: `packages/browser/src/adapter.ts`
-- Modify: `packages/browser/src/adapter.test.ts`
+- Modify: `packages/browser/src/gateway.ts`
+- Modify: `packages/browser/src/gateway.test.ts`
 
 - [ ] **Step 1: 寫 identity failing tests**
 
@@ -734,11 +876,17 @@ const article = await client.getArticle({ board: "Test", index: 1 });
 if (!article.ok) throw new Error("fixture article missing");
 await client.replyToReply({
   article: { board: "Test", index: 1 },
-  replyId: article.value.pushes[0].id,
+  replyId: article.value.replies[0].replyId,
   content: "同意",
   pushType: "neutral",
 });
-expect(gateway.replyToPush).toHaveBeenCalledWith(1, "同意", "neutral", "Test");
+expect(gateway.execute).toHaveBeenCalledWith({
+  type: "reply-floor",
+  article: { board: "Test", index: 1 },
+  floor: 1,
+  content: "回1樓：同意",
+  pushType: "neutral",
+});
 ```
 
 另測不存在 replyId → `REPLY_NOT_FOUND`、聚合卡多個 source floor、以及 `uncertain` 保留 outcome 且不重送。
@@ -764,24 +912,14 @@ withdrawReplyVote       → PTT type neutral，content「撤回我對x樓的推�
 
 文章投票與回文投票必須是不同 public methods；不得沿用目前名稱混淆的 floor-based `voteArticle()`。
 
-- [ ] **Step 4: 統一 browser receipt**
+- [ ] **Step 4: 驗證 browser receipt 符合既有 discriminated contract**
 
-```ts
-export interface ActionReceipt {
-  ok: boolean;
-  reason?: string;
-  code?: string;
-  outcome: WriteOutcome;
-  retryable: boolean;
-}
-```
-
-第一個不可逆按鍵前失敗是 `not-sent`；成功畫面是 `sent`；已送內容但確認 timeout 是 `uncertain`。不得自動重送 uncertain。
+不得在 browser 重定義 `ActionReceipt`。第一個不可逆按鍵前失敗回 core-owned `{ ok: false, outcome: "not-sent", retryable }`；成功是 `{ ok: true, outcome: "sent" }`；已送內容但確認 timeout 是 `{ ok: false, outcome: "uncertain", retryable: false }`。加入 type/runtime tests，確保 `sent`／`uncertain` 無法標成可重試且 client 永不自動重送。
 
 - [ ] **Step 5: 驗證並 commit**
 
 ```bash
-npx vitest run packages/core/src/client.test.ts packages/browser/src/adapter.test.ts
+npx vitest run packages/core/src/client.test.ts packages/browser/src/gateway.test.ts
 npm test
 ```
 
@@ -792,7 +930,7 @@ git add packages/core packages/browser
 git commit -m "feat: target replies by stable identity"
 ```
 
-### Task 12: 將 socket store 改為持有 PttzzzClient
+### Task 14: 將 socket store 改為持有 PttzzzClient
 
 **Files:**
 - Modify: `src/hooks/usePttSocket.ts`
@@ -811,7 +949,7 @@ Expected: FAIL。
 
 - [ ] **Step 3: 改 store 與 singleton**
 
-`client` 改為 `PttzzzClient | null`；正式模式用 `createBrowserClient()`，fake 模式用 `new PttzzzClient(createFakePttAdapter())`。`wsStatus`、`pttState`、登入錯誤由 event/Result 更新；terminal screen 只留 debug，不作正常狀態來源。
+`client` 改為 `PttzzzClient | null`；正式模式用 `createBrowserClient()`，fake 模式用 `new PttzzzClient(createFakeBrowserGateway())`。`wsStatus`、`pttState`、登入錯誤由 event/Result 更新；terminal screen 只留 debug，不作正常狀態來源。
 
 - [ ] **Step 4: 驗證並 commit**
 
@@ -824,7 +962,7 @@ git add src/hooks/usePttSocket.ts src/hooks/__tests__/usePttSocket.test.ts src/l
 git commit -m "refactor: bridge connection state from core client"
 ```
 
-### Task 13: 遷移 board/article read hooks
+### Task 15: 遷移 board/article read hooks
 
 **Files:**
 - Modify: `src/hooks/useBoard.ts`
@@ -863,7 +1001,7 @@ git add src/hooks src/lib/ptt/viewCache.ts src/components/Article.tsx src/compon
 git commit -m "refactor: read boards and articles through core client"
 ```
 
-### Task 14: 遷移所有寫入 actions 到 stable replyId
+### Task 16: 遷移所有寫入 actions 到 stable replyId
 
 **Files:**
 - Modify: `src/hooks/usePttActions.ts`
@@ -908,7 +1046,7 @@ git commit -m "refactor: write through stable core actions"
 
 ## Phase 5：移動官方參考 UI
 
-### Task 15: 移除相容入口並將 React app 移入 apps/web
+### Task 17: 移除相容入口並將 React app 移入 apps/web
 
 **Files:**
 - Move: `src/` → `apps/web/src/`
@@ -929,7 +1067,7 @@ git commit -m "refactor: write through stable core actions"
 
 - [ ] **Step 2: 先移除 app 對相容入口的依賴**
 
-以 `rg` 找出 app 與 UI tests 對舊 parser、aggregator、editing、adapter、fakeAdapter 的 import，分別改成 `@pttzzz/core`、`@pttzzz/browser` 或 `@pttzzz/browser/testing`。`Article.tsx` 的 `getLastArticleOpenTrace()` 改讀 article DTO 的 opt-in debug metadata，不直接 import browser adapter。執行 `npm test` 通過後，刪除五個相容 re-export 檔。
+以 `rg` 找出 app 與 UI tests 對舊 parser、aggregator、editing、adapter、fakeAdapter 的 import。正常 UI 必須已在 Tasks 14–16 改成只用 `@pttzzz/core`、`@pttzzz/browser` 或 `@pttzzz/browser/testing`；不得把舊 parser／aggregator deep import 改成新的 internal deep import。`Article.tsx` 的 `getLastArticleOpenTrace()` 改讀 article DTO 的 opt-in debug metadata，不直接 import browser terminal driver。執行 `npm test` 通過後，刪除所有 repo-local compatibility re-export。
 
 - [ ] **Step 3: Mechanical move**
 
@@ -992,7 +1130,7 @@ git commit -m "refactor: move React UI into reference app"
 
 ## Phase 6：發布驗證與文件收尾
 
-### Task 16: 驗證 npm pack 產物
+### Task 18: 驗證 npm pack 產物
 
 **Files:**
 - Create: `scripts/smoke-packages.mjs`
@@ -1040,7 +1178,7 @@ git add scripts packages package.json package-lock.json
 git commit -m "build: verify publishable packages"
 ```
 
-### Task 17: 驗證 AI 文件能建立替代 UI
+### Task 19: 驗證 AI 文件能建立替代 UI
 
 **Files:**
 - Modify: `docs/api/AI-INTERFACE.md`
@@ -1078,7 +1216,7 @@ git add docs/api docs/examples scripts/smoke-packages.mjs
 git commit -m "docs: verify alternate UI integration guide"
 ```
 
-### Task 18: 更新實作 notes 與整體架構紀錄
+### Task 20: 更新實作 notes 與整體架構紀錄
 
 **Files:**
 - Create: `dev-notes/goal-9-implementation-notes.md`

@@ -15,18 +15,22 @@ import type {
 } from "../lib/ptt/adapter";
 import { formatEditPush as buildEditPush } from "../lib/ptt/pushEditing";
 export { formatEditPush } from "../lib/ptt/pushEditing";
+import {
+  canVote,
+  formatReplyToReply,
+  formatReplyVote,
+  formatReplyVoteWithdrawal,
+} from "../../packages/core/src/actions";
+
+export {
+  canVote,
+  formatReplyToReply as formatReplyToPush,
+  formatReplyVote as formatArticleVote,
+  formatReplyVote as formatPushVote,
+  formatReplyVoteWithdrawal as formatPushVoteWithdrawal,
+};
 
 export type PushType = "push" | "neutral" | "boo";
-
-/**
- * Format a reply to a specific floor
- * @param floor - The floor number to reply to
- * @param content - The reply content
- * @returns Formatted reply string: "回{floor}樓：{content}"
- */
-export function formatReplyToPush(floor: number, content: string): string {
-  return `回${floor}樓：${content.trim()}`;
-}
 
 /**
  * Format an edit push based on mode
@@ -36,47 +40,6 @@ export function formatReplyToPush(floor: number, content: string): string {
  * @param content - The content (only used for 補充 and 更正)
  * @returns Formatted edit string
  */
-/**
- * Format a vote on an article
- * @param floor - The floor number to vote on
- * @param kind - "push" (推) or "boo" (噓)
- * @returns Formatted vote string
- */
-export function formatArticleVote(
-  floor: number,
-  kind: "push" | "boo",
-): string {
-  const voteChar = kind === "push" ? "推" : "噓";
-  return `${voteChar}${floor}樓`;
-}
-
-/**
- * Format a vote on a push (same mechanism as article vote)
- * @param floor - The floor number to vote on
- * @param kind - "push" (推) or "boo" (噓)
- * @returns Formatted vote string
- */
-export function formatPushVote(floor: number, kind: "push" | "boo"): string {
-  return formatArticleVote(floor, kind);
-}
-
-export function formatPushVoteWithdrawal(
-  floor: number,
-  kind: "push" | "boo",
-): string {
-  return `撤回我對${floor}樓的${kind === "push" ? "推" : "噓"}`;
-}
-
-/**
- * Returns whether a vote in the given direction is allowed given the user's current vote.
- * Blocks re-voting in the same direction (dedup rule).
- */
-export function canVote(myVote: -1 | 0 | 1, direction: "push" | "boo"): boolean {
-  if (myVote === 1 && direction === "push") return false;
-  if (myVote === -1 && direction === "boo") return false;
-  return true;
-}
-
 export interface PttActionsResult {
   isLoggedIn: boolean;
   replyToArticle(

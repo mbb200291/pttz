@@ -1,0 +1,352 @@
+import type { ArticleEditRecord, ArticleRevision } from "./parser.js";
+import type { AggregatedPush } from "./pushAggregator.js";
+
+export type Result<T, E = CoreError> =
+  | { ok: true; value: T }
+  | { ok: false; error: E };
+
+export type WriteOutcome = "not-sent" | "sent" | "uncertain";
+
+export interface CoreError {
+  code: string;
+  message: string;
+  retryable: boolean;
+  outcome?: WriteOutcome;
+  cause?: unknown;
+}
+
+/** Expected failure reported by a transport gateway read or lifecycle method. */
+export class GatewayError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly retryable: boolean,
+    readonly cause?: unknown,
+  ) {
+    super(message);
+    this.name = "GatewayError";
+  }
+}
+
+export type Unsubscribe = () => void;
+
+export function ok<T>(value: T): Result<T, never> {
+  return { ok: true, value };
+}
+
+export function fail<E>(error: E): Result<never, E> {
+  return { ok: false, error };
+}
+
+export type ArticleKey =
+  | { board: string; index: number; aid?: never }
+  | { board: string; aid: string; index?: never };
+
+export function articleKeyId(key: ArticleKey): string {
+  return "index" in key
+    ? JSON.stringify([key.board, "index", key.index])
+    : JSON.stringify([key.board, "aid", key.aid]);
+}
+
+export type ReplyId = string;
+export type VoteDirection = "push" | "boo";
+export type PushType = "push" | "boo" | "neutral";
+export type ArticleCompleteness = "incomplete" | "final";
+
+export interface Board {
+  name: string;
+  title: string;
+  category?: string;
+  description?: string;
+  favorite?: boolean;
+}
+
+export type BoardListEntry =
+  | { kind: "board"; board: Board }
+  | { kind: "category"; title: string; categoryCursor: string };
+
+export interface BoardPage {
+  items: readonly BoardListEntry[];
+  nextCursor?: string;
+}
+
+export interface ArticleRef {
+  key: ArticleKey;
+}
+
+export interface ArticleSummary extends ArticleRef {
+  title: string;
+  author: string;
+  publishedAt?: string;
+  nativeScore?: number;
+}
+
+export interface ArticlePage {
+  items: readonly ArticleSummary[];
+  nextCursor?: string;
+}
+
+export interface EditRecord {
+  kind: "append" | "replace" | "withdraw";
+  author: string;
+  content: string;
+  createdAt?: string;
+}
+
+export interface ReplyMetadata {
+  sourceFloors?: readonly number[];
+  raw?: unknown;
+}
+
+export interface Reply {
+  replyId: ReplyId;
+  author: string;
+  content: string;
+  pushType: PushType;
+  createdAt?: string;
+  replyTo?: ReplyId;
+  depth: 1 | 2 | 3;
+  score: number;
+  viewerVote?: VoteDirection;
+  isOp: boolean;
+  visible: boolean;
+  edits: readonly EditRecord[];
+  children: readonly Reply[];
+  metadata?: ReplyMetadata;
+}
+
+export interface Article extends ArticleSummary {
+  completeness: "final";
+  revision: number;
+  body: string;
+  replies: readonly Reply[];
+  viewerVote?: VoteDirection;
+  metadata?: { raw?: unknown };
+}
+
+export interface PartialArticle {
+  key: ArticleKey;
+  completeness: "incomplete";
+  revision: number;
+  title?: string;
+  author?: string;
+  body?: string;
+  replies: readonly Reply[];
+}
+
+export type ConnectionStatus = "disconnected" | "connecting" | "connected";
+
+export interface Session {
+  userId: string;
+}
+
+export type CoreEvent =
+  | { type: "connection.changed"; status: ConnectionStatus }
+  | { type: "session.changed"; session: Session | null }
+  | {
+      type: "article.partial";
+      articleKey: ArticleKey;
+      revision: number;
+      article: PartialArticle;
+    }
+  | {
+      type: "article.updated";
+      articleKey: ArticleKey;
+      revision: number;
+      article: Article;
+    }
+  | { type: "operation.progress"; operationId: string; phase: string };
+
+export interface LoginInput {
+  username: string;
+  password: string;
+  disconnectExistingSession?: boolean;
+}
+
+export type BoardListSource =
+  | { kind: "hot" }
+  | { kind: "favorite" }
+  | { kind: "category"; categoryCursor?: string };
+
+export interface ListBoardsInput {
+  source?: BoardListSource;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface SearchBoardsInput {
+  prefix: string;
+  cursor?: string;
+  limit?: number;
+}
+
+type BoardFilterPage = { cursor?: string; limit?: number };
+
+export type FilterBoardsInput = BoardFilterPage &
+  (
+    | { favorite: boolean; categoryCursor?: string }
+    | { favorite?: boolean; categoryCursor: string }
+  );
+export interface ListArticlesInput { board: string; cursor?: string; limit?: number }
+export interface SearchArticlesInput { board: string; query: string; cursor?: string; limit?: number }
+export interface FilterArticlesInput { board: string; author?: string; keyword?: string; cursor?: string; limit?: number }
+export interface GetArticleInput { article: ArticleKey; includeDebugMetadata?: boolean }
+export interface CreateArticleInput { board: string; title: string; content: string }
+export interface EditArticleInput { article: ArticleKey; content: string }
+export interface DeleteArticleInput { article: ArticleKey }
+export interface ReplyToArticleInput { article: ArticleKey; content: string; pushType: PushType }
+export interface ReplyToReplyInput { article: ArticleKey; replyId: ReplyId; content: string; pushType: PushType }
+export interface EditReplyInput { article: ArticleKey; replyId: ReplyId; mode: "append" | "replace"; content: string }
+export interface WithdrawReplyInput { article: ArticleKey; replyId: ReplyId }
+export interface VoteArticleInput { article: ArticleKey; direction: VoteDirection }
+export interface WithdrawArticleVoteInput { article: ArticleKey; direction: VoteDirection }
+export interface VoteReplyInput { article: ArticleKey; replyId: ReplyId; direction: VoteDirection }
+export interface WithdrawReplyVoteInput { article: ArticleKey; replyId: ReplyId; direction: VoteDirection }
+
+export interface PttzzzClient {
+  connect(): Promise<Result<void>>;
+  login(input: LoginInput): Promise<Result<Session>>;
+  disconnect(): Promise<void>;
+  listBoards(input?: ListBoardsInput): Promise<Result<BoardPage>>;
+  searchBoards(input: SearchBoardsInput): Promise<Result<BoardPage>>;
+  filterBoards(input: FilterBoardsInput): Promise<Result<BoardPage>>;
+  listArticles(input: ListArticlesInput): Promise<Result<ArticlePage>>;
+  searchArticles(input: SearchArticlesInput): Promise<Result<ArticlePage>>;
+  filterArticles(input: FilterArticlesInput): Promise<Result<ArticlePage>>;
+  getArticle(input: GetArticleInput): Promise<Result<Article>>;
+  createArticle(input: CreateArticleInput): Promise<Result<void>>;
+  editArticle(input: EditArticleInput): Promise<Result<void>>;
+  deleteArticle(input: DeleteArticleInput): Promise<Result<void>>;
+  replyToArticle(input: ReplyToArticleInput): Promise<Result<void>>;
+  replyToReply(input: ReplyToReplyInput): Promise<Result<void>>;
+  editReply(input: EditReplyInput): Promise<Result<void>>;
+  withdrawReply(input: WithdrawReplyInput): Promise<Result<void>>;
+  voteArticle(input: VoteArticleInput): Promise<Result<void>>;
+  withdrawArticleVote(input: WithdrawArticleVoteInput): Promise<Result<void>>;
+  voteReply(input: VoteReplyInput): Promise<Result<void>>;
+  withdrawReplyVote(input: WithdrawReplyVoteInput): Promise<Result<void>>;
+  subscribe(listener: (event: CoreEvent) => void): Unsubscribe;
+}
+
+export interface RawArticleSource {
+  articleKey: ArticleKey;
+  completeness: ArticleCompleteness;
+  rawText: string;
+  revision: number;
+}
+
+export type GatewayEvent =
+  | { type: "connection.changed"; status: ConnectionStatus }
+  | { type: "session.changed"; session: Session | null }
+  | { type: "article.source"; source: RawArticleSource };
+
+export type PttCommand =
+  | { type: "create-article"; board: string; title: string; content: string }
+  | { type: "edit-article"; article: ArticleKey; content: string }
+  | { type: "delete-article"; article: ArticleKey }
+  | { type: "reply-article"; article: ArticleKey; content: string; pushType: PushType }
+  | { type: "reply-floor"; article: ArticleKey; floor: number; content: string; pushType: PushType }
+  | { type: "edit-floor"; article: ArticleKey; floors: readonly number[]; mode: "append" | "replace"; content: string }
+  | { type: "withdraw-floor"; article: ArticleKey; floors: readonly number[] }
+  | { type: "vote-article"; article: ArticleKey; direction: VoteDirection }
+  | { type: "withdraw-article-vote"; article: ArticleKey; direction: VoteDirection }
+  | { type: "vote-floor"; article: ArticleKey; floor: number; direction: VoteDirection }
+  | { type: "withdraw-floor-vote"; article: ArticleKey; floor: number; direction: VoteDirection };
+
+export type ActionReceipt =
+  | { ok: true; outcome: "sent" }
+  | {
+      ok: false;
+      code: string;
+      message: string;
+      outcome: "not-sent";
+      retryable: boolean;
+      cause?: unknown;
+      serverDetail?: string;
+    }
+  | {
+      ok: false;
+      code: string;
+      message: string;
+      outcome: "sent" | "uncertain";
+      retryable: false;
+      cause?: unknown;
+      serverDetail?: string;
+    };
+
+export interface PttGateway {
+  connect(): Promise<void>;
+  login(input: LoginInput): Promise<Session>;
+  disconnect(): Promise<void>;
+  listBoards(input?: ListBoardsInput): Promise<BoardPage>;
+  searchBoards(input: SearchBoardsInput): Promise<BoardPage>;
+  filterBoards(input: FilterBoardsInput): Promise<BoardPage>;
+  listArticles(input: ListArticlesInput): Promise<ArticlePage>;
+  searchArticles(input: SearchArticlesInput): Promise<ArticlePage>;
+  filterArticles(input: FilterArticlesInput): Promise<ArticlePage>;
+  readArticle(input: GetArticleInput): AsyncIterable<RawArticleSource>;
+  execute(command: PttCommand): Promise<ActionReceipt>;
+  subscribe(listener: (event: GatewayEvent) => void): Unsubscribe;
+}
+
+// Compatibility DTOs retained while the current browser adapter moves packages.
+export interface ArticleDebugDump {
+  boardName: string;
+  articleIndex: number;
+  title: string;
+  author: string;
+  rawLineCount: number;
+  firstLines: string[];
+  lastLines: string[];
+  parsedPushCount: number;
+  parsedLastPushes: Array<{
+    id: string;
+    type: AggregatedPush["type"];
+    author: string;
+    content: string;
+    time: string;
+    replyTo: string | null;
+    sourceFloors: number[];
+  }>;
+  articleNoteCount: number;
+  articleNotes: ArticleEditRecord[];
+  bottomStatusLine: string;
+}
+
+export interface ArticleData {
+  title: string;
+  author: string;
+  date: string;
+  board: string;
+  body: string;
+  pushes: AggregatedPush[];
+  articleNotes: ArticleEditRecord[];
+  revisions?: ArticleRevision[];
+  revisionSourceBody?: string;
+  score: number;
+  nativePushCount: number;
+  nativeBooCount: number;
+  nativeNeutralCount: number;
+  articlePushVoters: string[];
+  articleBooVoters: string[];
+  debug?: ArticleDebugDump;
+}
+
+export type AdapterArticleData = ArticleData;
+
+export interface PartialArticleData {
+  title: string;
+  author: string;
+  date: string;
+  board: string;
+  body: string;
+  pushes?: AggregatedPush[];
+  articleNotes?: ArticleEditRecord[];
+  revisions?: ArticleRevision[];
+  score?: number;
+  nativePushCount?: number;
+  nativeBooCount?: number;
+  nativeNeutralCount?: number;
+  articlePushVoters?: string[];
+  articleBooVoters?: string[];
+}

@@ -1,20 +1,20 @@
 import { describe, expect, it } from "vitest";
-import aggregation from "../../../../docs/fixtures/thread-events/aggregation.json";
-import nestedReplies from "../../../../docs/fixtures/thread-events/nested-replies.json";
-import schema from "../../../../docs/fixtures/thread-events/schema.json";
-import votesAndEdits from "../../../../docs/fixtures/thread-events/votes-and-edits.json";
-import whitepaper from "../../../../docs/whitepaper/pttzzz-core.md?raw";
+import aggregation from "../../../docs/fixtures/thread-events/aggregation.json";
+import nestedReplies from "../../../docs/fixtures/thread-events/nested-replies.json";
+import schema from "../../../docs/fixtures/thread-events/schema.json";
+import votesAndEdits from "../../../docs/fixtures/thread-events/votes-and-edits.json";
+import whitepaper from "../../../docs/whitepaper/pttzzz-core.md?raw";
 import {
   aggregatePushes,
   aggregateThreadSnapshot,
   normalizeThreadEvents,
-} from "../pushAggregator";
+} from "./pushAggregator.js";
 import type {
   AggregatedThread,
   NormalizedThreadEvent,
   ThreadSnapshotStatus,
-} from "../pushAggregator";
-import type { RawPush } from "../parser";
+} from "./pushAggregator.js";
+import type { RawPush } from "./parser.js";
 
 interface StableReply {
   author: string;

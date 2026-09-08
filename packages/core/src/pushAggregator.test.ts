@@ -7,8 +7,8 @@ import {
   detectVote,
   normalizeThreadEvents,
   normalizePttId,
-} from "../pushAggregator";
-import type { ArticleEditRecord, OpEditedReplySegment, RawPush } from "../parser";
+} from "./pushAggregator.js";
+import type { ArticleEditRecord, OpEditedReplySegment, RawPush } from "./parser.js";
 
 const OP = "opUser";
 

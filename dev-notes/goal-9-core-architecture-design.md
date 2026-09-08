@@ -93,6 +93,8 @@ Repository 先使用 npm workspaces，不引入 Turborepo 或額外 monorepo fra
 
 Fake PTT adapter 因使用 browser storage，預計放在 `@pttzzz/browser` 的 testing export，而不是核心正式 runtime。
 
+公開的 `PttGateway` 必須依 PTT 真實能力建模：看板清單區分熱門、我的最愛與分類目錄，分類結果可包含下一層分類；看板搜尋是名稱 prefix search，不宣稱全文搜尋。分類位置與分頁只以 session-scoped opaque cursor 暴露，terminal offset 留在 `packages/browser/src/internal/`。真實 terminal driver 可以保留 positional args、raw floor、screen helpers 與 raw `send()`，但不是第二套公開 API，也不從 browser package exports 匯出。
+
 ### 4.3 `@pttzzz/core`
 
 `@pttzzz/core` 是 UI framework 無關的核心套件，目標是在瀏覽器與 Node-like JavaScript 環境均可載入及執行純規則；是否能連上 PTT 由注入的 gateway 決定。
@@ -163,6 +165,15 @@ interface CoreError {
   cause?: unknown;
 }
 
+class GatewayError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly retryable: boolean,
+    readonly cause?: unknown,
+  );
+}
+
 interface PttzzzClient {
   connect(): Promise<Result<void>>;
   login(input: LoginInput): Promise<Result<Session>>;
@@ -172,7 +183,7 @@ interface PttzzzClient {
   listArticles(input: ListArticlesInput): Promise<Result<ArticlePage>>;
   getArticle(input: GetArticleInput): Promise<Result<Article>>;
 
-  createArticle(input: CreateArticleInput): Promise<Result<ArticleRef>>;
+  createArticle(input: CreateArticleInput): Promise<Result<void>>;
   editArticle(input: EditArticleInput): Promise<Result<void>>;
   deleteArticle(input: DeleteArticleInput): Promise<Result<void>>;
   replyToArticle(input: ReplyToArticleInput): Promise<Result<void>>;
@@ -191,9 +202,14 @@ interface PttzzzClient {
 
 查詢與寫入方法回傳 Promise，適合表示單次操作的最終結果；連線狀態、逐步載入與資料更新使用事件，避免 framework polling，也避免核心綁定任何 store。
 
+看板契約固定如下：`listBoards()` 預設熱門看板，也可選 favorite 或 category source；category page 的 entry 是 board/category discriminated union；`searchBoards()` 只接受名稱 `prefix`；`filterBoards()` 至少提供 `favorite` 或 `categoryCursor`，同時提供時取交集。所有 cursor 都是不透明且只在建立它的 session 有效，UI 不得反解或持久化。
+
+Gateway read／lifecycle 的可預期失敗使用 core-owned `GatewayError`；高階 client 保留其欄位正規化成 `CoreError`，只有未知 throw 轉為 `GATEWAY_FAILURE`。寫入仍只用 `ActionReceipt` 表達是否送出與不確定性。
+
 ### 6.2 僅供 gateway 實作者公開
 
 - `PttGateway`
+- `GatewayError`
 - `RawArticleSource`
 - `GatewayEvent`
 - `PttCommand`
@@ -210,7 +226,7 @@ interface PttzzzClient {
 - 原始樓號索引與 `replyId` 對照表
 - 未承諾穩定的 parser helper
 
-內部模組不由 package root export；UI 文件也不得示範 deep import。
+內部模組不由 package root export。官方 `@pttzzz/browser` 可透過保留且不承諾相容性的 `@pttzzz/core/internal` subpath 使用已抽出的純規則；一般 UI 與第三方 client 不得使用，UI 文件也不得示範 deep import。
 
 ## 7. 身分、樓號與資料模型
 
@@ -268,7 +284,7 @@ interface ReplyMetadata {
 - `sent`：可以確認已送出，但後續流程或回讀失敗；通常應重新載入確認。
 - `uncertain`：無法知道 PTT 是否已接受；UI 不得自動重試，以免重複發文、回文或投票。
 
-`retryable` 與 `outcome` 是不同維度。即使網路錯誤看似可重試，只要 outcome 是 `uncertain`，預設行為仍應先重新讀取狀態或由使用者決定。
+只有 `outcome` 是 `not-sent` 時，`retryable` 才可能為 true；`sent` 與 `uncertain` 在型別上固定不可重試。即使網路錯誤看似可重試，只要可能已送出，仍應先重新讀取狀態或由使用者決定。
 
 ## 10. 事件與 partial data
 
@@ -375,7 +391,7 @@ EDIT-001
 
 ### Phase 3：抽出 browser gateway
 
-- 將目前 `adapter.ts` 拆成 gateway workflow 與 browser-specific transport。
+- 先將目前 `adapter.ts` 原樣搬成不公開的 terminal driver，再在其上建立公開 gateway；不重寫大型 terminal workflow。
 - `@pttzzz/browser` 包裝 `ptt-client` 並實作 `PttGateway`。
 - Fake adapter 移到 browser testing entry，並以同一 contract 測試。
 

@@ -7,7 +7,7 @@ import {
   splitArticleBody,
   splitArticleEditableContent,
   stripAnsi,
-} from "../parser";
+} from "./parser.js";
 
 describe("stripAnsi", () => {
   it("removes ANSI escape sequences and backspace cursor artifacts", () => {

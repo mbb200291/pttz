@@ -1,6 +1,7 @@
 import Ptt from "ptt-client";
 import sleep from "sleep-promise";
 import type PttConfig from "ptt-client/dist/config";
+export { formatBoardReplyTitle } from "../../../packages/core/src/actions";
 import {
   aggregatePushes,
   type AggregatedPush,
@@ -202,10 +203,6 @@ const DEFAULT_ARTICLE_REPLY_TIMEOUTS: ArticleReplyTimeouts = {
   pollMs: 50,
   afterPromptMs: 80,
 };
-
-export function formatBoardReplyTitle(title: string): string {
-  return `Re: ${title.replace(/^(?:Re:\s*)+/giu, "").trim()}`;
-}
 
 export interface PttAdapter {
   send: (data: string) => Promise<boolean>;

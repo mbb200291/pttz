@@ -1,0 +1,25 @@
+{
+  "name": "@pttzzz/core",
+  "version": "0.1.0",
+  "type": "module",
+  "files": ["dist"],
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./internal": {
+      "types": "./dist/internal.d.ts",
+      "import": "./dist/internal.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run src --config vitest.config.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.2",
+    "vitest": "^4.1.2"
+  }
+}
