@@ -3,9 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "pttzzz": {
-    "core": "^0.1.0",
-    "browser": "^0.1.0",
-    "rules": "0.1.x"
+    "core": "^0.2.0",
+    "browser": "^0.2.0",
+    "rules": "0.2.x"
   },
   "type": "module",
   "scripts": {
@@ -14,7 +14,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@pttzzz/core": "0.1.0",
-    "@pttzzz/browser": "0.1.0"
+    "@pttzzz/core": "0.2.0",
+    "@pttzzz/browser": "0.2.0"
   }
 }

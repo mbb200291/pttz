@@ -5,7 +5,7 @@ Goal 12 的獨立唯讀介面範例。以 Threads 式單欄討論串流呈現跨
 ## 版本與邊界
 
 - 套件：`@pttzzz/threads-example` 0.1.0，private workspace。
-- 使用 `@pttzzz/core` / `@pttzzz/browser` 0.1.0，支援規則 0.1.x。
+- 使用 `@pttzzz/core` / `@pttzzz/browser` 0.2.0，支援規則 0.2.x。
 - 只使用公開 API；沒有發文、回覆、推噓、編輯、刪除或修改最愛的入口。
 - 規則與投票資料由核心提供；列表的 PTT 原生熱度不等於文章頁的提案文章推噓。
 

@@ -1,9 +1,9 @@
 {
   "name": "@pttzzz/browser",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "pttzzz": {
-    "core": "^0.1.0",
-    "rules": "0.1.x"
+    "core": "^0.2.0",
+    "rules": "0.2.x"
   },
   "description": "Official browser gateway for @pttzzz/core",
   "license": "MIT",
@@ -33,7 +33,7 @@
     "test": "vitest run src --config vitest.config.ts"
   },
   "dependencies": {
-    "@pttzzz/core": "0.1.0",
+    "@pttzzz/core": "0.2.0",
     "ptt-client": "^0.9.0"
   },
   "devDependencies": {
