@@ -1,5 +1,13 @@
 # Goal 11 實作紀錄
 
+## 保留其他連線後 closed 的排查
+
+查核 [PTT 官方 mbbsd.c / multi_user_check](https://github.com/ptt/pttbbs/blob/961c62394f095762b554d394e2bce13e38b95c13/mbbsd/mbbsd.c#L379)：選 n 且 getotherlogin(3) 非空時，直接 abort_bbs；選 y 的刪除迴圈則以 getotherlogin(3) 為繼續條件，不保證清除全部其他連線。此行為可以解釋使用者描述，但沒有這次現場終端資料，不能斷言此次斷線就是達上限。未使用真站帳密、未踢除連線。
+
+本地可重現缺陷：登入 Promise 在 wsStatus 已 closed 後完成，原 hook 仍會改為 ready 或 need_login。加入回歸測試與 guard 保留 closed 並清除記憶體 credentials。LoginModal 原本不呈現 closed，現在提供明確提示及重新整理入口；保留連線後中斷提示明示無法確認原因、可能為上限或網路問題，建議先自行關閉不用的連線，不自動重試或替使用者選擇踢除。重複登入確認畫面亦預告限制。
+
+本次完整 verify（含同時進行的閱讀樣式）：core 372、browser 189、Web 269、輔助 11、build、lint（0 errors／3 既有 warnings）及 package smoke 通過。離線掛載 closed modal 確認提示可見，並補測修正 closed 誤顯示「連線中」的指示燈。未驗證真站斷線原因。
+
 ## 自適應 ANSI 正文
 
 依使用者確認的規則調整：寬容器優先原文行寬，窄容器優先可讀性；兩者都解析顏色。AdaptiveArticleBody 使用絕對定位、隱藏、max-content 的同樣式正文量測，觀察其與容器的寬度並在字型就緒後重算。手動原始排版以 aria-pressed 明示，不被 resize 蓋過。CJK／全形字使用 2ch；特殊 emoji 與組合字不承諾完整終端格點還原。媒體固定另列，原文網址不移除。載入中輕量正文與重新編輯流程仍採原有純文字策略。

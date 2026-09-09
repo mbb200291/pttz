@@ -193,6 +193,19 @@ describe("public PttzzzClient socket bridge", () => {
     });
   });
 
+  it.each([true, false])("does not let a late duplicate-login result overwrite a closed connection (%s)", async (ok) => {
+    usePttSocketStore.setState({ client, wsStatus: "connected", pttState: "duplicate_login", credentials: { username: "user", password: "password" } });
+    login.mockImplementationOnce(async () => {
+      usePttSocketStore.setState({ wsStatus: "closed", pttState: "closed" });
+      return ok ? { ok: true, value: { userId: "user" } } : { ok: false, error: { code: "LOGIN_FAILED", message: "unknown", retryable: false } };
+    });
+    await submitDuplicateLoginDecision(false);
+    expect(usePttSocketStore.getState()).toMatchObject({ pttState: "closed", credentials: null });
+    expect(usePttSocketStore.getState().loginError).toContain("保留其他連線");
+    expect(usePttSocketStore.getState().loginError).toContain("無法確認");
+    expect(login).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps credentials and asks for a decision when PTT reports a duplicate login", async () => {
     login.mockResolvedValueOnce({
       ok: false,

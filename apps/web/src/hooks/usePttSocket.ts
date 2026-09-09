@@ -268,6 +268,17 @@ export function useRecentBoards(maxRecent = 5) {
   return { recent, addRecent };
 }
 
+function retainDisconnectedLogin(preservedOthers = false): boolean {
+  const state = usePttSocketStore.getState();
+  if (state.wsStatus !== "closed" && state.wsStatus !== "error") return false;
+  state.clearCredentials();
+  state.setPttState("closed");
+  state.setLoginError(preservedOthers
+    ? "選擇保留其他連線後，本次登入連線已中斷。可能已達 PTT 同帳號連線上限，也可能是網路中斷；目前無法確認原因。可先自行關閉不用的 PTT 連線，再重新整理登入；若再次出現重複登入提示，再決定是否踢除。"
+    : "登入期間連線已中斷，目前無法確認登入是否完成。請稍後重新整理再試；不會自動踢除其他連線。");
+  return true;
+}
+
 export async function submitLogin(
   username: string,
   password: string,
@@ -285,6 +296,7 @@ export async function submitLogin(
     password,
     disconnectExistingSession: false,
   });
+  if (retainDisconnectedLogin()) return;
   if (result.ok) {
     setPttState("ready");
     return;
@@ -315,6 +327,7 @@ export async function submitDuplicateLoginDecision(
     password: credentials.password,
     disconnectExistingSession: kickOthers,
   });
+  if (retainDisconnectedLogin(!kickOthers)) return;
 
   if (result.ok) {
     setPttState("ready");

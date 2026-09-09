@@ -32,6 +32,7 @@ export function LoginModal({ pttState, wsStatus }: Props) {
   const isGuestOverload = pttState === "guest_overload";
   const isSyncingUsers = pttState === "syncing_users";
   const isLoginRateLimited = pttState === "login_rate_limited";
+  const isClosed = pttState === "closed";
 
   if (
     !isOpen &&
@@ -39,7 +40,8 @@ export function LoginModal({ pttState, wsStatus }: Props) {
     !isDuplicateLogin &&
     !isGuestOverload &&
     !isSyncingUsers &&
-    !isLoginRateLimited
+    !isLoginRateLimited &&
+    !isClosed
   )
     return null;
 
@@ -159,7 +161,9 @@ export function LoginModal({ pttState, wsStatus }: Props) {
             color: "var(--text-dim)",
           }}
         >
-          {wsStatus === "connected" ? (
+          {isClosed || wsStatus === "closed" || wsStatus === "error" ? (
+            <span style={{ color: "var(--boo-fg)" }}>● 連線已中斷</span>
+          ) : wsStatus === "connected" ? (
             <span style={{ color: "var(--push-fg)" }}>● 已連線</span>
           ) : (
             <span style={{ color: "oklch(0.86 0.16 75)" }}>● 連線中…</span>
@@ -190,10 +194,18 @@ export function LoginModal({ pttState, wsStatus }: Props) {
               </button>
             </div>
           </div>
+        ) : isClosed ? (
+          <div className="space-y-3">
+            <p role="alert" style={{ color: "var(--text-muted)" }}>
+              連線已中斷。{loginError ?? "請稍後重新整理再試。若剛才選擇保留其他登入連線，可能已達同帳號連線上限，也可能是網路中斷；目前無法確認原因。可先自行關閉不用的連線，不必直接踢除所有連線。"}
+            </p>
+            <button type="button" style={primaryButtonStyle} className="w-full py-2.5" onClick={() => window.location.reload()}>重新整理</button>
+          </div>
         ) : isDuplicateLogin ? (
           <div className="space-y-3">
             <div className="text-sm text-gray-300 leading-relaxed">
               偵測到此帳號已有其他連線，是否要踢掉其他重複登入？
+              <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>保留連線時，若已達 PTT 同帳號連線上限，本次登入可能會被中斷。可先自行關閉不用的連線；選擇踢除也不保證所有其他連線都會離線。</p>
             </div>
             <div className="flex gap-2 pt-1">
               <button

@@ -2,6 +2,14 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 describe("LoginModal", () => {
+  it("shows a closed connection explanation without forcing a kick decision", async () => {
+    const { LoginModal } = await import("../LoginModal");
+    const html = renderToStaticMarkup(<LoginModal pttState="closed" wsStatus="closed" />);
+    expect(html).toContain("連線已中斷");
+    expect(html).toContain("重新整理");
+    expect(html).not.toContain("連線中…");
+    expect(html).not.toContain("踢掉其他連線（是）");
+  });
   it("defers the duplicate-session decision until PTT reports it", async () => {
     Object.defineProperty(globalThis, "location", {
       configurable: true,
