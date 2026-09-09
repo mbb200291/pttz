@@ -4,6 +4,17 @@
 
 新增 `apps/threads`，獨立唯讀 TypeScript/Vite UI，以熱門看板精選為入口。不改 core/browser、原有 Web UI 或 spec.md。UI 取捨與啟動方式集中於 [介面 README](../apps/threads/README.md)。
 
+## 讀取佇列與刷新容錯修訂（2026-09-09）
+
+- 先合併本機 dev `87a9254`，merge commit `5e5384d`；無文字衝突。Threads dependency／compatibility metadata 及 lockfile 同步 core/browser 0.2.0、rules 0.2.x，保留 Goal 10 核心規則。
+- 回歸先重現重試直接呼叫 `readArticle` 導致與 viewport 讀取重疊，再統一到 FIFO。去重集合只保留排隊／讀取中的文章，完成後移除；失敗不因展開或 viewport 自動重試，必須使用重試按鈕。
+- 重試立即清除舊 error 並通知畫面，排隊與正在讀取分別呈現；已有 partial 繼續可讀，不因重試清空正文。
+- 刷新先停止未開始的排隊，再等待目前不可取消的讀取。快取與展開狀態延後至成功取得新串流才清除；來源 Result 失敗、拋出例外、所有看板失敗均保留舊資料。
+- `completed` 包含成功與失敗看板，每個失敗看板對應一筆 error；以此區分全部失敗與成功空結果。部分成功接受新列表並呈現單板錯誤；單板 rejected promise 轉成該板錯誤後繼續，避免遺失先前批次。
+- modern-web-guidance 線上請求 `ENOTFOUND`，離線 `ENOTCACHED`；依 [MDN await](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/await) 的 Promise 等待語意沿用原生 TypeScript 流程，不新增依賴。
+- 測試只使用 fake client／jsdom；本次沒有新增視覺布局，未操作真實 PTT 或使用帳密。
+- 完整 `npm run verify` 通過：core 363、browser 168、Web 205、Threads 28，另 11 helper、build、lint、package smoke。Threads 比合併後基準新增 9 個案例；先重現 4 個 app 失敗及 1 個 feed 失敗，再修正通過。既有 3 個 Fast Refresh、bundle size 與 Node module.register deprecation 警告保留。
+
 ## 原位討論與媒體修訂（2026-09-08）
 
 - 使用者確認整塊文章原位展開全文與回覆，移除「查看討論」及獨立文章頁流程。標題使用原生 button 保留 Enter／Space 操作，媒體、回覆、連結、選字及拖曳不切換收合。

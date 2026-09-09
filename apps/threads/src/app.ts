@@ -62,6 +62,7 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
         if (articleCache.get(id) === target) previewUpdates.get(id)?.();
       }
     })();
+    previewUpdates.get(id)?.();
     return target.pending;
   }
   const header = node("header");
@@ -156,13 +157,16 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
         const article = queue.shift()!;
         if (!active) break;
         await readArticle(article);
+        queued.delete(articleKeyId(article.key));
       }
       reading = false;
     };
-    const enqueue = (article: ArticleSummary): void => {
+    const enqueue = (article: ArticleSummary, retry = false): void => {
       const id = articleKeyId(article.key);
-      if (!active || queued.has(id)) return;
-      queued.add(id); queue.push(article); void drain();
+      const entry = articleCache.get(id);
+      if (!active || queued.has(id) || entry?.snapshot?.completeness === "final" || (entry?.error && !retry)) return;
+      if (entry) entry.error = undefined;
+      queued.add(id); queue.push(article); previewUpdates.get(id)?.(); void drain();
     };
     const observer = typeof IntersectionObserver === "undefined" ? undefined : new IntersectionObserver(entries => {
       for (const entry of entries) {
@@ -225,7 +229,7 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
         if(dragged || window.getSelection()?.toString() || (event.target as Element).closest("button,a,input,summary,details,.media-strip,.inline-discussion")) return;
         toggleExpanded();
       });
-      const retry=button("重試內文",()=>void readArticle(article),"text-action"); retry.hidden=true;
+      const retry=button("重試內文",()=>enqueue(article,true),"text-action"); retry.hidden=true;
       const update=():void=>{
         const entry=articleCache.get(id);
         const snapshot=entry?.snapshot;
@@ -248,7 +252,7 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
           if(!snapshot.replies.some(reply=>reply.visible || reply.children.length)) replyContent.append(node("p",snapshot.completeness==="final"?"尚無回覆":"回覆讀取中…","muted"));
         }
         const complete=snapshot?.completeness==="final";
-        loading.textContent=entry?.error ?? (complete ? (text?.trim() ? "" : "（無內文）") : text ? "正在讀取其餘內容…" : "內文等待載入…");
+        loading.textContent=entry?.error ?? (complete ? (text?.trim() ? "" : "（無內文）") : entry?.pending ? (text ? "正在讀取其餘內容…" : "內文讀取中…") : queued.has(id) ? "內文排隊中…" : "內文等待載入…");
         loading.hidden=!loading.textContent;
         retry.hidden=!entry?.error;
       };
@@ -268,13 +272,21 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
     showStatus("");
   }
   async function refresh(): Promise<void> {
-    clearPreviews();
+    stopPreviews();
     const current=scope.next();
     content.replaceChildren(heading("正在整理討論…"),node("p","依序讀取熱門看板，不會自動發文或回覆。","muted"));
     showStatus("讀取熱門看板…");
     try {
+      // Public reads cannot be cancelled; let the current body finish before switching boards.
+      await Promise.all([...articleCache.values()].flatMap(entry => entry.pending ? [entry.pending] : []));
+      if (!current()) return;
       const result=await loadFeed(client,current,(done,total)=>showStatus("已讀取 "+done+" / "+total+" 個看板"),preview?0:20);
       if (!current()) return;
+      // A failed source or zero successful boards must not masquerade as an empty success.
+      if (result.errors.length && result.completed <= result.errors.length) {
+        renderFeed(); showStatus("讀取失敗，已保留本次登入先前取得的列表。" + result.errors.join("；")); return;
+      }
+      clearPreviews();
       feed=result; renderFeed();
     } catch { if(current()) {renderFeed();showStatus("讀取失敗，已保留本次登入先前取得的列表。");} }
   }

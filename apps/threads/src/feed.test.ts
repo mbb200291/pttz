@@ -40,4 +40,15 @@ describe("hot-board selection feed", () => {
     expect(result.errors).toEqual(["B：看板讀取失敗"]);
     expect(result.items.map(a=>a.title)).toEqual(["A1","C1","D1","E1"]);
   });
+  it("retains successful batches when a later board throws", async () => {
+    const client=source();
+    client.filterArticles.mockImplementation(async ({board})=>{
+      if (board === "B") throw new Error("offline");
+      return ok({items:[article(board,1)]});
+    });
+    const result=await loadFeed(client,()=>true);
+    expect(result.items.map(a=>a.title)).toEqual(["A1","C1","D1","E1"]);
+    expect(result.completed).toBe(5);
+    expect(result.errors).toEqual(["B：看板讀取失敗"]);
+  });
 });

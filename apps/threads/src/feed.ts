@@ -29,7 +29,9 @@ export async function loadFeed(client: Pick<PttzzzClient, "listBoards" | "filter
   const seenArticles = new Set<string>();
   for (const board of boards) {
     if (!current()) return {...result, items:[]};
-    const page = await client.filterArticles({board:board.name,minimumNativeScore,limit:6});
+    const page = await client.filterArticles({board:board.name,minimumNativeScore,limit:6}).catch(() => ({
+      ok:false as const,error:{message:"看板讀取失敗"},
+    }));
     if (!current()) return {...result, items:[]};
     if (!page.ok) result.errors.push(board.name + "：" + page.error.message);
     else batches.push(page.value.items.filter(article => {

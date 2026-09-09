@@ -1,7 +1,7 @@
 /* @vitest-environment jsdom */
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor } from "@testing-library/dom";
-import { ok, type Article, type CoreEvent, type PttzzzClient } from "@pttzzz/core";
+import { ok, type Article, type CoreEvent, type PttzzzClient, type Result } from "@pttzzz/core";
 import { mountApp } from "./app";
 
 let dispose: (() => void) | undefined;
@@ -18,25 +18,121 @@ beforeEach(() => {
 afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); });
 function setup(count = 1) {
   const listeners=new Set<(event: CoreEvent) => void>();
-  const resolvers=new Map<number,(value: ReturnType<typeof ok<Article>>) => void>();
+  const resolvers=new Map<number,(value: Result<Article>) => void>();
   const client = {
     connect: vi.fn(async () => ok(undefined)),
     login: vi.fn(async () => ok({userId:"reader"})),
     disconnect: vi.fn(async () => {}),
     subscribe: vi.fn((listener: (event: CoreEvent) => void) => { listeners.add(listener); return () => {listeners.delete(listener);}; }),
-    listBoards: vi.fn(async () => ok({kind:"boards" as const,items:[{name:"Test",title:"Test"}]})),
-    filterArticles: vi.fn(async () => ok({items:Array.from({length:count},(_,index)=>({key:{board:"Test",index:index+1},title:index?"Second article":"A <script>title</script>",author:"alice"}))})),
-    getArticle: vi.fn(({article}:{article:{index?:number}}) => new Promise<ReturnType<typeof ok<Article>>>(r => { resolvers.set(article.index!,r); })),
+    listBoards: vi.fn<PttzzzClient["listBoards"]>(async () => ok({kind:"boards" as const,items:[{name:"Test",title:"Test"}]})),
+    filterArticles: vi.fn<PttzzzClient["filterArticles"]>(async () => ok({items:Array.from({length:count},(_,index)=>({key:{board:"Test",index:index+1},title:index?"Second article":"A <script>title</script>",author:"alice"}))})),
+    getArticle: vi.fn(({article}:{article:{index?:number}}) => new Promise<Result<Article>>(r => { resolvers.set(article.index!,r); })),
   };
   const root = document.createElement("div"); document.body.append(root);
   dispose=mountApp(root,client as unknown as PttzzzClient,true);
-  return {client,emit:(event:CoreEvent)=>listeners.forEach(listener=>listener(event)),finish:(index=1)=>resolvers.get(index)!(ok({
+  return {client,fail:(index=1)=>resolvers.get(index)!(failure),emit:(event:CoreEvent)=>listeners.forEach(listener=>listener(event)),finish:(index=1)=>resolvers.get(index)!(ok({
     key:{board:"Test",index},title:"Late article",author:"alice",body:"Secret body",
     completeness:"final",revision:3,replies:[],articleEdits:[],revisions:[],
     nativePushCount:0,nativeBooCount:0,nativeNeutralCount:0,
     nativeVotes:{pushCount:0,booCount:0,score:0},articleVotes:{pushCount:0,booCount:0,score:0},
   }))};
 }
+const failure = {ok:false as const,error:{code:"READ_FAILED",message:"測試讀取失敗",retryable:true}};
+
+it("queues retries behind visible reads and publishes deduplicated queued/loading states immediately", async () => {
+  const test=setup(3);
+  await screen.findByRole("button",{name:/A <script>title/});
+  const cards=Array.from(document.querySelectorAll(".feed-item"));
+  intersect(cards.map(target=>({target,isIntersecting:true})) as IntersectionObserverEntry[],{} as IntersectionObserver);
+  test.fail(1);
+  const retry=await screen.findByRole("button",{name:"重試內文"});
+  await waitFor(()=>expect(test.client.getArticle).toHaveBeenCalledTimes(2));
+  fireEvent.click(retry); fireEvent.click(retry);
+  expect(test.client.getArticle).toHaveBeenCalledTimes(2);
+  expect(cards[0].querySelector(".excerpt-status")?.textContent).toBe("內文排隊中…");
+  expect(screen.queryByRole("button",{name:"重試內文"})).toBeNull();
+  fireEvent.click(cards[0].querySelector("button")!);
+  test.finish(2);
+  await waitFor(()=>expect(test.client.getArticle).toHaveBeenCalledTimes(3));
+  expect(test.client.getArticle.mock.calls.map(([input])=>input.article.index)).toEqual([1,2,3]);
+  test.finish(3);
+  await waitFor(()=>expect(test.client.getArticle).toHaveBeenCalledTimes(4));
+  expect(cards[0].querySelector(".excerpt-status")?.textContent).toBe("內文讀取中…");
+  test.finish(1);
+  await waitFor(()=>expect(cards[0].querySelector(".feed-body")?.textContent).toBe("Secret body"));
+  expect(test.client.getArticle).toHaveBeenCalledTimes(4);
+});
+
+it.each(["source-result","source-throw","all-boards"])("preserves readable bodies and expanded discussion after %s refresh failure", async kind => {
+  const test=setup();
+  fireEvent.click(await screen.findByRole("button",{name:/A <script>title/}));
+  test.finish();
+  await screen.findByText("Secret body");
+  if(kind==="source-result") test.client.listBoards.mockResolvedValueOnce(failure);
+  else if(kind==="source-throw") test.client.listBoards.mockRejectedValueOnce(new Error("offline"));
+  else test.client.filterArticles.mockResolvedValueOnce(failure);
+  fireEvent.click(screen.getByRole("button",{name:"重新整理"}));
+  await screen.findByText(/已保留/);
+  expect(screen.getByText("Secret body")).toBeTruthy();
+  expect(screen.getByRole("button",{name:/A <script>title/}).getAttribute("aria-expanded")).toBe("true");
+  expect(test.client.getArticle).toHaveBeenCalledTimes(1);
+});
+
+it("replaces old content for a successful empty refresh", async () => {
+  const test=setup();
+  fireEvent.click(await screen.findByRole("button",{name:/A <script>title/}));
+  test.finish(); await screen.findByText("Secret body");
+  test.client.filterArticles.mockResolvedValueOnce(ok({items:[]}));
+  fireEvent.click(screen.getByRole("button",{name:"重新整理"}));
+  await screen.findByText(/這次沒有取得符合條件/);
+  expect(screen.queryByText("Secret body")).toBeNull();
+  expect(screen.queryByText(/已保留/)).toBeNull();
+});
+
+it("waits for the active body before refreshing and restores a failed partial without starting old queued work", async () => {
+  const test=setup(2);
+  const title=await screen.findByRole("button",{name:/A <script>title/});
+  fireEvent.click(title);
+  intersect(Array.from(document.querySelectorAll(".feed-item")).map(target=>({target,isIntersecting:true})) as IntersectionObserverEntry[],{} as IntersectionObserver);
+  test.emit({type:"article.partial",articleKey:{board:"Test",index:1},revision:1,
+    article:{key:{board:"Test",index:1},revision:1,completeness:"incomplete",body:"Readable partial",replies:[]}});
+  test.client.listBoards.mockResolvedValueOnce(failure);
+  fireEvent.click(screen.getByRole("button",{name:"重新整理"}));
+  expect(test.client.listBoards).toHaveBeenCalledTimes(1);
+  test.fail();
+  await screen.findByText(/已保留/);
+  expect(screen.getByText("Readable partial")).toBeTruthy();
+  expect(test.client.getArticle).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole("button",{name:"重試內文"}));
+  expect(test.client.getArticle).toHaveBeenCalledTimes(2);
+  expect(screen.getByText("Readable partial")).toBeTruthy();
+  expect(screen.getByText("正在讀取其餘內容…")).toBeTruthy();
+  test.finish();
+});
+
+it("accepts a partially successful refreshed feed and reports the failed board", async () => {
+  const test=setup();
+  await screen.findByRole("button",{name:/A <script>title/});
+  test.client.listBoards.mockResolvedValueOnce(ok({kind:"boards",items:[{name:"New",title:"New"},{name:"Failed",title:"Failed"}]}));
+  test.client.filterArticles.mockResolvedValueOnce(ok({items:[{key:{board:"New",index:1},title:"Fresh article",author:"new"}]})).mockResolvedValueOnce(failure);
+  fireEvent.click(screen.getByRole("button",{name:"重新整理"}));
+  await screen.findByRole("button",{name:"Fresh article"});
+  expect(screen.queryByRole("button",{name:/A <script>title/})).toBeNull();
+  expect(screen.getByText("Failed：測試讀取失敗")).toBeTruthy();
+});
+
+it("drops a queued retry on disconnect", async () => {
+  const test=setup(2);
+  await screen.findByRole("button",{name:/A <script>title/});
+  intersect(Array.from(document.querySelectorAll(".feed-item")).map(target=>({target,isIntersecting:true})) as IntersectionObserverEntry[],{} as IntersectionObserver);
+  test.fail();
+  fireEvent.click(await screen.findByRole("button",{name:"重試內文"}));
+  test.emit({type:"connection.changed",status:"disconnected"});
+  test.finish(2);
+  await screen.findByRole("button",{name:"重新登入"});
+  expect(test.client.getArticle).toHaveBeenCalledTimes(2);
+  expect(screen.queryByText("Secret body")).toBeNull();
+});
 it("uses safe text and returning stays on the feed when the shared article finishes", async () => {
   const test=setup();
   const item=await screen.findByRole("button",{name:/A <script>title/});

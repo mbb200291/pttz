@@ -6,6 +6,15 @@
 
 **Tech Stack:** Vanilla TypeScript、Vite、Vitest；無新UI框架。
 
+## 讀取佇列與刷新容錯修訂（2026-09-09）
+
+- [x] 先將本機 dev 合併至 Goal 12 feature branch，同步 core/browser 0.2.0 與 rules 0.2.x；保留 Goal 10 核心規則及既有 UI，不修改 dev/main。
+- [x] 先建立失敗回歸：重試與 viewport 共用 FIFO、同篇去重、立即呈現排隊／讀取狀態；失敗刷新不得清除可讀正文及展開狀態。
+- [x] 統一重試／展開／viewport 入口；失敗只由明確重試重新排隊，保留 partial，離頁／斷線停止尚未開始的請求。
+- [x] 刷新先等待不可取消的正文讀取結束；來源失敗或所有看板失敗保留舊串流，成功空結果正常替換，部分成功仍可讀並顯示錯誤。
+- [x] 補上單板 rejected promise 的失敗測試及處理，避免丟失其他成功看板。
+- [x] 更新既有 README／notes／implement，完整 verify 後同一 commit 提交實作與文件；保留分支與 worktree，不 push、不合併回 dev/main，不使用真實 PTT。
+
 ## 串流內文與緊湊排版修訂
 
 ### 原位討論與媒體（後續修訂）
