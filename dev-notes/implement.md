@@ -94,6 +94,8 @@ npm run verify    # tests + helper tests + build + lint + pack/example smoke
 
 ## 細節文件
 
+Goal 11 閱讀樣式預設繼承網站，僅投影作者明確 ANSI 樣式為可讀色盤；表格／ASCII 才預設等寬，手動原始排版恢復終端色彩。登入中斷保留 closed 並提示可能的重複連線上限，不自動踢除其他連線。
+
 Goal 11 閱讀呈現：完整文章以安全 ANSI SGR 分段保留色彩，量測原文自然行寬後依容器自動採原始行寬或換行；可手動鎖定原始排版並局部橫捲。媒體固定另列，不改核心解析規則。
 
 Goal 11 格式階段：core/browser/Web 0.3.0 新增獨立 ArticleTextStyle 範圍，支援文章高亮與 8 種前景色；browser 驗證後以編輯器控制序列傳送，Web 選字預覽且格式納入防重複寫入指紋。規則層維持 0.2.x，既有 ANSI 樣式的閱讀／重編輯 round-trip 尚未提供。

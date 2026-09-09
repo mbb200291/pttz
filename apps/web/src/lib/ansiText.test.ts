@@ -1,11 +1,34 @@
 import { describe, expect, it } from "vitest";
-import { parseAnsiText } from "./ansiText";
+import { parseAnsiText as parseWithAuthoredStyles } from "./ansiText";
+
+// Existing terminal-palette assertions remain independent of the authored-style projection.
+const parseAnsiText = (text: string) => {
+  const parsed = parseWithAuthoredStyles(text);
+  return { text: parsed.text, runs: parsed.runs.map(({ text, style }) => ({ text, style })) };
+};
 
 const normal = { color: "#aaaaaa", backgroundColor: "#000000", fontWeight: 400 };
 const palette = ["#000000", "#aa0000", "#00aa00", "#aa5500", "#0000aa", "#aa00aa", "#00aaaa", "#aaaaaa"];
 const bright = ["#555555", "#ff5555", "#55ff55", "#ffff55", "#5555ff", "#ff55ff", "#55ffff", "#ffffff"];
 
 describe("safe ANSI text projection", () => {
+  it("distinguishes implicit terminal defaults from explicitly authored white and black", () => {
+    const runs = parseWithAuthoredStyles("普通\x1b[37m白\x1b[40m黑底\x1b[39m預設字\x1b[49m預設底").runs;
+    expect(runs.map((run) => run.text)).toEqual(["普通", "白", "黑底", "預設字", "預設底"]);
+    expect(runs.map((run) => run.authoredStyle)).toEqual([
+      {}, { color: "#aaaaaa" }, { color: "#aaaaaa", backgroundColor: "#000000" }, { backgroundColor: "#000000" }, {},
+    ]);
+  });
+  it("resets authored colors without losing bold and resets all author styling with SGR zero", () => {
+    expect(parseWithAuthoredStyles("\x1b[1m亮\x1b[31;44m色\x1b[39;49m亮字\x1b[0m普通").runs.map((run) => run.authoredStyle)).toEqual([
+      { fontWeight: 700 }, { color: "#ff5555", backgroundColor: "#0000aa", fontWeight: 700 }, { fontWeight: 700 }, {},
+    ]);
+  });
+  it("keeps explicit reverse styling but returns to inherited defaults after inverse reset", () => {
+    expect(parseWithAuthoredStyles("\x1b[7m反白\x1b[27m普通").runs.map((run) => run.authoredStyle)).toEqual([
+      { color: "#000000", backgroundColor: "#aaaaaa" }, {},
+    ]);
+  });
   it("preserves literal HTML, tabs, whitespace, line breaks and Unicode", () => {
     const text = "  <img src=x onerror=alert(1)>\t中文😀\n  next\n";
     expect(parseAnsiText(text)).toEqual({ text, runs: [{ text, style: normal }] });

@@ -1,7 +1,13 @@
 import type { CSSProperties } from "react";
 import { ARTICLE_BRIGHT_COLORS, ARTICLE_COLORS } from "./articleFormatting";
 
-export interface AnsiTextRun { text: string; style: CSSProperties }
+export interface AnsiTextRun {
+  text: string;
+  /** Exact terminal colors, including implicit defaults, for manual original layout. */
+  style: CSSProperties;
+  /** Sparse author intent: default/reset colors inherit the website in normal reading. */
+  authoredStyle: CSSProperties;
+}
 export interface ParsedAnsiText { text: string; runs: AnsiTextRun[] }
 
 /** Projects a terminal transcript to inert text and allowlisted CSS, never HTML. */
@@ -9,6 +15,8 @@ export function parseAnsiText(text: string): ParsedAnsiText {
   const runs: AnsiTextRun[] = [];
   let foreground = 7;
   let background = 0;
+  let foregroundSpecified = false;
+  let backgroundSpecified = false;
   let bold = false;
   let reverse = false;
   const color = (index: number) => index >= 8 ? ARTICLE_BRIGHT_COLORS[index - 8] : ARTICLE_COLORS[index];
@@ -21,10 +29,16 @@ export function parseAnsiText(text: string): ParsedAnsiText {
       backgroundColor: reverse ? foregroundColor : backgroundColor,
       fontWeight: bold ? 700 : 400,
     };
+    const authoredStyle: CSSProperties = {
+      ...((foregroundSpecified || reverse) ? { color: style.color } : {}),
+      ...((backgroundSpecified || reverse) ? { backgroundColor: style.backgroundColor } : {}),
+      ...(bold ? { fontWeight: 700 } : {}),
+    };
     const last = runs[runs.length - 1];
-    if (last && last.style.color === style.color && last.style.backgroundColor === style.backgroundColor && last.style.fontWeight === style.fontWeight) {
+    if (last && last.style.color === style.color && last.style.backgroundColor === style.backgroundColor && last.style.fontWeight === style.fontWeight &&
+      last.authoredStyle.color === authoredStyle.color && last.authoredStyle.backgroundColor === authoredStyle.backgroundColor && last.authoredStyle.fontWeight === authoredStyle.fontWeight) {
       last.text += value;
-    } else runs.push({ text: value, style });
+    } else runs.push({ text: value, style, authoredStyle });
   };
   const sgr = (parameters: string) => {
     // Private/intermediate/colon syntax is unsupported; do not guess its meaning.
@@ -32,17 +46,17 @@ export function parseAnsiText(text: string): ParsedAnsiText {
     const codes = parameters.split(";").map(Number);
     for (let index = 0; index < codes.length; index++) {
       const code = codes[index];
-      if (code === 0) { foreground = 7; background = 0; bold = false; reverse = false; }
+      if (code === 0) { foreground = 7; background = 0; foregroundSpecified = false; backgroundSpecified = false; bold = false; reverse = false; }
       else if (code === 1) bold = true;
       else if (code === 22) bold = false;
       else if (code === 7) reverse = true;
       else if (code === 27) reverse = false;
-      else if (code >= 30 && code <= 37) foreground = code - 30;
-      else if (code >= 90 && code <= 97) foreground = code - 90 + 8;
-      else if (code === 39) foreground = 7;
-      else if (code >= 40 && code <= 47) background = code - 40;
-      else if (code >= 100 && code <= 107) background = code - 100 + 8;
-      else if (code === 49) background = 0;
+      else if (code >= 30 && code <= 37) { foreground = code - 30; foregroundSpecified = true; }
+      else if (code >= 90 && code <= 97) { foreground = code - 90 + 8; foregroundSpecified = true; }
+      else if (code === 39) { foreground = 7; foregroundSpecified = false; }
+      else if (code >= 40 && code <= 47) { background = code - 40; backgroundSpecified = true; }
+      else if (code >= 100 && code <= 107) { background = code - 100 + 8; backgroundSpecified = true; }
+      else if (code === 49) { background = 0; backgroundSpecified = false; }
       else if (code === 38 || code === 48 || code === 58) {
         // Extended colors are outside the whitelist, including their numeric operands.
         const mode = codes[index + 1];

@@ -1,5 +1,11 @@
 # Goal 11 實作紀錄
 
+## 網站閱讀樣式優先
+
+保留 parser 原始終端 style，另以 authoredStyle 表示作者明確設定；SGR reset 與未指定顏色恢復網站繼承。預設無黑底框、一般文章採網站字體，作者顏色以深色網站可讀色盤映射。原始排版手動啟用才使用 raw style、黑底、等寬與固定行寬。多行表格／ASCII 以保守啟發式辨識，整篇採等寬，不承諾精準區塊辨識。新增明確設定／reset、樣式映射、表格判定與模式切換回歸測試。
+
+最終完整 verify：core 372、browser 189、Web 270，含新增可讀調色盤 256 種前景／背景組合對比至少 4.5 的檢查；輔助 11、build、lint 與 package smoke 通過。離線瀏覽器確認普通文使用 Inter／Noto Sans TC 網站字體、容器背景 transparent，只有作者指定紅色的中段帶 rgb(242,139,130)，前後原文不指定色彩。既有寬度量測與手動鎖定測試持續通過。
+
 ## 保留其他連線後 closed 的排查
 
 查核 [PTT 官方 mbbsd.c / multi_user_check](https://github.com/ptt/pttbbs/blob/961c62394f095762b554d394e2bce13e38b95c13/mbbsd/mbbsd.c#L379)：選 n 且 getotherlogin(3) 非空時，直接 abort_bbs；選 y 的刪除迴圈則以 getotherlogin(3) 為繼續條件，不保證清除全部其他連線。此行為可以解釋使用者描述，但沒有這次現場終端資料，不能斷言此次斷線就是達上限。未使用真站帳密、未踢除連線。
