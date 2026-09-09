@@ -501,6 +501,18 @@ describe("PttzzzClient article reads", () => {
 });
 
 describe("PttzzzClient writes", () => {
+  it("rejects invalid article styles before gateway writes and preserves valid formatting", async () => {
+    const gateway = new MemoryGateway();
+    const client = new PttzzzClient(gateway);
+    const invalid = { content: "abc", formatting: [{ start: 0, end: 20, bold: true }] };
+    expect(await client.createArticle({ board: "Test", title: "title", ...invalid })).toMatchObject({ ok: false });
+    expect(await client.editArticle({ article: indexKey, ...invalid })).toMatchObject({ ok: false });
+    expect(await client.replyArticleToBoard({ article: indexKey, ...invalid })).toMatchObject({ ok: false });
+    expect(gateway.commands).toHaveLength(0);
+    const formatting = [{ start: 0, end: 2, bold: true }];
+    await client.createArticle({ board: "Test", title: "title", content: "abc", formatting });
+    expect(gateway.commands[0]).toMatchObject({ content: "abc", formatting });
+  });
   it("maps every article-level write to one gateway command", async () => {
     const gateway = new MemoryGateway();
     const client = new PttzzzClient(gateway);

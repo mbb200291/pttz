@@ -1,3 +1,4 @@
+import { articleTextRuns } from "@pttzzz/core";
 import {
   GatewayError,
   type ActionReceipt,
@@ -327,6 +328,12 @@ export class BrowserPttGateway implements PttGateway {
   }
 
   async execute(command: PttCommand): Promise<ActionReceipt> {
+    if (command.type === "create-article" || command.type === "edit-article" || command.type === "reply-article-to-board") {
+      try { articleTextRuns(command.content, command.formatting); }
+      catch (error) {
+        return { ok: false, code: "INVALID_INPUT", message: error instanceof Error ? error.message : "文章格式無效", outcome: "not-sent", retryable: false };
+      }
+    }
     if (command.type === "edit-floor" && (!Number.isInteger(command.floor) || command.floor <= 0)) {
       return {
         ok: false,
@@ -627,6 +634,7 @@ function terminalGatewayDriver(driver: GatewayTerminalDriver): BrowserGatewayDri
             command.category ?? "",
             command.title,
             command.content,
+            command.formatting,
           ));
         case "withdraw-floor": {
           if (!command.ranges.length || command.ranges.some(({ start, end }) =>

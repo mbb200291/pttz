@@ -6,6 +6,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { articleTextRuns, type ArticleTextStyle } from "@pttzzz/core";
+import { applyArticleStyle, rebaseArticleStyles, ARTICLE_COLORS, ARTICLE_BRIGHT_COLORS } from "../lib/articleFormatting";
 import { RichContent } from "./RichContent";
 import { uploadToImgur } from "../lib/imgur";
 import {
@@ -21,6 +23,7 @@ export interface ComposePayload {
   category: string;
   title: string;
   body: string;
+  formatting?: readonly ArticleTextStyle[];
 }
 
 interface ComposeScreenProps {
@@ -80,7 +83,19 @@ export function ComposeScreen({
   const [board, setBoard] = useState(initial?.board ?? "");
   const [category, setCategory] = useState(initial?.category ?? "");
   const [title, setTitle] = useState(initial?.title ?? "");
-  const [body, setBody] = useState(initial?.body ?? "");
+  const [draft, setDraft] = useState<{ body: string; formatting: ArticleTextStyle[] }>({ body: (initial?.body ?? "").replace(/\x1b\[[0-9;]*[A-Za-z]/g, ""), formatting: [] });
+  const { body, formatting } = draft;
+  const formattedPreview = useMemo(() => {
+    try { return { runs: articleTextRuns(body, formatting), error: "" }; }
+    catch (error) { return { runs: [], error: error instanceof Error ? error.message : "格式無效" }; }
+  }, [body, formatting]);
+  const setBody = useCallback((value: string | ((previous: string) => string)) => {
+    setDraft((previous) => {
+      const next = typeof value === "function" ? value(previous.body) : value;
+      return { body: next, formatting: rebaseArticleStyles(previous.body, next, previous.formatting) };
+    });
+  }, []);
+  const [formatMessage, setFormatMessage] = useState("");
   const [preview, setPreview] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -90,6 +105,19 @@ export function ComposeScreen({
 
   const draftTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const applyStyle = (style: Omit<ArticleTextStyle, "start" | "end">) => {
+    const input = bodyRef.current;
+    if (!input || input.selectionStart === input.selectionEnd) { setFormatMessage("請先選取要套用格式的文字"); return; }
+    const start = input.selectionStart, end = input.selectionEnd;
+    const existing = formatting.find((range) => range.start <= start && range.end >= end);
+    const combined = Object.keys(style).length ? { ...(existing ? { bold: existing.bold, color: existing.color } : {}), ...style } : {};
+    const next = applyArticleStyle(formatting, start, end, combined);
+    try { articleTextRuns(body, next); }
+    catch (error) { setFormatMessage(error instanceof Error ? error.message : "格式無效"); return; }
+    setDraft({ body, formatting: next });
+    setFormatMessage("格式已套用；可切換預覽檢查。修改選取內容會清除該範圍格式。");
+    input.focus(); input.setSelectionRange(start, end);
+  };
   const fileInputRef = useRef<HTMLInputElement>(null);
   const categories = useMemo(() => {
     const resolved = resolveBoardCategoryOptions(board, categoryOptions);
@@ -119,14 +147,14 @@ export function ComposeScreen({
     };
   }, [title, body]);
 
-  const canSubmit = title.trim() !== "" && body.trim() !== "";
-  const currentPayload = { board, category, title, body };
+  const canSubmit = title.trim() !== "" && body.trim() !== "" && !formattedPreview.error;
+  const currentPayload = { board, category, title, body, ...(formatting.length ? { formatting } : {}) };
   const currentSubmitLocked = submitLocked || Boolean(isSubmitLocked?.(currentPayload));
 
   const handleSubmit = useCallback(() => {
     if (!canSubmit || submitting || currentSubmitLocked) return;
-    onSubmit({ board, category, title, body });
-  }, [canSubmit, submitting, currentSubmitLocked, onSubmit, board, category, title, body]);
+    onSubmit({ board, category, title, body, ...(formatting.length ? { formatting } : {}) });
+  }, [canSubmit, submitting, currentSubmitLocked, onSubmit, board, category, title, body, formatting]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -180,24 +208,6 @@ export function ComposeScreen({
   };
 
   // Toolbar action helpers
-  const wrapSelection = (prefix: string, suffix: string, emptyPlaceholder: string) => {
-    const el = bodyRef.current;
-    if (!el) return;
-    applyTextTransform(
-      el,
-      (selected, before, after) => {
-        const inner = selected || emptyPlaceholder;
-        const wrapped = prefix + inner + suffix;
-        return {
-          text: before + wrapped + after,
-          selStart: before.length + prefix.length,
-          selEnd: before.length + prefix.length + inner.length,
-        };
-      },
-      setBody,
-    );
-  };
-
   const prefixLines = (prefix: string) => {
     const el = bodyRef.current;
     if (!el) return;
@@ -636,7 +646,12 @@ export function ComposeScreen({
             </span>
           </div>
 
-          {/* Markdown toolbar + body */}
+          <p style={{ color: "var(--text-dim)", fontSize: 12 }}>
+            選取文字可套用 PTT 高亮及文字色彩；斜體／刪除線不支援。既有文章目前以純文字載入，編輯不保留原色碼。
+          </p>
+          <p role="status" style={{ color: "var(--text-dim)", fontSize: 12 }}>{formatMessage}</p>
+          {formattedPreview.error && <p role="alert">{formattedPreview.error}</p>}
+          {/* PTT formatting toolbar + body */}
           {!preview ? (
             <>
               {/* Toolbar */}
@@ -645,6 +660,7 @@ export function ComposeScreen({
                   display: "flex",
                   alignItems: "center",
                   gap: 4,
+                  flexWrap: "wrap",
                   padding: "6px 10px",
                   background: "var(--surface)",
                   borderTop: `1px solid ${bodyFocused ? "var(--accent-border)" : "var(--border)"}`,
@@ -656,28 +672,19 @@ export function ComposeScreen({
               >
                 <button
                   type="button"
-                  onClick={() => wrapSelection("**", "**", "粗體")}
+                  onClick={() => applyStyle({ bold: true })}
                   style={{ ...toolbarBtnStyle, fontWeight: 700 }}
-                  title="粗體"
+                  title="高亮／粗體"
+                  aria-label="高亮／粗體"
                 >
                   B
                 </button>
-                <button
-                  type="button"
-                  onClick={() => wrapSelection("_", "_", "斜體")}
-                  style={{ ...toolbarBtnStyle, fontStyle: "italic" }}
-                  title="斜體"
-                >
-                  I
-                </button>
-                <button
-                  type="button"
-                  onClick={() => wrapSelection("~~", "~~", "刪除線")}
-                  style={{ ...toolbarBtnStyle, textDecoration: "line-through" }}
-                  title="刪除線"
-                >
-                  S
-                </button>
+                <select aria-label="PTT 文字顏色" value="" style={toolbarBtnStyle}
+                  onChange={(event) => applyStyle({ color: Number(event.target.value) as ArticleTextStyle["color"] })}>
+                  <option value="" disabled>文字顏色</option>
+                  {["黑", "紅", "綠", "黃", "藍", "紫", "青", "白"].map((name, index) => <option key={name} value={30 + index}>{name}</option>)}
+                </select>
+                <button type="button" onClick={() => applyStyle({})} style={toolbarBtnStyle}>清除格式</button>
 
                 {/* Separator */}
                 <span
@@ -845,7 +852,9 @@ export function ComposeScreen({
                 color: "var(--text)",
               }}
             >
-              <RichContent text={body} variant="body" />
+              {formatting.length ? <pre aria-label="PTT 格式預覽" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontFamily: "var(--font-mono)", background: "#000", color: "#aaa", padding: 12 }}>
+                {formattedPreview.runs.map((run, index) => <span key={index} style={{ fontWeight: run.bold ? 700 : 400, color: (run.bold ? ARTICLE_BRIGHT_COLORS : ARTICLE_COLORS)[(run.color ?? 37) - 30] }}>{run.text}</span>)}
+              </pre> : <RichContent text={body} variant="body" />}
             </div>
           )}
 

@@ -242,11 +242,13 @@ export interface ListArticlesInput { board: string; cursor?: string; limit?: num
 export interface SearchArticlesInput { board: string; query: string; cursor?: string; limit?: number }
 export interface FilterArticlesInput { board: string; author?: string; keyword?: string; minimumNativeScore?: number; cursor?: string; limit?: number }
 export interface GetArticleInput { article: ArticleKey; includeDebugMetadata?: boolean }
-export interface CreateArticleInput { board: string; category?: string; title: string; content: string }
-export interface EditArticleInput { article: ArticleKey; content: string }
+/** Presentation offsets are UTF-16, start-inclusive/end-exclusive, not reply-edit indices. */
+export interface ArticleTextStyle { start: number; end: number; bold?: boolean; color?: 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 }
+export interface CreateArticleInput { board: string; category?: string; title: string; content: string; formatting?: readonly ArticleTextStyle[] }
+export interface EditArticleInput { article: ArticleKey; content: string; formatting?: readonly ArticleTextStyle[] }
 export interface DeleteArticleInput { article: ArticleKey }
 export interface ReplyToArticleInput { article: ArticleKey; content: string; pushType: PushType }
-export interface ReplyArticleToBoardInput { article: ArticleKey; content: string }
+export interface ReplyArticleToBoardInput { article: ArticleKey; content: string; formatting?: readonly ArticleTextStyle[] }
 export interface ReplyToReplyInput { article: ArticleKey; replyId: ReplyId; content: string; pushType: PushType }
 export interface SectionChange { start: number; end: number; replacement: string }
 export type EditReplyInput =
@@ -271,11 +273,11 @@ export type GatewayEvent =
   | { type: "article.source"; source: RawArticleSource };
 
 export type PttCommand =
-  | { type: "create-article"; board: string; category?: string; title: string; content: string }
-  | { type: "edit-article"; article: ArticleKey; content: string }
+  | ({ type: "create-article" } & CreateArticleInput)
+  | ({ type: "edit-article" } & EditArticleInput)
   | { type: "delete-article"; article: ArticleKey }
   | { type: "reply-article"; article: ArticleKey; content: string; pushType: PushType }
-  | { type: "reply-article-to-board"; article: ArticleKey; content: string }
+  | ({ type: "reply-article-to-board" } & ReplyArticleToBoardInput)
   | { type: "reply-floor"; article: ArticleKey; floor: number; content: string; pushType: PushType }
   | { type: "edit-floor"; article: ArticleKey; floor: number; mode: "append" | "replace"; content: string }
   | { type: "edit-floor"; article: ArticleKey; floor: number; mode: "section"; changes: readonly SectionChange[] }

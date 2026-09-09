@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import type { ArticleKey, PttCommand, PttGateway } from "@pttzzz/core";
+import { PttzzzClient, type ArticleKey, type PttCommand, type PttGateway } from "@pttzzz/core";
+import { stripAnsi } from "@pttzzz/core/internal";
 import { createFakeBrowserGateway } from "./testing.js";
 import {
   BrowserPttGateway,
@@ -215,6 +216,60 @@ function runGatewayContract(name: string, harness: ContractHarness): void {
 
 for (const [name, harness] of harnesses) runGatewayContract(name, harness);
 
+it("stores formatted fake create/edit/reply as ANSI with a lossless plain text projection", async () => {
+  localStorage.clear();
+  const gateway = createFakeBrowserGateway();
+  const client = new PttzzzClient(gateway);
+  await client.connect();
+  await client.login({ username: "opUser", password: "fake" });
+  const formatting = [{ start: 0, end: 3, color: 31 as const, bold: true }];
+  const key = { board: "test", index: 1001 };
+  for (const command of [
+    { type: "create-article", board: "test", title: "formatted", content: "red text", formatting },
+    { type: "edit-article", article: key, content: "red edit", formatting },
+    { type: "reply-article-to-board", article: key, content: "red reply", formatting },
+  ] satisfies PttCommand[]) {
+    await expect(gateway.execute(command)).resolves.toEqual({ ok: true, outcome: "sent" });
+    const page = await client.listArticles({ board: "test" });
+    expect(page.ok).toBe(true);
+    if (!page.ok) throw new Error("missing list");
+    const target = command.type === "edit-article" ? key : page.value.items[0].key;
+    const sources = [];
+    for await (const source of gateway.readArticle({ article: target })) sources.push(source);
+    expect(sources.at(-1)?.rawText).toContain("\x1b[0;1;31mred\x1b[0m");
+    expect(sources.at(-1)?.rawText).not.toContain("\x15");
+    const article = await client.getArticle({ article: target });
+    expect(article.ok).toBe(true);
+    if (!article.ok) throw new Error("missing article");
+    // The public body preserves source ANSI; the reference UI strips it for plain reading.
+    expect(stripAnsi(article.value.body)).toContain(command.content);
+    expect(article.value.body).not.toContain("\x15");
+  }
+  await client.disconnect();
+});
+
+it("rejects caller terminal controls before mutating formatted fake storage", async () => {
+  localStorage.clear();
+  const gateway = createFakeBrowserGateway();
+  await gateway.login({ username: "opUser", password: "fake" });
+  const before = localStorage.getItem("pttzzz_fake_ptt_store_v1");
+  await expect(gateway.execute({ type: "create-article", board: "test", title: "unsafe", content: "red\x15[31m", formatting: [{ start: 0, end: 3, color: 31 }] }))
+    .resolves.toMatchObject({ ok: false, code: "INVALID_INPUT", outcome: "not-sent" });
+  expect(localStorage.getItem("pttzzz_fake_ptt_store_v1")).toBe(before);
+  await gateway.disconnect();
+});
+
+it.each(["edit-article", "reply-article-to-board"] as const)("rejects formatted blank fake %s before storage changes", async (type) => {
+  localStorage.clear();
+  const gateway = createFakeBrowserGateway();
+  await gateway.login({ username: "opUser", password: "fake" });
+  const before = localStorage.getItem("pttzzz_fake_ptt_store_v1");
+  await expect(gateway.execute({ type, article: { board: "test", index: 1001 }, content: "   ", formatting: [{ start: 0, end: 3, bold: true }] }))
+    .resolves.toMatchObject({ ok: false, outcome: "not-sent" });
+  expect(localStorage.getItem("pttzzz_fake_ptt_store_v1")).toBe(before);
+  await gateway.disconnect();
+});
+
 function supplementalTerminal() {
   const methods = {
     getStatus: () => "connected" as const,
@@ -272,13 +327,27 @@ describe("real terminal gateway supplemental contract", () => {
     });
     await gateway.execute({ type: "edit-article", article: key, content: "new" });
     await gateway.execute({ type: "reply-article-to-board", article: key, content: "response" });
-    expect(methods.postArticle).toHaveBeenCalledWith("Test", "問卦", "title", "body");
+    expect(methods.postArticle).toHaveBeenCalledWith("Test", "問卦", "title", "body", undefined);
     expect(methods.executeArticleCommand).toHaveBeenNthCalledWith(1, {
       type: "edit-article", article: key, content: "new",
     });
     expect(methods.executeArticleCommand).toHaveBeenNthCalledWith(2, {
       type: "reply-article-to-board", article: key, content: "response",
     });
+  });
+
+  it("preserves optional article formatting through create, edit and board-reply dispatch", async () => {
+    const { methods, driver } = supplementalTerminal();
+    const gateway = new BrowserPttGateway(createTerminalGatewayDriverForTesting(driver));
+    const article = { board: "Test", index: 12 };
+    const formatting = [{ start: 0, end: 2, bold: true, color: 31 as const }];
+    await gateway.execute({ type: "create-article", board: "Test", title: "title", content: "body", formatting });
+    expect(methods.postArticle).toHaveBeenCalledWith("Test", "", "title", "body", formatting);
+    for (const type of ["edit-article", "reply-article-to-board"] as const) {
+      const command = { type, article, content: "body", formatting };
+      await gateway.execute(command);
+      expect(methods.executeArticleCommand).toHaveBeenLastCalledWith(command);
+    }
   });
 
   it("routes native author and combined author/title searches", async () => {

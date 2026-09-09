@@ -1,4 +1,16 @@
-# Goal 11 第一階段實作紀錄
+# Goal 11 實作紀錄
+
+## PTT 相容文字格式（0.3）
+
+先合併本機 dev（e93e4ac），再新增發文／編輯／回應文章的獨立格式範圍。Core 與 browser 驗證 UTF-16 範圍、重疊、代理字元邊界、控制字元及大小；只接受高亮與前景色 30–37。browser 確認編輯器後以 Ctrl+U 插入受控 SGR，每段結尾重設。普通文字傳送維持原行為，無效格式不得產生終端寫入。
+
+Compose 提供選字高亮、顏色、清除與安全 React 預覽；格式納入寫入指紋。預覽驗證失敗顯示錯誤並禁送，避免超長或含控制字元的草稿造成整頁崩潰。文字更動採最小差異調整範圍，不是完整富文字編輯模型。現有閱讀 UI 仍移除 ANSI，重新編輯由純文字開始，不承諾舊樣式 round-trip；核心正文資料本身仍可能保留 ANSI。
+
+Core、browser、Web 升至 0.3.0；白皮書規則仍為 0.2.x，未改 spec 或 fixture。完整 verify：core 372、browser 189、Web 228，加上 11 項輔助測試，build、lint（0 errors，3 個既有 warnings）、package smoke 通過。獨立審查複驗相關 24 項測試通過，無 Important blocker。格式傳送由 fake 與終端 transcript 測試驗證，沒有真站發文／回文。手動瀏覽器只確認離線頁面可載入，未完成編輯器視覺驗收，不將其記為通過。
+
+依 [PTT edit.c](https://github.com/ptt/pttbbs/blob/master/mbbsd/edit.c) 的 Ctrl+U 插入 ESC 行為實作；文字選取介面參考 [MDN textarea setRangeText](https://developer.mozilla.org/en-US/docs/Web/API/HTMLTextAreaElement/setRangeText)。
+
+## 第一階段（歷史紀錄）
 
 本階段僅修改 Web 介面：列表鍵盤導覽、返回焦點、正文空白保存與原始排版切換。PTT 格式編輯尚未實作，core/browser 契約與寫入格式不變。
 

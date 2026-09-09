@@ -94,6 +94,8 @@ npm run verify    # tests + helper tests + build + lint + pack/example smoke
 
 ## 細節文件
 
+Goal 11 格式階段：core/browser/Web 0.3.0 新增獨立 ArticleTextStyle 範圍，支援文章高亮與 8 種前景色；browser 驗證後以編輯器控制序列傳送，Web 選字預覽且格式納入防重複寫入指紋。規則層維持 0.2.x，既有 ANSI 樣式的閱讀／重編輯 round-trip 尚未提供。
+
 Goal 11 後續：Web 文章統計合併為核心校正票數操作列；首頁加入空間方向鍵導覽，文章 X／R 與看板 Ctrl+P 僅開啟既有編輯器。browser 最新頁讀取重新定位終端，舊頁排除重疊／置底並推進游標；useBoard 同步請求鎖與 generation 保護刷新、載入更多及快取重驗證。詳見 [Goal 11 實作紀錄](goal-11-implementation-notes.md)。
 
 - [Goal 9 architecture design](goal-9-core-architecture-design.md)

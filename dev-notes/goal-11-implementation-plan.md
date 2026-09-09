@@ -6,7 +6,17 @@
 
 **Tech Stack:** React、TypeScript、Vitest、Testing Library、原生鍵盤與 CSS white-space。
 
-## 後續：統計整合、分頁與快捷鍵
+## 已批准下一階段：PTT 相容文字格式
+
+設計：正文保持普通文字，另附依 JavaScript UTF-16 左含右不含索引定位的非重疊格式範圍；只支援高亮與 8 種前景色。Core 驗證範圍／控制字元，browser 在已確認編輯器中將受控 SGR 以 Ctrl+U 插入 ESC 後送出。UI 選字套用格式，預覽同一份範圍；修改碰到的範圍清除、後方範圍平移。不將 Markdown 轉成終端命令，不宣稱斜體／刪除線支援。本階段既有文章讀取仍為純文字，編輯不承諾保留原 ANSI 樣式。
+
+- [x] `packages/core/src/articleFormatting.test.ts` 測合法樣式、多行、重疊／超界／代理字元邊界／控制字元拒絕；新增公開型別、驗證及文字分段 helper。`client.test.ts` 驗證非法格式不送 gateway。
+- [x] browser 新增 `articleFormatting` 編碼測試：受控 ESC 轉 Ctrl+U，普通文字不變，unsupported／控制字元不送；串接發文／編輯／文章回應，未確認 editor 不送 formatted body。補終端傳送回歸。
+- [x] Web 新增格式範圍編輯 helper 測試與 ComposeScreen 整合測試；選字高亮／顏色／清除、預覽及 payload 一致；App 傳遞 formatting，寫入不確定狀態鎖仍有效。
+- [x] 更新 core/browser/UI 文件與 notes，完整 verify 與獨立審查；規則層不改，不 merge/push、不真站發文。程式與文件同批提交。
+- [ ] 手動編輯器視覺驗收：本次離線瀏覽器僅確認頁面載入；格式互動由元件整合測試覆蓋，不能替代視覺驗收。
+
+## 已完成：統計整合、分頁與快捷鍵
 
 - [x] 以 hook／gateway 回歸測試重現重複刷新後置底文章消失、提早顯示最舊、游標覆蓋與請求競態；修正根因，保留錯誤與可重試狀態。
 - [x] 統計呈現提案：合併為一列可操作推噓按鈕（核心 articleVotes）、聚合回覆數與回覆此文；移除重複原生統計，不改動 vote handlers 與權限限制。

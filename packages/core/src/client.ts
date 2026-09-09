@@ -1,3 +1,4 @@
+import { articleTextRuns } from "./articleFormatting.js";
 import {
   GatewayError,
   articleKeyId,
@@ -545,6 +546,12 @@ export class PttzzzClient {
   }
 
   private async write(command: PttCommand): Promise<Result<void>> {
+    if (command.type === "create-article" || command.type === "edit-article" || command.type === "reply-article-to-board") {
+      try { articleTextRuns(command.content, command.formatting); }
+      catch (error) {
+        return fail({ code: "INVALID_INPUT", message: error instanceof Error ? error.message : "文章格式無效", retryable: false, outcome: "not-sent" });
+      }
+    }
     let receipt: ActionReceipt;
     try {
       receipt = await this.gateway.execute(command);

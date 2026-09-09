@@ -32,6 +32,14 @@ function driver(overrides: Partial<BrowserGatewayDriver> = {}): BrowserGatewayDr
 }
 
 describe("BrowserPttGateway", () => {
+  it.each(["create-article", "edit-article", "reply-article-to-board"] as const)("rejects malformed %s formatting before terminal dispatch", async (type) => {
+    const transport = driver();
+    const gateway = new BrowserPttGateway(transport);
+    const input = { content: "abc", formatting: [{ start: 0, end: 20, bold: true }] };
+    const command: PttCommand = type === "create-article" ? { type, board: "Test", title: "title", ...input } : { type, article: articleByIndex, ...input };
+    await expect(gateway.execute(command)).resolves.toMatchObject({ ok: false, code: "INVALID_INPUT", outcome: "not-sent" });
+    expect(transport.execute).not.toHaveBeenCalled();
+  });
   it("translates object login input and status events, and unsubscribes", async () => {
     let statusListener: ((status: "connected") => void) | undefined;
     const unsubscribe = vi.fn();

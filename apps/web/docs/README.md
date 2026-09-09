@@ -1,6 +1,6 @@
 # pttzzz Web
 
-目前版本為 `@pttzzz/web-example` `0.2.0`，相依與規則支援範圍見 [package.json](../package.json)。本介面使用 React、Zustand 與 Vite；核心整合方式見 [Building a UI with @pttzzz/core](../../../packages/core/docs/DEVELOPMENT_GUIDE.md)。
+目前版本為 `@pttzzz/web-example` `0.3.0`，相依與規則支援範圍見 [package.json](../package.json)。本介面使用 React、Zustand 與 Vite；核心整合方式見 [Building a UI with @pttzzz/core](../../../packages/core/docs/DEVELOPMENT_GUIDE.md)。
 
 本文件記錄 `apps/web` 介面層的呈現取捨與開發細節。核心提供的原始回覆對象與定位是權威資料；呈現規則只改變視覺層級，不改寫核心語意。
 
@@ -15,7 +15,9 @@
 - 文章開啟後閱讀區取得焦點，← 返回並恢復先前文章列焦點；輸入框、編輯區、彈窗、IME 與修飾鍵不被列表快捷鍵攔截。
 - 正文預設自動換行並預覽媒體；「原始排版」保留空白、換行與等寬排列，超寬內容在區塊內水平捲動。圖片與影片另列於原文之後，不取代表格裡的網址。
 - 原始排版保留的是核心提供的正文，不重建 PTT 終端，也不將 ASCII 猜成 HTML 表格。載入中的正文先保留原始排版。
-- PTT 相容的粗體／顏色編輯仍是後續階段，不能把現有 Markdown 標記視為 PTT 已支援的格式。
+- 0.3 支援發文、文章編輯與回應文章的選字高亮／粗體、8 種前景色、清除格式與預覽。格式獨立於正文傳遞，不把 Markdown 斜體／刪除線當成 PTT 格式，也不套用到單行推文。
+- 此版閱讀介面仍移除 ANSI 樣式；重新編輯既有文章會以純文字開始，不保證保留舊顏色。編輯碰到格式範圍時清除該範圍，後方範圍平移；重複文字的差異定位不等同完整富文字編輯器。
+- 格式錯誤在預覽顯示提示並阻止送出；核心與 browser 也獨立驗證。送出不確定時的防重複指紋包含格式。
 
 ### 文章統計與列表刷新
 

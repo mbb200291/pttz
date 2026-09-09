@@ -18,14 +18,14 @@ describe("three-layer version compatibility", () => {
 
     expect(whitepaper).toContain("> 規則版本：0.2.0");
     expect(fixtures).toMatchObject({ specVersion: "0.2.0" });
-    expect(core).toMatchObject({ version: "0.2.0", pttzzz: { rules: "0.2.x" } });
+    expect(core).toMatchObject({ version: "0.3.0", pttzzz: { rules: "0.2.x" } });
     expect(browser).toMatchObject({
-      version: "0.2.0",
-      pttzzz: { core: "^0.2.0", rules: "0.2.x" },
+      version: "0.3.0",
+      pttzzz: { core: "^0.3.0", rules: "0.2.x" },
     });
     expect(web).toMatchObject({
-      version: "0.2.0",
-      pttzzz: { browser: "^0.2.0", core: "^0.2.0", rules: "0.2.x" },
+      version: "0.3.0",
+      pttzzz: { browser: "^0.3.0", core: "^0.3.0", rules: "0.2.x" },
     });
   });
 });
