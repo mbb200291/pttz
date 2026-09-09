@@ -26,7 +26,7 @@ const previewRuns = articleTextRuns(draft.content, draft.formatting);
 - Do not silently reuse offsets after editing. The reference UI removes intersected styles and shifts later ranges using a minimal text diff; repeated identical characters can make the inferred edit boundary ambiguous.
 - Include formatting in uncertain-write fingerprints. A failed or uncertain write must not automatically retry.
 - Use matching 0.3+ core and gateway implementations; older gateways may ignore unknown fields. No formatting is supported for one-line pushes, reply votes, or reply edits.
-- Reading is unchanged: `Article.body` can contain source ANSI; the Web reader strips it for plain-text display. The reference editor strips existing ANSI and warns that old colors are not retained. This release is not a full ANSI round-trip editor.
+- `Article.body` can contain source ANSI. The Web reader safely projects allowlisted SGR colors and intensity into styled text and adapts wrapping to its container. The reference editor still strips existing ANSI and warns that old colors are not retained. This release is not a full ANSI round-trip editor.
 
 ## Layer model
 

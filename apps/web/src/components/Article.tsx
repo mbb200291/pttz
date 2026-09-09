@@ -163,8 +163,7 @@ function ArticleHeader({
 }
 
 function ArticleBody({ body }: { body: string }) {
-  const clean = body.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
-  return <RichContent text={clean} variant="body" />;
+  return <RichContent text={body} variant="body" />;
 }
 
 function LightweightArticleBody({ body }: { body: string }) {

@@ -1,5 +1,13 @@
 # Goal 11 實作紀錄
 
+## 自適應 ANSI 正文
+
+依使用者確認的規則調整：寬容器優先原文行寬，窄容器優先可讀性；兩者都解析顏色。AdaptiveArticleBody 使用絕對定位、隱藏、max-content 的同樣式正文量測，觀察其與容器的寬度並在字型就緒後重算。手動原始排版以 aria-pressed 明示，不被 resize 蓋過。CJK／全形字使用 2ch；特殊 emoji 與組合字不承諾完整終端格點還原。媒體固定另列，原文網址不移除。載入中輕量正文與重新編輯流程仍採原有純文字策略。
+
+ANSI parser 採 SGR 白名單，OSC、游標控制等只移除、不執行；React 文字節點防止 HTML 注入。16 項 parser 測試與新增容器縮放／手動鎖定／顏色保留測試先 RED 再 GREEN。完整 verify：core 372、browser 189、Web 246、輔助 11；build、lint（0 errors／3 既有 warnings）、package smoke 通過。獨立唯讀審查未見重大安全或 resize 問題。
+
+離線瀏覽器掛載實際 AdaptiveArticleBody 與彩色排名表：1280px 視窗容器 876px、原文約 491px，採 pre；390px 視窗容器 366px，採 pre-wrap 且頁面寬 390px。按原始排版後 pre、區塊 scrollWidth 491px，頁面仍 390px。未連線真 PTT。參考 [MDN ResizeObserver](https://developer.mozilla.org/en-US/docs/Web/API/ResizeObserver) 與 [white-space](https://developer.mozilla.org/en-US/docs/Web/CSS/white-space)；modern-web-guidance CLI 缺少離線快取，改查官方文件。
+
 ## PTT 相容文字格式（0.3）
 
 先合併本機 dev（e93e4ac），再新增發文／編輯／回應文章的獨立格式範圍。Core 與 browser 驗證 UTF-16 範圍、重疊、代理字元邊界、控制字元及大小；只接受高亮與前景色 30–37。browser 確認編輯器後以 Ctrl+U 插入受控 SGR，每段結尾重設。普通文字傳送維持原行為，無效格式不得產生終端寫入。

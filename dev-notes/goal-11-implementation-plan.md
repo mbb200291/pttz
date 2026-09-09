@@ -1,5 +1,14 @@
 # Goal 11 鍵盤與排版 Implementation Plan
 
+## 已批准：自適應 ANSI 正文
+
+正文採安全 SGR 樣式解析，不執行游標或任意控制碼；兩種排版均保留顏色。以隱藏且不影響布局的同字型正文量測自然行寬，ResizeObserver 觀察文章容器與量測節點。容器足夠採 pre，不足採 pre-wrap；手動「原始排版」強制 pre 加局部橫向捲動，再次點擊回到自動。媒體固定於正文下方，網址仍在正文，不因模式變動搬移。
+
+- [x] 新增 ANSI parser 測試後實作安全 SGR 分段。
+- [x] RichContent 測試寬／窄容器、縮放、手動鎖定、顏色與原文網址保存後實作 AdaptiveArticleBody；媒體固定另列。
+- [x] Article 不再移除完整正文 ANSI，保留 inline 回文現有呈現；更新文件。
+- [x] 執行完整 verify 與離線寬／窄視覺檢查，程式和文件同批提交 Goal 11，不 merge/push。
+
 **Goal:** 第一階段加入列表鍵盤導覽與原始排版切換；PTT 格式化編輯不在本階段。
 
 **Architecture:** 沿用 React 元件與既有 callback。鍵盤事件僅由聚焦的列表接收；正文切換只影響 CSS 與媒體呈現，不修改核心解析或發送資料。
