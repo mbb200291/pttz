@@ -38,6 +38,8 @@ interface ParsedPushIntent {
   editMode?: "append" | "replace" | "section" | "withdraw";
   sectionChanges?: SectionChange[];
   targetEndFloor?: number;
+  /** Relative references start a new structural segment, including fallbacks. */
+  relativeUpstairs?: boolean;
 }
 
 interface SectionChange {
@@ -386,7 +388,7 @@ function groupPushes(
     const cur = rawPushes[i];
 
     // Vote events must stay independent from adjacent discussion content.
-    if (cur.intent.isControl) {
+    if (cur.intent.isControl || cur.intent.relativeUpstairs) {
       groups.push({
         pushes: [cur],
         anchorOrder: cur.anchorOffset ?? i,
@@ -798,20 +800,43 @@ function applyPushEdits(pushes: ParsedRawPush[]): void {
 }
 
 function parseAndApplyPushEdits(rawPushes: AnchoredRawPush[]): ParsedRawPush[] {
-  const parsedPushes = rawPushes.map((push, index) => {
-    const intent = parsePushIntent(push.content);
-    return {
+  const parsedPushes: ParsedRawPush[] = [];
+  for (const [index, push] of rawPushes.entries()) {
+    const rawFloor = push.rawFloor ?? index + 1;
+    const previous = parsedPushes[index - 1];
+    // Match only explicit prefixes. Never interpret an edit command's payload.
+    const relative = /^\s*(?:推樓上(?=$|\s|[：:])|回樓上\s*[：:])/u.test(push.content);
+    let intent = parsePushIntent(push.content);
+    if (relative) {
+      if (previous && previous.rawFloor === rawFloor - 1 && !previous.intent.isControl) {
+        intent = parsePushIntent(push.content.replace(/樓上/u, `${previous.rawFloor}樓`));
+      }
+      intent.relativeUpstairs = true;
+    }
+    parsedPushes.push({
       ...push,
       commandOrder: index,
-      rawFloor: push.rawFloor ?? index + 1,
+      rawFloor,
       intent,
       originalContent: push.content,
       structuralContent: intent.visibleContent,
       withdrawn: false,
       editHistory: [],
-    };
-  });
+    });
+  }
   applyPushEdits(parsedPushes);
+  const byFloor = new Map(parsedPushes.map((push) => [push.rawFloor, push]));
+  for (const push of parsedPushes) {
+    if (!push.intent.relativeUpstairs || push.intent.targetFloor === undefined) continue;
+    if (!byFloor.get(push.intent.targetFloor)?.withdrawn) continue;
+    // Losing a target never redirects to another event. Keep edited text opaque.
+    const content = push.editHistory.length
+      ? push.intent.visibleContent
+      : push.originalContent;
+    push.intent = { kind: "plain", visibleContent: content, isControl: false, relativeUpstairs: true };
+    // Edit replay offsets refer to the original visible body, not its prefix.
+    if (!push.editHistory.length) push.structuralContent = push.originalContent;
+  }
   return parsedPushes;
 }
 

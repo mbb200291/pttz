@@ -8,8 +8,8 @@
     "build": "tsc --noEmit && vite build"
   },
   "dependencies": {
-    "@pttzzz/browser": "0.1.0",
-    "@pttzzz/core": "0.1.0",
+    "@pttzzz/browser": "0.2.0",
+    "@pttzzz/core": "0.2.0",
     "buffer": "^6.0.3"
   },
   "devDependencies": {

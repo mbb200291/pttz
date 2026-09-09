@@ -1,6 +1,6 @@
 # pttzzz Web
 
-目前版本為 `@pttzzz/web-example` `0.1.0`，相依與規則支援範圍見 [package.json](../package.json)。本介面使用 React、Zustand 與 Vite；核心整合方式見 [Building a UI with @pttzzz/core](../../../packages/core/docs/DEVELOPMENT_GUIDE.md)。
+目前版本為 `@pttzzz/web-example` `0.2.0`，相依與規則支援範圍見 [package.json](../package.json)。本介面使用 React、Zustand 與 Vite；核心整合方式見 [Building a UI with @pttzzz/core](../../../packages/core/docs/DEVELOPMENT_GUIDE.md)。
 
 本文件記錄 `apps/web` 介面層的呈現取捨與開發細節。核心提供的原始回覆對象與定位是權威資料；呈現規則只改變視覺層級，不改寫核心語意。
 
