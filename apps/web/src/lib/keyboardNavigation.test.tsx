@@ -2,7 +2,7 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { canUseShortcut, navigateList } from "./keyboardNavigation";
+import { canUseShortcut, navigateBoardGrid, navigateList } from "./keyboardNavigation";
 afterEach(cleanup);
 
 function setup() {
@@ -19,6 +19,22 @@ function setup() {
 }
 
 describe("scoped keyboard navigation", () => {
+  it.each(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"])("initializes an unfocused list on %s without activating/back", (key) => {
+    const { open, back, first } = setup();
+    fireEvent.keyDown(first.parentElement!, { key });
+    expect(first).toHaveFocus();
+    expect(open).not.toHaveBeenCalled();
+    expect(back).not.toHaveBeenCalled();
+  });
+  it("initializes a grid at the first enabled visible item", () => {
+    render(<div onKeyDown={navigateBoardGrid} data-testid="grid">
+      <button data-navigation-item disabled>Disabled</button>
+      <button data-navigation-item hidden>Hidden</button>
+      <button data-navigation-item>Available</button>
+    </div>);
+    fireEvent.keyDown(screen.getByTestId("grid"), { key: "ArrowLeft" });
+    expect(screen.getByText("Available")).toHaveFocus();
+  });
   it("guards command shortcuts from editing, dialogs, selection and modifiers", () => {
     const command = vi.fn();
     const { container } = render(<div onKeyDown={(event) => {

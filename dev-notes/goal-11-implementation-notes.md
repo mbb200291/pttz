@@ -1,5 +1,13 @@
 # Goal 11 實作紀錄
 
+## 鍵盤啟用與登出
+
+首頁／看板任一方向鍵首次啟用選取，不直接執行開文／返回；Z 開啟自訂推文門檻，原生輸入與彈窗保持優先。具體事件回歸包括 body 焦點、scope 內空白、已有選取的單次移動與卸載清理。
+
+首頁已登入狀態旁新增登出，使用現有 public client.disconnect，不送 PTT 踢人指令。成功後清除記憶體 credentials/recentBuffer/loginError，採獨立 logged_out 狀態呈現「已登出／重新登入」；若清理失敗則清除credentials但顯示未完成提示，避免宣稱成功。fake PTT 介面實測按登出後留在登出畫面，不自動重連。未使用真實 PTT 帳密。
+
+2026-09-10 驗證：完整 verify core 372、browser 189、Web 289 與輔助 11、build/lint/package smoke 通過；補上兩項背景 autofocus 防穿透測試後，重跑全部 Web 291、build 與 lint 通過（3 個既有 warnings）。瀏覽器 preview=board 從 body 按 ArrowLeft 只選到 #30215、未返回；Z 開啟自訂門檻。LoginModal 新增 dialog 語意，所有鍵盤入口與自動focus均阻擋跨層彈窗。參考 [MDN focus](https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/focus)；modern-web-guidance 缺少離線快取，改查官方文件。
+
 ## 網站閱讀樣式優先
 
 保留 parser 原始終端 style，另以 authoredStyle 表示作者明確設定；SGR reset 與未指定顏色恢復網站繼承。預設無黑底框、一般文章採網站字體，作者顏色以深色網站可讀色盤映射。原始排版手動啟用才使用 raw style、黑底、等寬與固定行寬。多行表格／ASCII 以保守啟發式辨識，整篇採等寬，不承諾精準區塊辨識。新增明確設定／reset、樣式映射、表格判定與模式切換回歸測試。

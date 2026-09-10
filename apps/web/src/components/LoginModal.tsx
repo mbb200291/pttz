@@ -33,6 +33,7 @@ export function LoginModal({ pttState, wsStatus }: Props) {
   const isSyncingUsers = pttState === "syncing_users";
   const isLoginRateLimited = pttState === "login_rate_limited";
   const isClosed = pttState === "closed";
+  const isLoggedOut = pttState === "logged_out";
 
   if (
     !isOpen &&
@@ -41,7 +42,7 @@ export function LoginModal({ pttState, wsStatus }: Props) {
     !isGuestOverload &&
     !isSyncingUsers &&
     !isLoginRateLimited &&
-    !isClosed
+    !isClosed && !isLoggedOut
   )
     return null;
 
@@ -94,6 +95,9 @@ export function LoginModal({ pttState, wsStatus }: Props) {
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={isLoggedOut ? "已登出" : "登入 PTT"}
       className="fixed inset-0 z-50 flex items-center justify-center"
       style={{
         background: "oklch(0 0 0 / 0.62)",
@@ -161,7 +165,7 @@ export function LoginModal({ pttState, wsStatus }: Props) {
             color: "var(--text-dim)",
           }}
         >
-          {isClosed || wsStatus === "closed" || wsStatus === "error" ? (
+          {isLoggedOut ? <span>● 已登出</span> : isClosed || wsStatus === "closed" || wsStatus === "error" ? (
             <span style={{ color: "var(--boo-fg)" }}>● 連線已中斷</span>
           ) : wsStatus === "connected" ? (
             <span style={{ color: "var(--push-fg)" }}>● 已連線</span>
@@ -193,6 +197,11 @@ export function LoginModal({ pttState, wsStatus }: Props) {
                 改用帳號登入
               </button>
             </div>
+          </div>
+        ) : isLoggedOut ? (
+          <div className="space-y-3">
+            <p>已登出 Pttzzz。本次連線已關閉，不影響其他 PTT 客戶端。</p>
+            <button type="button" style={primaryButtonStyle} className="w-full py-2.5" onClick={() => window.location.reload()}>重新登入</button>
           </div>
         ) : isClosed ? (
           <div className="space-y-3">

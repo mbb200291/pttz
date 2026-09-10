@@ -11,6 +11,53 @@ afterEach(() => {
 });
 
 describe("BoardInput", () => {
+  it("does not autofocus a background card while a sibling dialog is open", () => {
+    const dialog = document.createElement("div"); dialog.setAttribute("role", "dialog"); document.body.append(dialog);
+    try {
+      render(<BoardInput pttState="ready" wsStatus="connected" onEnter={() => {}} favoriteBoards={[]} popularBoards={[{ name: "One" }]} />);
+      expect(document.activeElement).toBe(document.body);
+    } finally { dialog.remove(); }
+  });
+  it("offers logout only for a ready session without entering a board", () => {
+    const logout = vi.fn(), open = vi.fn();
+    const { rerender } = render(<BoardInput pttState="ready" wsStatus="connected" onEnter={open} onLogout={logout} favoriteBoards={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "登出" }));
+    expect(logout).toHaveBeenCalledOnce();
+    expect(open).not.toHaveBeenCalled();
+    rerender(<BoardInput pttState="closed" wsStatus="closed" onEnter={open} onLogout={logout} favoriteBoards={[]} />);
+    expect(screen.queryByRole("button", { name: "登出" })).toBeNull();
+    rerender(<BoardInput pttState="ready" wsStatus="connected" onEnter={open} favoriteBoards={[]} />);
+    expect(screen.queryByRole("button", { name: "登出" })).toBeNull();
+  });
+  it.each(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"])("restarts selection from body with %s and handles each key once", (key) => {
+    const open = vi.fn();
+    const { unmount } = render(<BoardInput pttState="ready" wsStatus="connected" onEnter={open} favoriteBoards={[]}
+      popularBoards={[{ name: "One" }, { name: "Two" }]} />);
+    const first = screen.getByRole("button", { name: "One" });
+    (document.activeElement as HTMLElement).blur();
+    expect(fireEvent.keyDown(document.body, { key })).toBe(false);
+    expect(document.activeElement).toBe(first);
+    expect(open).not.toHaveBeenCalled();
+    fireEvent.keyDown(first, { key: "ArrowRight" });
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Two" }));
+    unmount();
+    expect(fireEvent.keyDown(document.body, { key })).toBe(true);
+  });
+  it("does not start body navigation during a dialog, selection, modifiers, composition or held key", () => {
+    render(<BoardInput pttState="ready" wsStatus="connected" onEnter={() => {}} favoriteBoards={[]} popularBoards={[{ name: "One" }]} />);
+    (document.activeElement as HTMLElement).blur();
+    for (const extra of [{ repeat: true }, { isComposing: true }, { altKey: true }, { ctrlKey: true }, { metaKey: true }, { shiftKey: true }]) {
+      expect(fireEvent.keyDown(document.body, { key: "ArrowRight", ...extra })).toBe(true);
+    }
+    const selection = window.getSelection()!;
+    selection.selectAllChildren(screen.getByRole("button", { name: "One" }));
+    expect(fireEvent.keyDown(document.body, { key: "ArrowRight" })).toBe(true);
+    selection.removeAllRanges();
+    const dialog = document.createElement("div"); dialog.setAttribute("role", "dialog"); document.body.append(dialog);
+    expect(fireEvent.keyDown(document.body, { key: "ArrowRight" })).toBe(true);
+    dialog.remove();
+    expect(document.activeElement).toBe(document.body);
+  });
   it("starts keyboard selection on entry and includes recent boards", async () => {
     const open = vi.fn();
     render(<BoardInput pttState="ready" wsStatus="connected" onEnter={open} favoriteBoards={[]}

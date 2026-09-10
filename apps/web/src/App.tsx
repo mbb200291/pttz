@@ -5,6 +5,7 @@ import {
   useRecentBoards,
   usePttSocket,
   usePttSocketStore,
+  submitLogout,
 } from "./hooks/usePttSocket";
 import { BoardInput } from "./components/BoardInput";
 import { ArticleList } from "./components/ArticleList";
@@ -272,6 +273,7 @@ export default function App() {
           favoriteBoardsLoading={!isPreview && favoriteBoardsLoading}
           recentBoards={isPreview ? undefined : recentBoards}
           currentUser={currentUser}
+          onLogout={isPreview ? undefined : () => { void submitLogout(); }}
           onEnter={(board) => {
             addRecent(board);
             setView({ type: "board", name: board });

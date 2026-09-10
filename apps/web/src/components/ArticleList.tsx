@@ -16,7 +16,8 @@ import type {
   WheelEvent,
 } from "react";
 import { useRef, useEffect, useMemo, useState } from "react";
-import { canUseShortcut, navigateList } from "../lib/keyboardNavigation";
+import { canUseShortcut, hasOpenNavigationDialog, navigateList, type NavigationKeyEvent } from "../lib/keyboardNavigation";
+import { useBodyNavigation } from "../hooks/useBodyNavigation";
 import { useBoard } from "../hooks/useBoard";
 import type { BoardFilter } from "../lib/ptt/viewState";
 import type { ArticleSummary } from "../lib/ptt/uiArticle";
@@ -720,6 +721,8 @@ export function ArticleList({
   );
   const [customPushFilterOpen, setCustomPushFilterOpen] = useState(false);
   const pushFilterRef = useRef<HTMLDivElement>(null);
+  const navigationRef = useRef<HTMLDivElement>(null);
+  useBodyNavigation(navigationRef, handleNavigation);
 
   const {
     articles: liveArticles,
@@ -821,7 +824,7 @@ export function ArticleList({
             row.getBoundingClientRect().top -
             cachedAnchor.viewportTop;
           window.scrollTo({ top: Math.max(0, targetTop), behavior: "auto" });
-          if (document.activeElement === document.body && !row.matches(":disabled")) row.focus({ preventScroll: true });
+          if (document.activeElement === document.body && !row.matches(":disabled") && !hasOpenNavigationDialog()) row.focus({ preventScroll: true });
           return;
         }
       }
@@ -1046,17 +1049,25 @@ export function ArticleList({
   const isCustomPushFilter =
     activePushThreshold !== null && !PUSH_FILTER_PRESETS.has(activePushThreshold);
 
+  function handleNavigation(event: NavigationKeyEvent, scope?: HTMLElement) {
+    if (event.key.toLowerCase() === "z" && canUseShortcut(event, false, scope)) {
+      event.preventDefault();
+      setCustomPushFilterOpen(true);
+      return;
+    }
+    if (event.key.toLowerCase() === "p" && onCompose && canUseShortcut(event, true, scope)) {
+      event.preventDefault();
+      onCompose(observedCategoryOptions);
+      return;
+    }
+    navigateList(event, onBack, scope);
+  }
+
   return (
     <div
+      ref={navigationRef}
       onTouchStart={handleTouchStart}
-      onKeyDown={(event) => {
-        if (event.key.toLowerCase() === "p" && onCompose && canUseShortcut(event, true)) {
-          event.preventDefault();
-          onCompose(observedCategoryOptions);
-          return;
-        }
-        navigateList(event, onBack);
-      }}
+      onKeyDown={handleNavigation}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}

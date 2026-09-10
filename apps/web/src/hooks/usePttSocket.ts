@@ -27,6 +27,7 @@ export type PttState =
   | "syncing_users"
   | "login_rate_limited"
   | "ready"
+  | "logged_out"
   | "closed"
   | "error";
 
@@ -266,6 +267,16 @@ export function useRecentBoards(maxRecent = 5) {
   };
 
   return { recent, addRecent };
+}
+
+export async function submitLogout(): Promise<void> {
+  const state = usePttSocketStore.getState();
+  try {
+    await state.client?.disconnect();
+    usePttSocketStore.setState({ credentials: null, recentBuffer: "", loginError: null, wsStatus: "closed", pttState: "logged_out" });
+  } catch {
+    usePttSocketStore.setState({ credentials: null, recentBuffer: "", wsStatus: "closed", pttState: "closed", loginError: "登出時連線清理未完成，請關閉此分頁；不會影響其他 PTT 客戶端。" });
+  }
 }
 
 function retainDisconnectedLogin(preservedOthers = false): boolean {

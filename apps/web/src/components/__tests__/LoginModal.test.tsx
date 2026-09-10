@@ -2,6 +2,15 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 describe("LoginModal", () => {
+  it("distinguishes intentional logout from an unexpected dropped connection", async () => {
+    const { LoginModal } = await import("../LoginModal");
+    const html = renderToStaticMarkup(<LoginModal pttState={"logged_out" as never} wsStatus="closed" />);
+    expect(html).toContain("已登出");
+    expect(html).toContain('role="dialog"');
+    expect(html).toContain('aria-modal="true"');
+    expect(html).toContain("重新登入");
+    expect(html).not.toContain("可能已達");
+  });
   it("shows a closed connection explanation without forcing a kick decision", async () => {
     const { LoginModal } = await import("../LoginModal");
     const html = renderToStaticMarkup(<LoginModal pttState="closed" wsStatus="closed" />);

@@ -3,7 +3,8 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { navigateBoardGrid } from "../lib/keyboardNavigation";
+import { hasOpenNavigationDialog, navigateBoardGrid } from "../lib/keyboardNavigation";
+import { useBodyNavigation } from "../hooks/useBodyNavigation";
 
 export interface PopularBoard {
   name: string;
@@ -54,10 +55,12 @@ interface BoardInputProps {
   favoriteBoardsLoading?: boolean;
   recentBoards?: string[];
   currentUser?: string;
+  onLogout?: () => void;
 }
 
 export function BoardInput({
   onEnter,
+  onLogout,
   pttState,
   wsStatus,
   popularBoards,
@@ -78,10 +81,11 @@ export function BoardInput({
   const [favoriteOverrides, setFavoriteOverrides] = useState<Record<string, boolean>>({});
   const popularGridRef = useRef<HTMLDivElement>(null);
   const navigationRef = useRef<HTMLDivElement>(null);
+  useBodyNavigation(navigationRef, navigateBoardGrid);
 
   const isConnected = pttState === "ready";
   useEffect(() => {
-    if (isConnected && document.activeElement === document.body) {
+    if (isConnected && document.activeElement === document.body && !hasOpenNavigationDialog()) {
       navigationRef.current?.querySelector<HTMLElement>('[data-navigation-item]:not(:disabled)')?.focus({ preventScroll: true });
     }
   });
@@ -309,6 +313,7 @@ export function BoardInput({
                 : wsStatus === "connecting"
                   ? "連線中..."
                   : `狀態:${pttState}`}
+            {isConnected && onLogout && <button type="button" onClick={onLogout} title="只登出本次 Pttzzz 連線" style={{ color: "var(--text)", border: "1px solid var(--border)", borderRadius: 8, padding: "5px 10px", cursor: "pointer" }}>登出</button>}
           </div>
         </div>
       </div>

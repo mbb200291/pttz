@@ -10,6 +10,60 @@ afterEach(() => {
 });
 
 describe("ArticleList", () => {
+  it("does not restore article focus behind an open sibling dialog", async () => {
+    const { ArticleList } = await import("../ArticleList");
+    const { writeBoardAnchorCache } = await import("../../lib/ptt/viewCache");
+    writeBoardAnchorCache("KeyboardDialog", { articleIndex: 1, viewportTop: 0, scrollY: 0 });
+    const dialog = document.createElement("div"); dialog.setAttribute("role", "dialog"); document.body.append(dialog);
+    let restore: FrameRequestCallback = () => {};
+    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => { restore = callback; return 1; });
+    const scroll = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    try {
+      render(<ArticleList boardName="KeyboardDialog" onBack={() => {}} onSelectArticle={() => {}} onSelectArticleByAid={() => {}}
+        mockLoading={false} mockArticles={[{ index: 1, title: "First", author: "a", date: "9/8", pushCount: "1", mark: " " }]} />);
+      act(() => restore(0));
+      expect(document.activeElement).toBe(document.body);
+    } finally { dialog.remove(); raf.mockRestore(); scroll.mockRestore(); }
+  });
+  it.each(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"])("starts article selection from body with %s without reading or returning", async (key) => {
+    const { ArticleList } = await import("../ArticleList");
+    const open = vi.fn(), back = vi.fn();
+    const { container, unmount } = render(<ArticleList boardName="Keyboard" onBack={back} onSelectArticle={open} onSelectArticleByAid={() => {}}
+      mockLoading={false} mockArticles={[
+        { index: 2, title: "First", author: "a", date: "9/8", pushCount: "1", mark: " " },
+        { index: 1, title: "Second", author: "b", date: "9/8", pushCount: "1", mark: " " },
+      ]} />);
+    (document.activeElement as HTMLElement).blur();
+    expect(fireEvent.keyDown(document.body, { key })).toBe(false);
+    const first = container.querySelector<HTMLElement>('[data-article-index="2"]')!;
+    expect(document.activeElement).toBe(first);
+    expect(open).not.toHaveBeenCalled(); expect(back).not.toHaveBeenCalled();
+    fireEvent.keyDown(first, { key: "ArrowRight" });
+    expect(open).toHaveBeenCalledOnce();
+    unmount(); expect(fireEvent.keyDown(document.body, { key })).toBe(true);
+  });
+  it("opens threshold with z from body or a row, but not input/modifiers/dialog/selection", async () => {
+    const { ArticleList } = await import("../ArticleList");
+    const { container } = render(<ArticleList boardName="Keyboard" onBack={() => {}} onSelectArticle={() => {}} onSelectArticleByAid={() => {}}
+      mockLoading={false} mockArticles={[{ index: 1, title: "First", author: "a", date: "9/8", pushCount: "1", mark: " " }]} />);
+    const row = container.querySelector<HTMLElement>('[data-article-index="1"]')!;
+    const input = container.querySelector("input")!;
+    input.focus(); fireEvent.keyDown(input, { key: "z" });
+    for (const extra of [{ repeat: true }, { isComposing: true }, { altKey: true }, { ctrlKey: true }, { metaKey: true }, { shiftKey: true }]) fireEvent.keyDown(row, { key: "z", ...extra });
+    const selection = window.getSelection()!; selection.selectAllChildren(row);
+    fireEvent.keyDown(row, { key: "z" }); selection.removeAllRanges();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    row.focus(); expect(fireEvent.keyDown(row, { key: "z" })).toBe(false);
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    fireEvent.keyDown(document.body, { key: "z" });
+    fireEvent.keyDown(row, { key: "ArrowRight" });
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    (document.activeElement as HTMLElement).blur();
+    fireEvent.keyDown(document.body, { key: "z" });
+    expect(screen.getByRole("dialog", { name: "自訂推文門檻" })).toBeTruthy();
+  });
   it("opens compose with Ctrl+P without intercepting search or modified shortcuts", async () => {
     const { ArticleList } = await import("../ArticleList");
     const compose = vi.fn();

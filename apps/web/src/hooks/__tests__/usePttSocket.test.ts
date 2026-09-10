@@ -40,6 +40,7 @@ vi.mock("@pttzzz/core", async (importOriginal) => ({
 import {
   submitDuplicateLoginDecision,
   submitLogin,
+  submitLogout,
   useFavoriteBoards,
   usePttSocket,
   usePttSocketStore,
@@ -47,6 +48,21 @@ import {
 } from "../usePttSocket";
 
 describe("public PttzzzClient socket bridge", () => {
+  it("logs out only this client and clears local credentials without logging in again", async () => {
+    usePttSocketStore.setState({ client, pttState: "ready", wsStatus: "connected", credentials: { username: "user", password: "secret" }, loginError: "old" });
+    await submitLogout();
+    expect(client.disconnect).toHaveBeenCalledTimes(1);
+    expect(login).not.toHaveBeenCalled();
+    expect(usePttSocketStore.getState()).toMatchObject({ pttState: "logged_out", wsStatus: "closed", credentials: null, loginError: null });
+  });
+  it("clears credentials but does not claim logout succeeded if cleanup rejects", async () => {
+    vi.mocked(client.disconnect).mockRejectedValueOnce(new Error("disconnect failed"));
+    usePttSocketStore.setState({ client, pttState: "ready", wsStatus: "connected", credentials: { username: "user", password: "secret" } });
+    await submitLogout();
+    expect(usePttSocketStore.getState()).toMatchObject({ pttState: "closed", credentials: null });
+    expect(usePttSocketStore.getState().loginError).toContain("清理未完成");
+    expect(login).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     listeners.clear();
     vi.clearAllMocks();
