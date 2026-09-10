@@ -36,13 +36,13 @@ export function AdaptiveArticleBody({ text }: { text: string }) {
     ? <span key={j} data-terminal-wide="true" style={{ display: "inline-block", width: "2ch", textAlign: "center" }}>{part}</span> : part) : run.text}</span>);
   return <div className="mb-8" style={{ minWidth: 0, maxWidth: "100%" }}>
     <div className="mb-3 flex flex-wrap items-center gap-3">
+      <span className="text-xs text-gray-400">{forced ? "原始排版" : "自動"}</span>
       <button type="button" aria-pressed={forced} onClick={() => setForced(!forced)}
         title="強制保留原文行寬；再次點擊恢復自動排版"
-        className="rounded border border-gray-600 px-3 py-1 text-xs focus-visible:outline-2 focus-visible:outline-offset-2"
+        className="ml-auto rounded border border-gray-600 px-3 py-1 text-xs focus-visible:outline-2 focus-visible:outline-offset-2"
         style={{ background: forced ? "var(--accent-dim, #283044)" : undefined }}>
         原始排版
       </button>
-      <span className="text-xs text-gray-400">{forced ? "已鎖定原始排版 · 可左右捲動" : fits ? "自動 · 保留原文行寬" : "自動 · 適應寬度換行"}</span>
     </div>
     <div ref={container} style={{ position: "relative", minWidth: 0, maxWidth: "100%", overflow: "hidden", background: forced ? "#000" : undefined, color: forced ? "#aaa" : undefined, fontFamily: forced ? '"Noto Sans Mono CJK TC", ui-monospace, monospace' : preformatted ? "var(--font-mono)" : "var(--font)", fontSize: 16, lineHeight: 1.5, fontVariantLigatures: monospace ? "none" : undefined }}>
       <pre ref={measure} data-layout-measure="true" aria-hidden="true"
@@ -52,7 +52,6 @@ export function AdaptiveArticleBody({ text }: { text: string }) {
       </div>
     </div>
     {segments.some(segment => segment.kind !== "text") && <div className="mt-4">
-      <p className="mb-2 text-xs text-gray-400">媒體預覽（網址保留於正文）</p>
       {segments.map((segment, i) => segment.kind === "image"
         ? <ImagePreview key={i} url={segment.url} />
         : segment.kind === "youtube" ? <YouTubePreview key={i} videoId={segment.videoId} url={segment.url} /> : null)}

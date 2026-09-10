@@ -6,6 +6,21 @@ import { RichContent } from "../RichContent";
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("original body layout", () => {
+  it("uses compact layout labels and keeps the toggle at the toolbar end", () => {
+    render(<RichContent text="https://i.example.test/a.jpg" variant="body" />);
+    const button = screen.getByRole("button", { name: "原始排版" });
+    const toolbar = button.parentElement!;
+    expect(toolbar.firstElementChild).toHaveTextContent(/^自動$/);
+    expect(toolbar.lastElementChild).toBe(button);
+    expect(button).toHaveClass("ml-auto");
+    expect(screen.queryByText("媒體預覽（網址保留於正文）")).not.toBeInTheDocument();
+    expect(screen.getByRole("link").querySelector("img")).toHaveAttribute("src", "https://i.example.test/a.jpg");
+    fireEvent.click(button);
+    expect(toolbar.firstElementChild).toHaveTextContent(/^原始排版$/);
+    expect(button).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(button);
+    expect(toolbar.firstElementChild).toHaveTextContent(/^自動$/);
+  });
   it("uses website defaults for unstyled prose even when the original line fits", () => {
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function(this: HTMLElement) {
       return { width: this.dataset.layoutMeasure ? 100 : 900 } as DOMRect;
