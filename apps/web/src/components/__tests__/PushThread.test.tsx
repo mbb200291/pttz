@@ -262,7 +262,8 @@ describe("PushThread", () => {
     expect(html).toContain("first");
     expect(html).toContain("second");
     expect(html).not.toContain("third");
-    expect(html).toContain("已顯示 2 / 3 則第一層回覆");
+    expect(html).toContain("已顯示 2 / 3 則");
+    expect(html).not.toContain("則第一層回覆");
   });
 
   it("shows refresh controls when refresh is available", () => {
@@ -321,8 +322,8 @@ describe("PushThread", () => {
     );
 
     expect(html).toContain("推 好文");
-    expect(html).toContain("1 則第一層回覆");
-    expect(html).not.toContain("2 則第一層回覆");
+    expect(html).toContain("1 則討論");
+    expect(html).not.toContain("2 則討論");
     expect(html).not.toContain(">推</div>");
     expect(html).not.toContain(">噓</div>");
   });
