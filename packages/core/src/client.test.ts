@@ -193,6 +193,33 @@ describe("PttzzzClient lifecycle", () => {
 });
 
 describe("PttzzzClient article reads", () => {
+  it.each(["\n", "\r\n"])("preserves body ANSI in partial events and final getArticle results after a colored header separator (%j)", async (newline) => {
+    const gateway = new MemoryGateway();
+    const partialBody = "\x1b[31m紅字\x1b[0m\n正文  保留空格";
+    const finalBody = `${partialBody}\n\x1b[1;44m高亮藍底\x1b[0m`;
+    const source = (body: string, push = "") => raw("彩色主題", body, push)
+      .replace("───────────────────────────────────────", "\x1b[36m───────────────────────────────────────\x1b[0m")
+      .replace(/\n/g, newline);
+    gateway.sources = [
+      { articleKey: indexKey, completeness: "incomplete", revision: 1, rawText: source(partialBody) },
+      { articleKey: indexKey, completeness: "final", revision: 2, rawText: source(finalBody, "→ bob: 回覆 08/22 10:01") },
+    ];
+    const client = new PttzzzClient(gateway);
+    const events: CoreEvent[] = [];
+    client.subscribe((event) => events.push(event));
+
+    const result = await client.getArticle({ article: indexKey });
+
+    const partial = events.find((event) => event.type === "article.partial");
+    expect(partial?.type === "article.partial" && partial.article.body).toBe(partialBody);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.body).toBe(finalBody);
+    expect(result.value.title).toBe("彩色主題");
+    expect(result.value.replies[0].content).toBe("回覆");
+    const final = events.find((event) => event.type === "article.updated");
+    expect(final?.type === "article.updated" && final.article.body).toBe(finalBody);
+  });
   it("parses partial and final raw sources into nested public DTOs", async () => {
     const gateway = new MemoryGateway();
     gateway.sources = [

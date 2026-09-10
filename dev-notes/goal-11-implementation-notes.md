@@ -1,5 +1,15 @@
 # Goal 11 實作紀錄
 
+## 原始文章顏色讀取修正
+
+原始排版元件能呈現 SGR，但真實讀取路徑有兩個遺失點：terminal.js 的 `getLine().str` 是純文字，顏色另存於 `attr`；核心 `separatorBody` 移除標頭後，曾回傳 stripAnsi 後的本文。
+
+browser 現在依 ptt-client 設定的 terminal.js DBCS 欄位屬性邊界還原 16 色前景／背景、粗體與反相，每行獨立重設，保留跨行繼承的樣式。欄位計算匹配上游 dbcswidth，而不是 JavaScript 字串索引或 Unicode wcwidth，避免中文後的局部上色錯位。不是從畫面文字猜測顏色，也不使用含游標的 HTML 輸出。標頭和空白行判斷仍使用純文字副本。core 僅在辨識標頭分隔線時移除 ANSI，輸出的本文保留色碼。
+
+新增實際 terminal.js 模擬器的跨頁文章測試，涵蓋隊伍整行上色、比分局部上色及重疊頁去重；另驗證 16 色、黑底、重設、中文索引、跨行繼承，以及 core partial/final 與 LF/CRLF。未連線真實 PTT；舊快取需重新讀取文章才能取得顏色。未擴充 256 色或編輯 round-trip 支援。
+
+2026-09-10 `npm run verify` 通過：core 374、browser 208、Web 291 項測試，11 項輔助測試、build、lint 與 package smoke。保留 3 個既有 lint warnings、bundle 大小及 Node 棄用警告。
+
 ## 鍵盤啟用與登出
 
 首頁／看板任一方向鍵首次啟用選取，不直接執行開文／返回；Z 開啟自訂推文門檻，原生輸入與彈窗保持優先。具體事件回歸包括 body 焦點、scope 內空白、已有選取的單次移動與卸載清理。

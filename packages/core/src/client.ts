@@ -279,9 +279,9 @@ function withdrawalRanges(floors: readonly number[]): readonly { start: number; 
 }
 
 function separatorBody(body: string): string {
-  const plain = stripAnsi(body).replace(/\r\n?/gu, "\n");
-  const lines = plain.split("\n");
-  const separator = lines.findIndex((line) => /^─{10,}/u.test(line.trim()));
+  const lines = body.replace(/\r\n?/gu, "\n").split("\n");
+  // Strip styling only to recognize the header boundary; preserve the original body runs.
+  const separator = lines.findIndex((line) => /^─{10,}/u.test(stripAnsi(line).trim()));
   return (separator < 0 ? body : lines.slice(separator + 1).join("\n")).trim();
 }
 

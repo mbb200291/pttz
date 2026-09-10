@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
 
 function readRealPttFixture(name: string): string {
@@ -2722,6 +2723,45 @@ describe("terminal driver module", () => {
     expect(partial?.pushes).toEqual([
       expect.objectContaining({ author: "user1", content: "第一則" }),
     ]);
+  });
+
+  it("preserves terminal cell colors in first and subsequent raw article snapshots", async () => {
+    const { fetchArticleFromBotManually } = await import("./terminalDriver.js");
+    const Terminal = createRequire(import.meta.url)("terminal.js");
+    const terminal = new Terminal({ columns: 80, rows: 24 });
+    terminal.state.setMode("stringWidth", "dbcs");
+    const header = [
+      "作者  suwagutao (樹蛙孤逃)                 看板  Baseball",
+      "標題  [情報] 下半季",
+      "時間  Thu Sep 10 21:00:00 2026",
+      "───────────────────────────────────────",
+    ];
+    const colored = "\x1b[31m1 樂天桃猿 39 22-0-17\x1b[0m";
+    const pages = [
+      [...header, colored],
+      [colored, "\x1b[1;33m2 中信兄弟\x1b[0m", "G321 統一 \x1b[31m6\x1b[0m:0 中信"],
+    ];
+    const paint = (page: number) => {
+      terminal.write("\x1b[0m\x1b[2J\x1b[H" + pages[page].join("\r\n") +
+        `\x1b[24;1H瀏覽 第 ${page + 1}/2 頁 (${page ? 100 : 50}%)`);
+    };
+    paint(0);
+    const bot = {
+      async enterBoardByName() { return true; },
+      async send(command: string) {
+        if (command === "\x1b[6~") paint(1);
+        return true;
+      },
+      getLine(index: number) { return terminal.state.getLine(index); },
+    };
+    const snapshots: string[] = [];
+    await fetchArticleFromBotManually(bot, "Baseball", 1, undefined,
+      (raw) => snapshots.push(raw));
+    expect(snapshots[0]).toContain("\x1b[0;31m1 樂天桃猿");
+    const final = snapshots.at(-1)!;
+    expect(final).toContain("\x1b[0;1;33m2 中信兄弟");
+    expect(final).toContain("\x1b[0;31m6\x1b[0m:0 中信");
+    expect(final.match(/樂天桃猿/g)).toHaveLength(1);
   });
 
   it("waits for the first article screen before progressive paging", async () => {

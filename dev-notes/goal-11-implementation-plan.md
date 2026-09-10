@@ -52,3 +52,9 @@
 - [x] 執行完整 verify 與本機 preview 檢查，更新 Web README、notes 與 implement.md；一起 commit，不 merge／push。
 
 鍵盤設計遵循 W3C APG 的焦點與鍵盤慣例，排版使用 CSS white-space。modern-web-guidance CLI 無離線快取，改查 W3C APG 與 MDN 原始文件。
+
+## 原始排版色碼遺失修正
+
+- [x] 以 terminal.js 真實 attribute snapshots 重現首屏／跨頁色碼遺失。
+- [x] browser 從終端字串屬性還原受支援 SGR；core 移除標頭時保留本文色碼。
+- [x] 補齊顏色、重設、跨行繼承、跨頁重疊與 partial/final 回歸測試。

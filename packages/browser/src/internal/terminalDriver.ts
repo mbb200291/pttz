@@ -1,4 +1,5 @@
 import Ptt from "ptt-client";
+import { articleTerminalLine, type TerminalLine } from "./terminalLine.js";
 import { formatEditorBody } from "./articleFormatting.js";
 import type { ArticleTextStyle } from "@pttzzz/core";
 import type PttConfig from "ptt-client/dist/config";
@@ -350,7 +351,7 @@ type BotLike = {
     lines?: string[];
   }>;
   getFavorite?: (offsets?: number | number[]) => Promise<PttBoardRow[]>;
-  getLine?: (n: number) => { str?: string };
+  getLine?: (n: number) => TerminalLine;
 };
 
 type ArticleFetchBot = Partial<
@@ -3594,9 +3595,9 @@ function appendUniqueArticleScreenLines(
   let contentLines = screen.slice(0, 23);
   if (
     lines.length > 0 &&
-    contentLines[0]?.trimStart().startsWith("作者") &&
-    contentLines[1]?.trimStart().startsWith("標題") &&
-    contentLines[2]?.trimStart().startsWith("時間")
+    stripAnsi(contentLines[0] ?? "").trimStart().startsWith("作者") &&
+    stripAnsi(contentLines[1] ?? "").trimStart().startsWith("標題") &&
+    stripAnsi(contentLines[2] ?? "").trimStart().startsWith("時間")
   ) {
     const separatorIndex = contentLines.findIndex(
       (line, index) => index >= 3 && /^─{5,}/u.test(stripAnsi(line).trim()),
@@ -3609,7 +3610,7 @@ function appendUniqueArticleScreenLines(
   // Trim trailing blank lines from the screen content so that blank fill-lines
   // at the bottom of a PTT terminal page don't count as "new" content and
   // prevent the end-of-article early break.
-  while (contentLines.length > 0 && contentLines[contentLines.length - 1].trim() === "") {
+  while (contentLines.length > 0 && stripAnsi(contentLines[contentLines.length - 1]).trim() === "") {
     contentLines.pop();
   }
 
@@ -3618,7 +3619,7 @@ function appendUniqueArticleScreenLines(
     return contentLines.length;
   }
 
-  while (lines.length > 0 && lines[lines.length - 1].trim() === "") {
+  while (lines.length > 0 && stripAnsi(lines[lines.length - 1]).trim() === "") {
     lines.pop();
   }
 
@@ -3654,13 +3655,7 @@ async function readArticleLinesProgressively(
     throw new Error("Progressive article reading requires send/getLine");
   }
 
-  const readScreen = () => {
-    const screenLines: string[] = [];
-    for (let index = 0; index < 24; index += 1) {
-      screenLines.push(bot.getLine?.(index)?.str ?? "");
-    }
-    return screenLines;
-  };
+  const readScreen = () => readScreenLines(bot);
 
   const lines: string[] = [];
   let screen = initialScreen ?? readScreen();
@@ -3718,7 +3713,7 @@ async function readArticleLinesProgressively(
 function readScreenLines(bot: Pick<ArticleFetchBot, "getLine">): string[] {
   const screenLines: string[] = [];
   for (let index = 0; index < 24; index += 1) {
-    screenLines.push(bot.getLine?.(index)?.str ?? "");
+    screenLines.push(articleTerminalLine(bot.getLine?.(index)));
   }
   return screenLines;
 }
