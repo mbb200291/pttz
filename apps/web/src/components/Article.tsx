@@ -166,18 +166,6 @@ function ArticleBody({ body }: { body: string }) {
   return <RichContent text={body} variant="body" />;
 }
 
-function LightweightArticleBody({ body }: { body: string }) {
-  const clean = body.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
-  if (!clean) {
-    return <div className="mb-8 py-4 text-sm text-gray-500">文章內容載入中…</div>;
-  }
-  return (
-    <pre tabIndex={0} aria-label="載入中的原始正文" className="mb-8 overflow-x-auto whitespace-pre font-mono text-sm leading-relaxed text-gray-200">
-      {clean}
-    </pre>
-  );
-}
-
 function LightweightPushList({
   pushes,
 }: {
@@ -247,19 +235,12 @@ function transitionVoteState(
   };
 }
 
-function PartialArticleView({ partial }: { partial: PartialArticleData }) {
+function PartialDiscussion({ partial }: { partial: PartialArticleData }) {
   const pushes = partial.pushes ?? [];
   const articleNotes = partial.articleNotes ?? [];
 
   return (
     <>
-      <ArticleHeader
-        title={partial.title}
-        author={partial.author}
-        board={partial.board}
-        date={partial.date}
-      />
-      <LightweightArticleBody body={partial.body} />
       <ArticleEditRecords records={articleNotes} />
       <LightweightPushList pushes={pushes} />
       <div className="py-6 text-center text-gray-500 text-sm border-t border-gray-800">
@@ -711,6 +692,9 @@ export function Article({
         }
       : null;
 
+  const loadingArticle = loading ? partialArticle ?? cachedArticle ?? initialArticle : null;
+  const displayedArticle = article ?? loadingArticle;
+
   useEffect(() => {
     if (!import.meta.env.DEV || typeof window === "undefined") return;
 
@@ -890,13 +874,26 @@ export function Article({
           </div>
         )}
 
-        {/* 初次 loading，但有 partialArticle 可先顯示 */}
-        {loading && partialArticle && (
-          <PartialArticleView partial={partialArticle} />
+        {/* Keep the same formatted body mounted across partial, cached and final data. */}
+        {displayedArticle && (
+          <>
+            <ArticleHeader
+              title={displayedArticle.title}
+              author={displayedArticle.author}
+              board={displayedArticle.board}
+              date={displayedArticle.date}
+              score={article?.score}
+            />
+            {displayedArticle.body || article ? (
+              <ArticleBody key={`${boardName}:${articleAid ?? articleIndex}`} body={displayedArticle.body} />
+            ) : (
+              <div className="mb-8 py-4 text-sm text-gray-500">文章內容載入中…</div>
+            )}
+          </>
         )}
 
-        {loading && !partialArticle && (cachedArticle || initialArticle) && (
-          <PartialArticleView partial={(cachedArticle ?? initialArticle)!} />
+        {!article && loadingArticle && (
+          <PartialDiscussion partial={loadingArticle} />
         )}
 
         {/* 初次 loading，尚無任何內容 */}
@@ -914,14 +911,6 @@ export function Article({
         {/* 完整文章 */}
         {article && (
           <>
-            <ArticleHeader
-              title={article.title}
-              author={article.author}
-              board={article.board}
-              date={article.date}
-              score={article.score}
-            />
-            <ArticleBody body={article.body} />
             <ArticleRevisions revisions={article.revisions ?? []} />
             <ArticleEditRecords records={article.articleNotes} />
 

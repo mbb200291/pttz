@@ -29,7 +29,7 @@ describe("Article", () => {
     expect(html).not.toContain(">載入中…<");
   });
 
-  it("uses lightweight article rendering while partial content is still loading", async () => {
+  it("formats partial body while keeping the pending discussion lightweight", async () => {
     vi.resetModules();
     vi.doMock("../../hooks/useArticle", () => ({
       useArticle: () => ({
@@ -98,7 +98,7 @@ describe("Article", () => {
     expect(html).toContain("新聞");
     expect(html).toContain("partial article");
     expect(html).toContain("https://youtu.be/dQw4w9WgXcQ");
-    expect(html).not.toContain("播放 YouTube 影片");
+    expect(html).toContain("播放 YouTube 影片");
     expect(html).not.toContain("時間");
     expect(html).not.toContain("推噓分");
     expect(html).not.toContain("舊到新");

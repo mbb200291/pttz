@@ -1,5 +1,7 @@
 # pttzzz 實作概況
 
+Goal 11 漸進閱讀：載入中的本文與完整本文共用格式化呈現，保留色碼、排版選擇與媒體節點，避免純文字預覽切換到完整版時的格式閃動。
+
 Goal 11 色碼讀取：browser 從 terminal.js 屬性還原文章 SGR，core 去除標頭時保留本文色碼，讓既有原始排版／閱讀配色能收到作者上色資訊；不改動預設字體與頁面主題。
 
 這份文件記錄目前 high-level 架構與能力；產品需求仍以 `spec.md` 為準，Goal 9 的詳細決策見 [goal-9-implementation-notes.md](goal-9-implementation-notes.md)。

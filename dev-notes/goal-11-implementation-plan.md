@@ -55,6 +55,8 @@
 
 ## 原始排版色碼遺失修正
 
+- [x] partial、cached、final 共用持續掛載的格式化本文，避免先顯示無格式文字；補上載入完成及切換文章的狀態回歸測試。
+
 - [x] 以 terminal.js 真實 attribute snapshots 重現首屏／跨頁色碼遺失。
 - [x] browser 從終端字串屬性還原受支援 SGR；core 移除標頭時保留本文色碼。
 - [x] 補齊顏色、重設、跨行繼承、跨頁重疊與 partial/final 回歸測試。
