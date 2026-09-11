@@ -779,14 +779,16 @@ describe("terminal driver module", () => {
   it("reports when the push content prompt cannot be confirmed", async () => {
     const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
+    let screen = "瀏覽文章";
     const bot = {
       async send(command: string) {
         sent.push(command);
+        if (command === "X") screen = "1.值得推薦 2.給它噓聲 3.只加註解";
         return true;
       },
       getLine(index: number) {
         return {
-          str: index === 0 ? "1.值得推薦 2.給它噓聲 3.只加註解" : "",
+          str: index === 0 ? screen : "",
         };
       },
     };
@@ -813,10 +815,11 @@ describe("terminal driver module", () => {
   it("reports an uncertain result when push confirmation is missing", async () => {
     const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
-    let screen = "1.值得推薦 2.給它噓聲 3.只加註解";
+    let screen = "瀏覽文章";
     const bot = {
       async send(command: string) {
         sent.push(command);
+        if (command === "X") screen = "1.值得推薦 2.給它噓聲 3.只加註解";
         if (command === "3") screen = "請輸入推文內容:";
         if (command === "內容\r") screen = "瀏覽文章";
         return true;
@@ -850,10 +853,11 @@ describe("terminal driver module", () => {
   ] as const)("selects the PTT %s type key from the menu", async (type, key) => {
     const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
-    let screen = "1.值得推薦 2.給它噓聲 3.只加註解";
+    let screen = "瀏覽文章";
     const bot = {
       async send(command: string) {
         sent.push(command);
+        if (command === "X") screen = "1.值得推薦 2.給它噓聲 3.只加註解";
         if (command === key) screen = "請輸入推文內容:";
         if (command === "內容\r") screen = "確定送出推文嗎";
         if (command === "y\r") screen = "瀏覽文章";

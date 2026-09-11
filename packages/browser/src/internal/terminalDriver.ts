@@ -462,6 +462,12 @@ const MAX_BOARD_SCREEN_INDEX_GAP = 50000;
 
 type AdapterDebugGlobal = typeof globalThis & {
   __pttzzzLastArticleOpenTrace?: ArticleOpenTrace | null;
+  __pttzzzLastPushTrace?: {
+    startedAt: number;
+    pushType: PushType;
+    outcome?: string;
+    snapshots: Array<{ stage: string; elapsedMs: number; screen: string }>;
+  };
 };
 
 const IS_DEV = import.meta.env?.DEV ?? false;
@@ -2896,16 +2902,34 @@ const PUSH_TYPE_MENU_RE =
 const PUSH_CONTENT_PROMPT_RE =
   /請輸入推文內容|輸入推文內容|推文內容[:：]|作者本人[，,]?\s*使用\s*→\s*加註方式/u;
 
+function lastTerminalPrompt(screen: string): string {
+  const lines = screen.split("\n").map(line => line.trim()).filter(Boolean);
+  return lines[lines.length - 1] ?? "";
+}
+
+function isPushContentPrompt(screen: string, pushType: PushType): boolean {
+  const prompt = lastTerminalPrompt(screen);
+  // A historical push or confirmation contains text after the colon and is not an empty input.
+  const bare = /^(推|噓|→)\s+[A-Za-z][A-Za-z0-9_]{0,11}:\s*$/u.exec(prompt);
+  if (bare) return bare[1] === (pushType === "push" ? "推" : pushType === "boo" ? "噓" : "→");
+  return PUSH_CONTENT_PROMPT_RE.test(prompt);
+}
+
 async function waitForPushEntry(
   bot: WriteBot,
   timeoutMs: number,
   pollMs: number,
+  previousScreen: string,
+  capture: (stage: string, screen: string) => void,
 ): Promise<"menu" | "content" | null> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
     const screen = stripAnsi(readVisibleScreen(bot)).replace(/\r/g, "");
-    if (PUSH_TYPE_MENU_RE.test(screen)) return "menu";
-    if (PUSH_CONTENT_PROMPT_RE.test(screen)) return "content";
+    capture("after-X", screen);
+    if (screen !== previousScreen) {
+      if (PUSH_TYPE_MENU_RE.test(lastTerminalPrompt(screen))) return "menu";
+      if (isPushContentPrompt(screen, "neutral")) return "content";
+    }
     await sleep(pollMs);
   }
   return null;
@@ -2928,23 +2952,43 @@ export async function submitPushFromCurrentArticle(
     ...timeoutOverrides,
   };
 
+  const trace: NonNullable<AdapterDebugGlobal["__pttzzzLastPushTrace"]> = {
+    startedAt: Date.now(), pushType, snapshots: [],
+  };
+  if (IS_DEV) (globalThis as AdapterDebugGlobal).__pttzzzLastPushTrace = trace;
+  const capture = (stage: string, screen: string) => {
+    if (!IS_DEV) return;
+    // Never retain login/password screens; no snapshots are taken after entering draft text.
+    const safe = /密碼|password/iu.test(screen) ? "[sensitive screen omitted]" : screen;
+    const last = trace.snapshots[trace.snapshots.length - 1];
+    if (last?.stage === stage && last.screen === safe) return;
+    if (trace.snapshots.length >= 12) trace.snapshots.splice(1, 1);
+    trace.snapshots.push({ stage, elapsedMs: Date.now() - trace.startedAt, screen: safe });
+  };
+  const previousScreen = stripAnsi(readVisibleScreen(bot)).replace(/\r/g, "");
+  capture("before-X", previousScreen);
   await bot.send("X");
   const entry = await waitForPushEntry(
     bot,
     timeouts.typePromptMs,
     timeouts.pollMs,
+    previousScreen,
+    capture,
   );
 
   if (entry === "menu") {
     await bot.send(getPushTypeKey(pushType));
     await sleep(timeouts.afterTypeMs);
-    const contentReady = await waitForPattern(
-      bot,
-      PUSH_CONTENT_PROMPT_RE,
-      timeouts.typePromptMs,
-      timeouts.pollMs,
-    );
+    const startedAt = Date.now();
+    let contentReady = false;
+    while (Date.now() - startedAt < timeouts.typePromptMs) {
+      const screen = stripAnsi(readVisibleScreen(bot)).replace(/\r/g, "");
+      capture("after-type", screen);
+      if (isPushContentPrompt(screen, pushType)) { contentReady = true; break; }
+      await sleep(timeouts.pollMs);
+    }
     if (!contentReady) {
+      trace.outcome = "push-content-prompt-timeout";
       await bot.send(PTT_KEY_CTRL_C);
       return actionNotSent(
         "PTT 未顯示推文輸入框，請重新載入文章後再試",
@@ -2953,12 +2997,14 @@ export async function submitPushFromCurrentArticle(
       );
     }
   } else if (entry === "content" && pushType !== "neutral") {
+    trace.outcome = "push-type-not-allowed";
     await bot.send(PTT_KEY_CTRL_C);
     return actionNotSent(
       "PTT 限制此文章只能使用 → 加註方式",
       "push-type-not-allowed",
     );
   } else if (entry !== "content") {
+    trace.outcome = "push-entry-timeout";
     await bot.send(PTT_KEY_CTRL_C);
     return actionNotSent(
       "PTT 未顯示推文方式，請重新載入文章後再試",
@@ -2967,6 +3013,7 @@ export async function submitPushFromCurrentArticle(
     );
   }
 
+  trace.outcome = "content-ready";
   await bot.send(`${trimmed}\r`);
   const confirmed = await waitForPattern(
     bot,
@@ -2986,9 +3033,11 @@ export async function submitPushFromCurrentArticle(
     if (returnBoardName) {
       await ensureNormalBoardView(bot, returnBoardName);
     }
+    trace.outcome = "sent";
     return actionSent();
   }
 
+  trace.outcome = "push-confirm-timeout";
   return actionUncertain(
     "無法確認回文是否送出，請重新整理文章檢查",
     "push-confirm-timeout",
