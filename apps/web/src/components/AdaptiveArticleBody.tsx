@@ -3,6 +3,7 @@ import { parseAnsiText } from "../lib/ansiText";
 import { isPreformattedArticle, readableAnsiStyle } from "../lib/articlePresentation";
 import { parseContentSegments } from "../lib/ptt/contentSegments";
 import { ImagePreview, YouTubePreview } from "./MediaPreview";
+import { TerminalGlyph } from "./TerminalGlyph";
 
 export function AdaptiveArticleBody({ text }: { text: string }) {
   const parsed = useMemo(() => parseAnsiText(text), [text]);
@@ -31,9 +32,9 @@ export function AdaptiveArticleBody({ text }: { text: string }) {
   }, [parsed, forced, monospace]);
 
   const original = forced || fits;
-  // Give CJK/full-width glyphs two ASCII cells even when the fallback font differs.
-  const runs = parsed.runs.map((run, i) => <span key={i} style={forced ? run.style : readableAnsiStyle(run)}>{monospace ? run.text.split(/([\u2e80-\ua4cf\uac00-\ud7af\uf900-\ufaff\ufe10-\ufe6f\uff01-\uff60\uffe0-\uffe6])/u).map((part, j) => j % 2
-    ? <span key={j} data-terminal-wide="true" style={{ display: "inline-block", width: "2ch", textAlign: "center" }}>{part}</span> : part) : run.text}</span>);
+  // Match ptt-client's DBCS width for symbols as well as CJK characters.
+  const runs = parsed.runs.map((run, i) => <span key={i} style={forced ? run.style : readableAnsiStyle(run)}>{monospace ? run.text.split(/([^\u0000-\u00ff])/u).map((part, j) => j % 2
+    ? <TerminalGlyph key={j} text={part} /> : part) : run.text}</span>);
   return <div className="mb-8" style={{ minWidth: 0, maxWidth: "100%" }}>
     <div className="mb-3 flex flex-wrap items-center gap-3">
       <span className="text-xs text-gray-400">{forced ? "原始排版" : "自動"}</span>
@@ -44,7 +45,7 @@ export function AdaptiveArticleBody({ text }: { text: string }) {
         原始排版
       </button>
     </div>
-    <div ref={container} style={{ position: "relative", minWidth: 0, maxWidth: "100%", overflow: "hidden", background: forced ? "#000" : undefined, color: forced ? "#aaa" : undefined, fontFamily: forced ? '"Noto Sans Mono CJK TC", ui-monospace, monospace' : preformatted ? "var(--font-mono)" : "var(--font)", fontSize: 16, lineHeight: 1.5, fontVariantLigatures: monospace ? "none" : undefined }}>
+    <div ref={container} style={{ position: "relative", minWidth: 0, maxWidth: "100%", overflow: "hidden", background: forced ? "#000" : undefined, color: forced ? "#aaa" : undefined, fontFamily: forced ? '"Noto Sans Mono CJK TC", ui-monospace, monospace' : preformatted ? "var(--font-mono)" : "var(--font)", fontSize: 16, lineHeight: monospace ? 1.2 : 1.5, fontVariantLigatures: monospace ? "none" : undefined }}>
       <pre ref={measure} data-layout-measure="true" aria-hidden="true"
         style={{ position: "absolute", visibility: "hidden", pointerEvents: "none", whiteSpace: "pre", width: "max-content", margin: 0, font: "inherit", tabSize: 8 }}>{runs}</pre>
       <div role="region" aria-label="原始正文" tabIndex={original ? 0 : undefined} style={{ overflowX: original ? "auto" : "hidden", maxWidth: "100%" }}>

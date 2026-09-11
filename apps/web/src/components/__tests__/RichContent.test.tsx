@@ -6,6 +6,19 @@ import { RichContent } from "../RichContent";
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("original body layout", () => {
+  it("preserves terminal-width box drawing and seamless block cells in original layout", () => {
+    const text = "┌──────┐\n│█2   █2   │\n│██  ██  │\n└──────┘";
+    render(<RichContent text={text} variant="body" />);
+    fireEvent.click(screen.getByRole("button", { name: "原始排版" }));
+    const source = screen.getByRole("region", { name: "原始正文" });
+    expect(source.querySelector("pre")?.textContent).toBe(text);
+    const cells = source.querySelectorAll<HTMLElement>("[data-terminal-wide]");
+    expect(cells.length).toBe([...text].filter(char => char.charCodeAt(0) > 255).length);
+    for (const cell of cells) expect(cell).toHaveStyle({ width: "2ch", height: "1.2em", verticalAlign: "top" });
+    expect(source.querySelector('[data-terminal-glyph="█"] svg rect')).not.toBeNull();
+    expect(source.querySelector('[data-terminal-glyph="─"] svg path')).not.toBeNull();
+    expect(source.parentElement).toHaveStyle({ lineHeight: "1.2" });
+  });
   it("uses compact layout labels and keeps the toggle at the toolbar end", () => {
     render(<RichContent text="https://i.example.test/a.jpg" variant="body" />);
     const button = screen.getByRole("button", { name: "原始排版" });
