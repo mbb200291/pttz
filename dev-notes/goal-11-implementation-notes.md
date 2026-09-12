@@ -1,6 +1,22 @@
 # Goal 11 實作紀錄
 
+## 可驗證的文章工作階段
+
+browser 現在把文章工作階段保留為 package-private 終端狀態。完整讀取成功後，只有 requested `ArticleKey`、畫面看板／作者／標題，以及最後可見 terminal snapshot 都一致時才記錄；讀取失敗或取消、login/disconnect、raw send 與其他終端導覽都會使紀錄失效。後續推文型命令若仍可由目前畫面驗證同篇文章，直接進入 `X` 流程，不先返回看板或重開文章；否則沿用既有的看板定位、開文、作者／標題及 AID 核對。fallback 仍無法確認時回傳未送出，不傳正文。
+
+推文入口以實際畫面條件推進，涵蓋非作者 `X → 類型選單 → 3 → neutral input`、作者 `X → neutral input` 及延遲出現的 partial screens。開發診斷只保存 `open-push-menu`、`select-push`／`select-boo`／`select-neutral`、`submit-content`、`confirm`、`continue`、`cancel` 等語意 action 與輸入正文前的畫面，不保存密碼或草稿正文；畫面仍可能包含文章或帳號等個人資料，僅留在本機診斷。neutral 若意外進入原生推／噓輸入框會送 Ctrl-C 取消、使 article session 失效並回傳 `not-sent`；不把類型降級，也不自動重送任何可能已送出的內容。
+
+寫入安全採 fail-closed：未知或逾時畫面不盲送 Ctrl-C 或離開鍵；連線版本在正文前、確認前與確認後都會重新核對。送出 `y` 後必須看到相同看板、作者與標題，並確認已回到真正的文章閱讀器；提示選單、輸入框、確認或繼續畫面即使仍保留文章標頭，也不能當成成功。送出後的 AID／身分／連線證據不足時回傳 `uncertain`，多區間操作立即停止。
+
+篩選與搜尋結果的編號只視為相對位置。每次結果世代更新都會讓舊索引維持不可寫狀態；只有成功取得 canonical AID 的項目才可執行後續文章寫入。返回一般看板列表或直接讀取一般文章編號後才清除相關標記，避免把舊搜尋索引誤當成看板絕對編號。
+
+共享 gateway contract 繼續覆蓋 12 種公開 `PttCommand`，成功仍是 `{ ok: true, outcome: "sent" }`，`not-sent`／`sent`／`uncertain` 的 retryability 邊界不變；browser 私有 session 不會出現在 `@pttzzz/core` 的公開回傳型別。所有自動寫入案例都使用 fake storage、stub 或 terminal transcript，沒有登入或寫入真實 PTT。
+
+2026-09-12 最終 `npm run verify` 通過：core 374、browser 278、Web 302 項測試，以及 11 項輔助測試、三個 package build、lint（0 errors、3 個既有 Fast Refresh warnings）與 package smoke。所有自動驗證都不登入或寫入真實 PTT；四輪安全審查最後無 Critical／Important blocker。
+
 ## 推文入口辨識與診斷
+
+2026-09-12 真站診斷：閱讀畫面在 X 後 56ms 直接變為空白原生「推」欄位，沒有捕捉到類別選單。這解釋原先 entry-timeout，但尚未證明選單為何被略過。依官方 bbs.c 的 recommend，非數字類別輸入亦會選預設值；目前不能斷言存在額外按鍵。新增重現測試與 push-entry-type-mismatch 保護：取消且不送正文，不將回文票降級成原生文章推。此為明確診斷／安全處理，不是完整送出功能修復；尚需查核實際出站按鍵序列。
 
 驗證：`npm run verify` 通過，core 374、browser 221、Web 302 項測試，輔助測試、build、lint（0 errors、3 個既有 warnings）與 package smoke 通過。
 
