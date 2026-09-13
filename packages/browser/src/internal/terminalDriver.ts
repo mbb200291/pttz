@@ -31,6 +31,7 @@ import {
   type AggregatedPush,
   extractArticleThreadEvents,
   formatEditPushCommand,
+  formatEditPush,
   formatReplyVoteCommand,
   formatReplyVoteWithdrawalCommand,
   formatSectionEditCommand,
@@ -1425,7 +1426,7 @@ class PttClientTerminalDriver implements TerminalDriver {
           case "withdraw-floor": {
             const range = command.ranges[0];
             if (!range) return actionNotSent("撤回範圍不可為空");
-            content = `撤回我在${range.start === range.end ? range.start : `${range.start}~${range.end}`}樓發言`;
+            content = formatEditPush("撤回", range.start, range.end === range.start ? null : range.end, "");
             pushType = "neutral"; break;
           }
       }

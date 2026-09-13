@@ -5,7 +5,7 @@
  * mode="edit-article"  → edit an existing article
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { articleTextRuns, type ArticleTextStyle } from "@pttzzz/core";
 import { applyArticleStyle, rebaseArticleStyles, ARTICLE_COLORS, ARTICLE_BRIGHT_COLORS } from "../lib/articleFormatting";
 import { RichContent } from "./RichContent";
@@ -105,6 +105,22 @@ export function ComposeScreen({
 
   const draftTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const bodyPaintRef = useRef<HTMLDivElement>(null);
+  // Keep the painted text on the native textarea's exact content grid,
+  // including scrollbar width, user resizing and caret-driven scrolling.
+  useLayoutEffect(() => {
+    const input = bodyRef.current;
+    const paint = bodyPaintRef.current;
+    if (!input || !paint) return;
+    const sync = () => {
+      paint.style.width = `${input.clientWidth}px`;
+      paint.style.transform = `translate(${-input.scrollLeft}px, ${-input.scrollTop}px)`;
+    };
+    sync();
+    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(sync);
+    observer?.observe(input);
+    return () => observer?.disconnect();
+  }, [body, preview]);
   const applyStyle = (style: Omit<ArticleTextStyle, "start" | "end">) => {
     const input = bodyRef.current;
     if (!input || input.selectionStart === input.selectionEnd) { setFormatMessage("請先選取要套用格式的文字"); return; }
@@ -115,7 +131,7 @@ export function ComposeScreen({
     try { articleTextRuns(body, next); }
     catch (error) { setFormatMessage(error instanceof Error ? error.message : "格式無效"); return; }
     setDraft({ body, formatting: next });
-    setFormatMessage("格式已套用；可切換預覽檢查。修改選取內容會清除該範圍格式。");
+    setFormatMessage("");
     input.focus(); input.setSelectionRange(start, end);
   };
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -811,33 +827,53 @@ export function ComposeScreen({
               </div>
 
               {/* Body textarea */}
+              <div style={{ position: "relative", background: "var(--surface)", borderRadius: "0 0 12px 12px" }}>
+              <div aria-hidden="true" style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none", border: "1px solid transparent", borderTop: 0 }}>
+                <div ref={bodyPaintRef} style={{ boxSizing: "border-box", fontWeight: 400, padding: "18px 20px", whiteSpace: "pre-wrap", overflowWrap: "break-word", fontFamily: "var(--font-mono)", fontSize: 15, lineHeight: 1.7, tabSize: 8, color: "var(--text)" }}>
+                  {formattedPreview.runs.map((run, index) => <span key={index} style={{
+                    color: run.color === undefined ? undefined : (run.bold ? ARTICLE_BRIGHT_COLORS : ARTICLE_COLORS)[run.color - 30],
+                    textShadow: run.bold ? "0.4px 0 currentColor" : undefined,
+                  }}>{run.text}</span>)}
+                  {"\n"}
+                </div>
+              </div>
               <textarea
                 ref={bodyRef}
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 onFocus={() => setBodyFocused(true)}
                 onBlur={() => setBodyFocused(false)}
+                onScroll={(event) => {
+                  if (bodyPaintRef.current) bodyPaintRef.current.style.transform = `translate(${-event.currentTarget.scrollLeft}px, ${-event.currentTarget.scrollTop}px)`;
+                }}
                 placeholder="在這裡輸入文章內容…"
                 style={{
                   display: "block",
                   width: "100%",
                   padding: "18px 20px",
-                  background: "var(--surface)",
+                  position: "relative",
+                  background: "transparent",
                   borderRight: `1px solid ${bodyFocused ? "var(--accent-border)" : "var(--border)"}`,
+                  borderTop: 0,
                   borderBottom: `1px solid ${bodyFocused ? "var(--accent-border)" : "var(--border)"}`,
                   borderLeft: `1px solid ${bodyFocused ? "var(--accent-border)" : "var(--border)"}`,
                   borderBottomLeftRadius: 12,
                   borderBottomRightRadius: 12,
-                  color: "var(--text)",
+                  color: formattedPreview.error ? "var(--text)" : "transparent",
+                  caretColor: "var(--text)",
                   fontSize: 15,
                   lineHeight: 1.7,
                   fontFamily: "var(--font-mono)",
+                  fontWeight: 400,
+                  whiteSpace: "pre-wrap",
+                  overflowWrap: "break-word",
                   outline: "none",
                   resize: "vertical",
                   minHeight: 360,
                   boxSizing: "border-box",
                 }}
               />
+              </div>
             </>
           ) : (
             <div

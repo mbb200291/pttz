@@ -37,7 +37,6 @@ export function AdaptiveArticleBody({ text }: { text: string }) {
     ? <TerminalGlyph key={j} text={part} /> : part) : run.text}</span>);
   return <div className="mb-8" style={{ minWidth: 0, maxWidth: "100%" }}>
     <div className="mb-3 flex flex-wrap items-center gap-3">
-      <span className="text-xs text-gray-400">{forced ? "原始排版" : "自動"}</span>
       <button type="button" aria-pressed={forced} onClick={() => setForced(!forced)}
         title="強制保留原文行寬；再次點擊恢復自動排版"
         className="ml-auto rounded border border-gray-600 px-3 py-1 text-xs focus-visible:outline-2 focus-visible:outline-offset-2"

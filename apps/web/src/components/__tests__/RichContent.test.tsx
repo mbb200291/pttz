@@ -19,20 +19,21 @@ describe("original body layout", () => {
     expect(source.querySelector('[data-terminal-glyph="─"] svg path')).not.toBeNull();
     expect(source.parentElement).toHaveStyle({ lineHeight: "1.2" });
   });
-  it("uses compact layout labels and keeps the toggle at the toolbar end", () => {
+  it("shows only the right-aligned layout toggle without a status label", () => {
     render(<RichContent text="https://i.example.test/a.jpg" variant="body" />);
     const button = screen.getByRole("button", { name: "原始排版" });
     const toolbar = button.parentElement!;
-    expect(toolbar.firstElementChild).toHaveTextContent(/^自動$/);
+    expect(toolbar.children).toHaveLength(1);
     expect(toolbar.lastElementChild).toBe(button);
     expect(button).toHaveClass("ml-auto");
     expect(screen.queryByText("媒體預覽（網址保留於正文）")).not.toBeInTheDocument();
     expect(screen.getByRole("link").querySelector("img")).toHaveAttribute("src", "https://i.example.test/a.jpg");
     fireEvent.click(button);
-    expect(toolbar.firstElementChild).toHaveTextContent(/^原始排版$/);
+    expect(toolbar.children).toHaveLength(1);
     expect(button).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(button);
-    expect(toolbar.firstElementChild).toHaveTextContent(/^自動$/);
+    expect(toolbar.children).toHaveLength(1);
+    expect(button).toHaveAttribute("aria-pressed", "false");
   });
   it("uses website defaults for unstyled prose even when the original line fits", () => {
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function(this: HTMLElement) {

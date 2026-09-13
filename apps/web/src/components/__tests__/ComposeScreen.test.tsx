@@ -28,6 +28,23 @@ const defaultReplyProps = {
 };
 
 describe("ComposeScreen", () => {
+  it("shows selected colors while editing and keeps the native input and selection", () => {
+    render(<ComposeScreen {...defaultPostProps} initial={{ body: "前紅字後" }} />);
+    const input = screen.getByPlaceholderText("在這裡輸入文章內容…") as HTMLTextAreaElement;
+    input.focus();
+    input.setSelectionRange(1, 3);
+    fireEvent.change(screen.getByRole("combobox", { name: "PTT 文字顏色" }), { target: { value: "31" } });
+    const painted = screen.getByText("紅字");
+    expect(painted.style.color).not.toBe("");
+    expect(painted.closest('[aria-hidden="true"]')).not.toBeNull();
+    expect(input.value).toBe("前紅字後");
+    expect([input.selectionStart, input.selectionEnd]).toEqual([1, 3]);
+    fireEvent.scroll(input, { target: { scrollTop: 40 } });
+    expect(painted.parentElement?.style.transform).toBe("translate(0px, -40px)");
+    fireEvent.click(screen.getByRole("button", { name: "清除格式" }));
+    expect(screen.queryByText("紅字")).toBeNull();
+    expect(input.value).toBe("前紅字後");
+  });
   it("loads existing ANSI body as plain editable text without leaking color code text", () => {
     render(<ComposeScreen {...defaultEditProps} initial={{ body: "\x1b[1;31m原文\x1b[0m" }} />);
     expect((screen.getByPlaceholderText("在這裡輸入文章內容…") as HTMLTextAreaElement).value).toBe("原文");

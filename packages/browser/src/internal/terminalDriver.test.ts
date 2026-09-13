@@ -1032,13 +1032,23 @@ describe("terminal driver module", () => {
     await expect(withdrawal).resolves.toEqual({ ok: true, outcome: "sent" });
     await concurrent;
 
-    expect(sent.indexOf("SECOND")).toBeGreaterThan(sent.indexOf("撤回我在4樓發言\r"));
+    const { normalizeThreadEvents } = await import("@pttzzz/core/internal");
+    const commands = sent.filter((value) => value.startsWith("撤回我在"));
+    const events = normalizeThreadEvents(["第一樓", "第二樓", "第三樓", "第四樓", ...commands.map((value) => value.trim())].map((content) => ({
+      type: "neutral" as const, author: "TEST_USER", content, time: "09/13 16:59",
+    })));
+    expect(events[1].withdrawn).toBe(true);
+    expect(events[3].withdrawn).toBe(true);
+    expect(events[0].withdrawn).toBe(false);
+    expect(events[2].withdrawn).toBe(false);
+
+    expect(sent.indexOf("SECOND")).toBeGreaterThan(sent.indexOf("撤回我在4樓的發言\r"));
     expect(sent.filter((value) => value === "X")).toHaveLength(2);
     expect(sent.filter((value) => value === "42\r\r")).toHaveLength(1);
     expect(sent).not.toContain("q");
-    expect(sent).toContain("撤回我在2樓發言\r");
-    expect(sent).toContain("撤回我在4樓發言\r");
-    expect(sent).not.toContain("撤回我在2~4樓發言\r");
+    expect(sent).toContain("撤回我在2樓的發言\r");
+    expect(sent).toContain("撤回我在4樓的發言\r");
+    expect(sent).not.toContain("撤回我在2~4樓的發言\r");
   });
 
   it("reports uncertain without retry when a later withdrawal content send is ambiguous", async () => {
@@ -1069,8 +1079,8 @@ describe("terminal driver module", () => {
         if (value === "42\r\r") screenRows = articleRows;
         else if (value === "q") screenRows = boardRows;
         else if (value === "X") screenRows = ["→ TEST_USER:"];
-        else if (value === "撤回我在2樓發言\r") screenRows = ["→ TEST_USER: 撤回我在2樓發言    確定[y/N]:"];
-        else if (value === "撤回我在4樓發言\r") return false;
+        else if (value === "撤回我在2樓的發言\r") screenRows = ["→ TEST_USER: 撤回我在2樓的發言    確定[y/N]:"];
+        else if (value === "撤回我在4樓的發言\r") return false;
         else if (value === "y\r") screenRows = articleRows;
         return true;
       },
@@ -1082,8 +1092,8 @@ describe("terminal driver module", () => {
       article: { board: "Test", index: 42 },
       ranges: [{ start: 2, end: 2 }, { start: 4, end: 4 }],
     })).resolves.toMatchObject({ ok: false, outcome: "uncertain", retryable: false });
-    expect(sent).toContain("撤回我在2樓發言\r");
-    expect(sent).toContain("撤回我在4樓發言\r");
+    expect(sent).toContain("撤回我在2樓的發言\r");
+    expect(sent).toContain("撤回我在4樓的發言\r");
   });
 
   it("aborts a slow article read and releases the serialized queue", async () => {
@@ -1372,8 +1382,8 @@ describe("terminal driver module", () => {
       expect(sent.indexOf("#expectedAid\r")).toBeGreaterThan(sent.indexOf("y\r"));
       expect(mode).toBe("article");
       expect(invalidate).toHaveBeenCalledWith("push-failed");
-      expect(sent).toContain("撤回我在2樓發言\r");
-      expect(sent).not.toContain("撤回我在4樓發言\r");
+      expect(sent).toContain("撤回我在2樓的發言\r");
+      expect(sent).not.toContain("撤回我在4樓的發言\r");
     } finally {
       invalidate.mockRestore();
     }
