@@ -441,67 +441,6 @@ export function BoardInput({
           </button>
         </form>
 
-        {favoriteCards.length > 0 && !isSearching && (
-          <section style={{ marginBottom: 40 }}>
-            <SectionHead
-              icon={<StarIcon filled />}
-              title="我的最愛"
-              hint={`${currentUser ?? "PTT"} · ${favoriteCards.length} 個關注看板`}
-              accent
-            />
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
-                gap: 12,
-              }}
-            >
-              {displayedFavoriteCards.map((board) => (
-                <FavoriteCard
-                  key={board.name}
-                  board={board}
-                  disabled={!isConnected}
-                  onOpen={() => submitBoard(board.name)}
-                  onUnstar={() => toggleFavorite(board.name)}
-                />
-              ))}
-            </div>
-            {favoriteCards.length > FAVORITE_INITIAL && (
-              <div style={{ display: "flex", justifyContent: "center", marginTop: 18 }}>
-                <button
-                  type="button"
-                  onClick={() => setFavoriteExpanded((expanded) => !expanded)}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "9px 16px",
-                    borderRadius: 10,
-                    background: "var(--surface)",
-                    border: "1px solid var(--border)",
-                    color: "var(--text-muted)",
-                    fontWeight: 600,
-                    fontSize: 13,
-                    cursor: "pointer",
-                    fontFamily: "var(--font)",
-                  }}
-                >
-                  {favoriteExpanded ? (
-                    <>
-                      <ChevronUpIcon /> 收起
-                    </>
-                  ) : (
-                    <>
-                      <ChevronDownIcon /> 展開全部 {favoriteCards.length} 個最愛（再 +
-                      {hiddenFavoriteCount}）
-                    </>
-                  )}
-                </button>
-              </div>
-            )}
-          </section>
-        )}
-
         {(recentBoards?.length ?? 0) > 0 && !isSearching && (
           <section style={{ marginBottom: 40 }}>
             <SectionHead icon={<ClockIcon />} title="最近瀏覽" />
@@ -566,6 +505,67 @@ export function BoardInput({
                 );
               })}
             </div>
+          </section>
+        )}
+
+        {favoriteCards.length > 0 && !isSearching && (
+          <section style={{ marginBottom: 40 }}>
+            <SectionHead
+              icon={<StarIcon filled />}
+              title="我的最愛"
+              hint={`${currentUser ?? "PTT"} · ${favoriteCards.length} 個關注看板`}
+              accent
+            />
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+                gap: 12,
+              }}
+            >
+              {displayedFavoriteCards.map((board) => (
+                <FavoriteCard
+                  key={board.name}
+                  board={board}
+                  disabled={!isConnected}
+                  onOpen={() => submitBoard(board.name)}
+                  onUnstar={() => toggleFavorite(board.name)}
+                />
+              ))}
+            </div>
+            {favoriteCards.length > FAVORITE_INITIAL && (
+              <div style={{ display: "flex", justifyContent: "center", marginTop: 18 }}>
+                <button
+                  type="button"
+                  onClick={() => setFavoriteExpanded((expanded) => !expanded)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "9px 16px",
+                    borderRadius: 10,
+                    background: "var(--surface)",
+                    border: "1px solid var(--border)",
+                    color: "var(--text-muted)",
+                    fontWeight: 600,
+                    fontSize: 13,
+                    cursor: "pointer",
+                    fontFamily: "var(--font)",
+                  }}
+                >
+                  {favoriteExpanded ? (
+                    <>
+                      <ChevronUpIcon /> 收起
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDownIcon /> 展開全部 {favoriteCards.length} 個最愛（再 +
+                      {hiddenFavoriteCount}）
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
           </section>
         )}
 
