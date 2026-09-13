@@ -1,0 +1,125 @@
+# 畫面索引
+
+時間、按鍵及所有中間畫面另見各 run 的 events.json / transitions.json。操作名稱描述意圖，不等於驗證結果。
+
+## keep-others
+
+| 畫面 | 前一操作 |
+|---|---|
+| [001.txt](keep-others/001.txt) | initial |
+| [002.txt](keep-others/002.txt) | username |
+| [003.txt](keep-others/003.txt) | password |
+| [004.txt](keep-others/004.txt) | password |
+| [005.txt](keep-others/005.txt) | keep |
+| [006.txt](keep-others/006.txt) | keep |
+| [007.txt](keep-others/007.txt) | continue |
+
+## kick-and-board
+
+| 畫面 | 前一操作 |
+|---|---|
+| [001.txt](kick-and-board/001.txt) | initial |
+| [002.txt](kick-and-board/002.txt) | username |
+| [003.txt](kick-and-board/003.txt) | password |
+| [004.txt](kick-and-board/004.txt) | password |
+| [005.txt](kick-and-board/005.txt) | kick |
+| [006.txt](kick-and-board/006.txt) | kick |
+| [007.txt](kick-and-board/007.txt) | continue |
+| [008.txt](kick-and-board/008.txt) | favorites |
+| [009.txt](kick-and-board/009.txt) | known-board-prompt |
+| [010.txt](kick-and-board/010.txt) | enter-Test |
+| [011.txt](kick-and-board/011.txt) | enter-Test |
+| [012.txt](kick-and-board/012.txt) | dismiss-board-welcome |
+| [013.txt](kick-and-board/013.txt) | open-user-designated-AID |
+| [014.txt](kick-and-board/014.txt) | read-designated-article |
+| [015.txt](kick-and-board/015.txt) | other-author-push-entry |
+| [016.txt](kick-and-board/016.txt) | other-author-neutral-input |
+| [017.txt](kick-and-board/017.txt) | cancel-empty-neutral |
+| [018.txt](kick-and-board/018.txt) | create-article-category |
+| [019.txt](kick-and-board/019.txt) | select-test-category |
+| [020.txt](kick-and-board/020.txt) | set-test-title |
+| [021.txt](kick-and-board/021.txt) | compose-body-header |
+| [022.txt](kick-and-board/022.txt) | compose-body-lines-01-15 |
+| [023.txt](kick-and-board/023.txt) | compose-body-lines-16-27 |
+| [024.txt](kick-and-board/024.txt) | compose-exit-menu |
+| [025.txt](kick-and-board/025.txt) | publish-test-article |
+| [026.txt](kick-and-board/026.txt) | no-signature |
+| [027.txt](kick-and-board/027.txt) | continue |
+| [028.txt](kick-and-board/028.txt) | select-created-article |
+| [029.txt](kick-and-board/029.txt) | created-article-AID |
+| [030.txt](kick-and-board/030.txt) | continue |
+| [031.txt](kick-and-board/031.txt) | created-article-first-page |
+| [032.txt](kick-and-board/032.txt) | article-page-down |
+| [033.txt](kick-and-board/033.txt) | author-own-push-entry |
+| [034.txt](kick-and-board/034.txt) | push-test-content |
+| [035.txt](kick-and-board/035.txt) | confirm-push-once |
+| [036.txt](kick-and-board/036.txt) | push-readback-open |
+| [037.txt](kick-and-board/037.txt) | push-readback-end |
+| [038.txt](kick-and-board/038.txt) | board-reply-entry |
+| [039.txt](kick-and-board/039.txt) | reply-to-board-only |
+| [040.txt](kick-and-board/040.txt) | reply-keep-title |
+| [041.txt](kick-and-board/041.txt) | reply-without-quote |
+| [042.txt](kick-and-board/042.txt) | compose-board-reply |
+| [043.txt](kick-and-board/043.txt) | reply-save-menu |
+| [044.txt](kick-and-board/044.txt) | publish-board-reply |
+| [045.txt](kick-and-board/045.txt) | reply-no-signature |
+| [046.txt](kick-and-board/046.txt) | continue |
+| [047.txt](kick-and-board/047.txt) | select-created-reply |
+| [048.txt](kick-and-board/048.txt) | reply-AID |
+| [049.txt](kick-and-board/049.txt) | continue |
+| [050.txt](kick-and-board/050.txt) | reply-readback |
+| [051.txt](kick-and-board/051.txt) | return-from-reply |
+| [052.txt](kick-and-board/052.txt) | select-original-by-AID-for-edit |
+| [053.txt](kick-and-board/053.txt) | edit-own-article |
+| [054.txt](kick-and-board/054.txt) | edit-body-position |
+| [055.txt](kick-and-board/055.txt) | insert-edit-marker |
+| [056.txt](kick-and-board/056.txt) | edit-save-menu |
+| [057.txt](kick-and-board/057.txt) | save-article-edit |
+| [058.txt](kick-and-board/058.txt) | edit-readback-first-page |
+| [059.txt](kick-and-board/059.txt) | edit-record-readback |
+| [060.txt](kick-and-board/060.txt) | return-before-cleanup |
+| [061.txt](kick-and-board/061.txt) | select-reply-for-cleanup |
+| [062.txt](kick-and-board/062.txt) | delete-reply-prompt |
+| [063.txt](kick-and-board/063.txt) | cancel-delete-reply |
+| [064.txt](kick-and-board/064.txt) | delete-reply-prompt-again |
+| [065.txt](kick-and-board/065.txt) | confirm-delete-reply |
+| [066.txt](kick-and-board/066.txt) | continue |
+| [067.txt](kick-and-board/067.txt) | select-original-for-cleanup |
+| [068.txt](kick-and-board/068.txt) | delete-original-prompt |
+| [069.txt](kick-and-board/069.txt) | confirm-delete-original |
+| [070.txt](kick-and-board/070.txt) | continue |
+| [071.txt](kick-and-board/071.txt) | title-search-prompt |
+| [072.txt](kick-and-board/072.txt) | title-search-results |
+| [073.txt](kick-and-board/073.txt) | read-filtered-designated-article |
+| [074.txt](kick-and-board/074.txt) | filtered-push-warning |
+| [075.txt](kick-and-board/075.txt) | filtered-boo-input |
+| [076.txt](kick-and-board/076.txt) | cancel-empty-filtered-boo |
+| [077.txt](kick-and-board/077.txt) | exit-title-search |
+| [078.txt](kick-and-board/078.txt) | board-list-push-entry |
+| [079.txt](kick-and-board/079.txt) | positive-push-input |
+| [080.txt](kick-and-board/080.txt) | cancel-empty-positive-push |
+| [081.txt](kick-and-board/081.txt) | author-search-prompt |
+| [082.txt](kick-and-board/082.txt) | author-search-results |
+| [083.txt](kick-and-board/083.txt) | exit-author-search |
+| [084.txt](kick-and-board/084.txt) | push-threshold-prompt |
+| [085.txt](kick-and-board/085.txt) | push-threshold-results |
+| [086.txt](kick-and-board/086.txt) | filtered-list-page-up |
+| [087.txt](kick-and-board/087.txt) | filtered-list-home |
+| [088.txt](kick-and-board/088.txt) | filtered-list-end |
+| [089.txt](kick-and-board/089.txt) | combined-title-prompt |
+| [090.txt](kick-and-board/090.txt) | combined-push-title-results |
+| [091.txt](kick-and-board/091.txt) | exit-combined-search |
+| [092.txt](kick-and-board/092.txt) | no-results-title-prompt |
+| [093.txt](kick-and-board/093.txt) | title-search-no-results |
+| [094.txt](kick-and-board/094.txt) | normal-board-home |
+| [095.txt](kick-and-board/095.txt) | normal-board-page-down |
+| [096.txt](kick-and-board/096.txt) | normal-board-end-cleanup-recheck |
+| [097.txt](kick-and-board/097.txt) | verify-designated-article-preserved |
+| [098.txt](kick-and-board/098.txt) | final-designated-readback |
+| [099.txt](kick-and-board/099.txt) | hot-boards-after-Ctrl-Z |
+| [100.txt](kick-and-board/100.txt) | leave-Test |
+| [101.txt](kick-and-board/101.txt) | favorites-page-down |
+| [102.txt](kick-and-board/102.txt) | favorites-home |
+| [103.txt](kick-and-board/103.txt) | return-main-menu |
+| [104.txt](kick-and-board/104.txt) | logout-prompt |
+| [105.txt](kick-and-board/105.txt) | confirm-logout |

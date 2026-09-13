@@ -1,0 +1,444 @@
+[
+  {
+    "action": "username",
+    "at": "2026-09-13T05:56:14.115Z",
+    "keys": "[REDACTED]",
+    "before": "001.txt",
+    "observedScreens": [
+      "002.txt"
+    ]
+  },
+  {
+    "action": "password",
+    "at": "2026-09-13T05:56:19.353Z",
+    "keys": "[REDACTED]",
+    "before": "002.txt",
+    "observedScreens": [
+      "003.txt"
+    ]
+  },
+  {
+    "action": "keep",
+    "at": "2026-09-13T05:56:27.870Z",
+    "keys": "n\r",
+    "before": "003.txt",
+    "observedScreens": [
+      "004.txt",
+      "005.txt"
+    ]
+  },
+  {
+    "action": "continue",
+    "at": "2026-09-13T05:56:41.639Z",
+    "keys": "\r",
+    "before": "005.txt",
+    "observedScreens": [
+      "006.txt"
+    ]
+  },
+  {
+    "action": "favorites",
+    "at": "2026-09-13T05:56:47.471Z",
+    "keys": "f\r",
+    "before": "006.txt",
+    "observedScreens": [
+      "007.txt"
+    ]
+  },
+  {
+    "action": "board-name-prompt",
+    "at": "2026-09-13T05:56:53.354Z",
+    "keys": "s",
+    "before": "007.txt",
+    "observedScreens": [
+      "008.txt"
+    ]
+  },
+  {
+    "action": "enter-Test",
+    "at": "2026-09-13T05:56:58.359Z",
+    "keys": "Test\r",
+    "before": "008.txt",
+    "observedScreens": [
+      "009.txt",
+      "010.txt",
+      "011.txt"
+    ]
+  },
+  {
+    "action": "dismiss-board-welcome",
+    "at": "2026-09-13T05:57:03.879Z",
+    "keys": "\r",
+    "before": "011.txt",
+    "observedScreens": [
+      "012.txt"
+    ]
+  },
+  {
+    "action": "select-designated-AID",
+    "at": "2026-09-13T05:57:11.998Z",
+    "keys": "#1gfWDlNT\r",
+    "before": "012.txt",
+    "observedScreens": [
+      "013.txt"
+    ]
+  },
+  {
+    "action": "baseline-article",
+    "at": "2026-09-13T05:57:17.206Z",
+    "keys": "\r",
+    "before": "013.txt",
+    "observedScreens": [
+      "014.txt"
+    ]
+  },
+  {
+    "action": "reply-level-1-entry",
+    "at": "2026-09-13T05:57:45.725Z",
+    "keys": "X",
+    "before": "014.txt",
+    "observedScreens": [
+      "015.txt"
+    ]
+  },
+  {
+    "action": "reply-level-1-neutral",
+    "at": "2026-09-13T05:57:53.797Z",
+    "keys": "3",
+    "before": "015.txt",
+    "observedScreens": [
+      "016.txt"
+    ]
+  },
+  {
+    "action": "reply-level-1-content",
+    "at": "2026-09-13T05:58:00.124Z",
+    "keys": "回2樓：pttzzz-R1357 第一層回覆測試。\r",
+    "before": "016.txt",
+    "observedScreens": [
+      "017.txt"
+    ]
+  },
+  {
+    "action": "reply-level-1-confirm",
+    "at": "2026-09-13T05:58:07.303Z",
+    "keys": "y\r",
+    "before": "017.txt",
+    "observedScreens": [
+      "018.txt"
+    ]
+  },
+  {
+    "action": "reply-level-1-readback",
+    "at": "2026-09-13T05:58:13.873Z",
+    "keys": "\r",
+    "before": "018.txt",
+    "observedScreens": [
+      "019.txt"
+    ]
+  },
+  {
+    "action": "reply-level-2-entry",
+    "at": "2026-09-13T05:58:35.545Z",
+    "keys": "X",
+    "before": "019.txt",
+    "observedScreens": [
+      "020.txt"
+    ]
+  },
+  {
+    "action": "reply-level-2-content",
+    "at": "2026-09-13T05:58:42.823Z",
+    "keys": "回3樓：pttzzz-R1357 第二層巢狀測試。\r",
+    "before": "020.txt",
+    "observedScreens": [
+      "021.txt"
+    ]
+  },
+  {
+    "action": "reply-level-2-confirm",
+    "at": "2026-09-13T05:58:49.114Z",
+    "keys": "y\r",
+    "before": "021.txt",
+    "observedScreens": [
+      "022.txt"
+    ]
+  },
+  {
+    "action": "reply-level-2-readback",
+    "at": "2026-09-13T05:58:56.122Z",
+    "keys": "\r",
+    "before": "022.txt",
+    "observedScreens": [
+      "023.txt"
+    ]
+  },
+  {
+    "action": "vote-parent-push-entry",
+    "at": "2026-09-13T05:59:10.373Z",
+    "keys": "X",
+    "before": "023.txt",
+    "observedScreens": [
+      "024.txt"
+    ]
+  },
+  {
+    "action": "vote-parent-push-content",
+    "at": "2026-09-13T05:59:16.537Z",
+    "keys": "推2樓\r",
+    "before": "024.txt",
+    "observedScreens": [
+      "025.txt"
+    ]
+  },
+  {
+    "action": "vote-parent-push-confirm",
+    "at": "2026-09-13T05:59:22.223Z",
+    "keys": "y\r",
+    "before": "025.txt",
+    "observedScreens": [
+      "026.txt"
+    ]
+  },
+  {
+    "action": "vote-parent-push-readback",
+    "at": "2026-09-13T05:59:37.984Z",
+    "keys": "\r",
+    "before": "026.txt",
+    "observedScreens": [
+      "027.txt"
+    ]
+  },
+  {
+    "action": "vote-parent-boo-entry",
+    "at": "2026-09-13T05:59:44.814Z",
+    "keys": "X",
+    "before": "027.txt",
+    "observedScreens": [
+      "028.txt"
+    ]
+  },
+  {
+    "action": "vote-parent-boo-content",
+    "at": "2026-09-13T05:59:50.773Z",
+    "keys": "噓2樓\r",
+    "before": "028.txt",
+    "observedScreens": [
+      "029.txt"
+    ]
+  },
+  {
+    "action": "vote-parent-boo-confirm",
+    "at": "2026-09-13T05:59:57.285Z",
+    "keys": "y\r",
+    "before": "029.txt",
+    "observedScreens": [
+      "030.txt"
+    ]
+  },
+  {
+    "action": "vote-parent-boo-readback",
+    "at": "2026-09-13T06:00:05.773Z",
+    "keys": "\r",
+    "before": "030.txt",
+    "observedScreens": [
+      "031.txt"
+    ]
+  },
+  {
+    "action": "vote-nested-push-entry",
+    "at": "2026-09-13T06:00:32.281Z",
+    "keys": "X",
+    "before": "031.txt",
+    "observedScreens": [
+      "032.txt"
+    ]
+  },
+  {
+    "action": "vote-nested-push-content",
+    "at": "2026-09-13T06:00:39.887Z",
+    "keys": "推3樓\r",
+    "before": "032.txt",
+    "observedScreens": [
+      "033.txt"
+    ]
+  },
+  {
+    "action": "vote-nested-push-confirm",
+    "at": "2026-09-13T06:01:05.756Z",
+    "keys": "y\r",
+    "before": "033.txt",
+    "observedScreens": [
+      "034.txt"
+    ]
+  },
+  {
+    "action": "vote-nested-push-readback",
+    "at": "2026-09-13T06:01:12.668Z",
+    "keys": "\r",
+    "before": "034.txt",
+    "observedScreens": [
+      "035.txt"
+    ]
+  },
+  {
+    "action": "vote-nested-boo-entry",
+    "at": "2026-09-13T06:01:20.567Z",
+    "keys": "X",
+    "before": "035.txt",
+    "observedScreens": [
+      "036.txt"
+    ]
+  },
+  {
+    "action": "vote-nested-boo-content",
+    "at": "2026-09-13T06:01:26.553Z",
+    "keys": "噓3樓\r",
+    "before": "036.txt",
+    "observedScreens": [
+      "037.txt"
+    ]
+  },
+  {
+    "action": "vote-nested-boo-confirm",
+    "at": "2026-09-13T06:01:34.223Z",
+    "keys": "y\r",
+    "before": "037.txt",
+    "observedScreens": [
+      "038.txt"
+    ]
+  },
+  {
+    "action": "vote-nested-boo-readback",
+    "at": "2026-09-13T06:01:40.143Z",
+    "keys": "\r",
+    "before": "038.txt",
+    "observedScreens": [
+      "039.txt"
+    ]
+  },
+  {
+    "action": "composite-push-entry",
+    "at": "2026-09-13T06:01:53.019Z",
+    "keys": "X",
+    "before": "039.txt",
+    "observedScreens": [
+      "040.txt"
+    ]
+  },
+  {
+    "action": "composite-push-content",
+    "at": "2026-09-13T06:02:02.614Z",
+    "keys": "推2樓：pttzzz-R1357 帶文字推回文測試。\r",
+    "before": "040.txt",
+    "observedScreens": [
+      "041.txt"
+    ]
+  },
+  {
+    "action": "composite-push-confirm",
+    "at": "2026-09-13T06:02:10.155Z",
+    "keys": "y\r",
+    "before": "041.txt",
+    "observedScreens": [
+      "042.txt"
+    ]
+  },
+  {
+    "action": "composite-push-readback",
+    "at": "2026-09-13T06:02:20.272Z",
+    "keys": "\r",
+    "before": "042.txt",
+    "observedScreens": [
+      "043.txt"
+    ]
+  },
+  {
+    "action": "composite-boo-entry",
+    "at": "2026-09-13T06:02:30.283Z",
+    "keys": "X",
+    "before": "043.txt",
+    "observedScreens": [
+      "044.txt"
+    ]
+  },
+  {
+    "action": "composite-boo-content",
+    "at": "2026-09-13T06:02:36.712Z",
+    "keys": "噓3樓：pttzzz-R1357 帶文字噓回文測試。\r",
+    "before": "044.txt",
+    "observedScreens": [
+      "045.txt"
+    ]
+  },
+  {
+    "action": "composite-boo-confirm",
+    "at": "2026-09-13T06:02:43.783Z",
+    "keys": "y\r",
+    "before": "045.txt",
+    "observedScreens": [
+      "046.txt"
+    ]
+  },
+  {
+    "action": "composite-boo-readback",
+    "at": "2026-09-13T06:02:49.435Z",
+    "keys": "\r",
+    "before": "046.txt",
+    "observedScreens": [
+      "047.txt"
+    ]
+  },
+  {
+    "action": "leave-article",
+    "at": "2026-09-13T06:03:59.935Z",
+    "keys": "q",
+    "before": "047.txt",
+    "observedScreens": [
+      "048.txt"
+    ]
+  },
+  {
+    "action": "leave-board",
+    "at": "2026-09-13T06:04:07.002Z",
+    "keys": "q",
+    "before": "048.txt",
+    "observedScreens": [
+      "049.txt"
+    ]
+  },
+  {
+    "action": "main-menu",
+    "at": "2026-09-13T06:04:12.252Z",
+    "keys": "q",
+    "before": "049.txt",
+    "observedScreens": [
+      "050.txt"
+    ]
+  },
+  {
+    "action": "logout-prompt",
+    "at": "2026-09-13T06:04:22.942Z",
+    "keys": "g\r",
+    "before": "050.txt",
+    "observedScreens": [
+      "051.txt"
+    ]
+  },
+  {
+    "action": "confirm-logout",
+    "at": "2026-09-13T06:04:28.559Z",
+    "keys": "y\r",
+    "before": "051.txt",
+    "observedScreens": [
+      "052.txt"
+    ]
+  },
+  {
+    "action": "finish-logout",
+    "at": "2026-09-13T06:04:34.686Z",
+    "keys": "\r",
+    "before": "052.txt",
+    "observedScreens": []
+  }
+]

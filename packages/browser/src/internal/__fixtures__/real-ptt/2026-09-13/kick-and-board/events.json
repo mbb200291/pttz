@@ -1,0 +1,1158 @@
+[
+  {
+    "at": "2026-09-13T05:33:06.616Z",
+    "type": "connect"
+  },
+  {
+    "at": "2026-09-13T05:33:06.857Z",
+    "type": "screen",
+    "file": "001.txt"
+  },
+  {
+    "at": "2026-09-13T05:33:10.997Z",
+    "type": "action",
+    "command": "username",
+    "keys": "[REDACTED]"
+  },
+  {
+    "at": "2026-09-13T05:33:11.235Z",
+    "type": "screen",
+    "file": "002.txt"
+  },
+  {
+    "at": "2026-09-13T05:33:15.366Z",
+    "type": "action",
+    "command": "password",
+    "keys": "[REDACTED]"
+  },
+  {
+    "at": "2026-09-13T05:33:15.582Z",
+    "type": "screen",
+    "file": "003.txt"
+  },
+  {
+    "at": "2026-09-13T05:33:16.646Z",
+    "type": "screen",
+    "file": "004.txt"
+  },
+  {
+    "at": "2026-09-13T05:33:29.472Z",
+    "type": "action",
+    "command": "kick",
+    "keys": "y\r"
+  },
+  {
+    "at": "2026-09-13T05:33:29.687Z",
+    "type": "screen",
+    "file": "005.txt"
+  },
+  {
+    "at": "2026-09-13T05:33:33.755Z",
+    "type": "screen",
+    "file": "006.txt"
+  },
+  {
+    "at": "2026-09-13T05:33:43.431Z",
+    "type": "action",
+    "command": "continue",
+    "keys": "\r"
+  },
+  {
+    "at": "2026-09-13T05:33:43.655Z",
+    "type": "screen",
+    "file": "007.txt"
+  },
+  {
+    "at": "2026-09-13T05:33:58.271Z",
+    "type": "action",
+    "command": "favorites",
+    "keys": "f\r"
+  },
+  {
+    "at": "2026-09-13T05:33:58.502Z",
+    "type": "screen",
+    "file": "008.txt"
+  },
+  {
+    "at": "2026-09-13T05:34:04.049Z",
+    "type": "action",
+    "command": "known-board-prompt",
+    "keys": "s"
+  },
+  {
+    "at": "2026-09-13T05:34:04.269Z",
+    "type": "screen",
+    "file": "009.txt"
+  },
+  {
+    "at": "2026-09-13T05:34:09.834Z",
+    "type": "action",
+    "command": "enter-Test",
+    "keys": "Test\r"
+  },
+  {
+    "at": "2026-09-13T05:34:10.156Z",
+    "type": "screen",
+    "file": "010.txt"
+  },
+  {
+    "at": "2026-09-13T05:34:11.160Z",
+    "type": "screen",
+    "file": "011.txt"
+  },
+  {
+    "at": "2026-09-13T05:34:16.788Z",
+    "type": "action",
+    "command": "dismiss-board-welcome",
+    "keys": "\r"
+  },
+  {
+    "at": "2026-09-13T05:34:17.007Z",
+    "type": "screen",
+    "file": "012.txt"
+  },
+  {
+    "at": "2026-09-13T05:34:22.679Z",
+    "type": "action",
+    "command": "open-user-designated-AID",
+    "keys": "#1gfWDlNT\r"
+  },
+  {
+    "at": "2026-09-13T05:34:22.893Z",
+    "type": "screen",
+    "file": "013.txt"
+  },
+  {
+    "at": "2026-09-13T05:34:27.977Z",
+    "type": "action",
+    "command": "read-designated-article",
+    "keys": "\r"
+  },
+  {
+    "at": "2026-09-13T05:34:28.196Z",
+    "type": "screen",
+    "file": "014.txt"
+  },
+  {
+    "at": "2026-09-13T05:34:36.162Z",
+    "type": "action",
+    "command": "other-author-push-entry",
+    "keys": "X"
+  },
+  {
+    "at": "2026-09-13T05:34:36.375Z",
+    "type": "screen",
+    "file": "015.txt"
+  },
+  {
+    "at": "2026-09-13T05:34:45.556Z",
+    "type": "action",
+    "command": "other-author-neutral-input",
+    "keys": "3"
+  },
+  {
+    "at": "2026-09-13T05:34:45.770Z",
+    "type": "screen",
+    "file": "016.txt"
+  },
+  {
+    "at": "2026-09-13T05:34:59.255Z",
+    "type": "action",
+    "command": "cancel-empty-neutral",
+    "keys": "\r"
+  },
+  {
+    "at": "2026-09-13T05:34:59.475Z",
+    "type": "screen",
+    "file": "017.txt"
+  },
+  {
+    "at": "2026-09-13T05:35:07.676Z",
+    "type": "action",
+    "command": "create-article-category",
+    "keys": "\u0010"
+  },
+  {
+    "at": "2026-09-13T05:35:07.901Z",
+    "type": "screen",
+    "file": "018.txt"
+  },
+  {
+    "at": "2026-09-13T05:35:13.053Z",
+    "type": "action",
+    "command": "select-test-category",
+    "keys": "1\r"
+  },
+  {
+    "at": "2026-09-13T05:35:13.271Z",
+    "type": "screen",
+    "file": "019.txt"
+  },
+  {
+    "at": "2026-09-13T05:35:20.105Z",
+    "type": "action",
+    "command": "set-test-title",
+    "keys": "pttzzz capture 20260913-1335\r"
+  },
+  {
+    "at": "2026-09-13T05:35:20.323Z",
+    "type": "screen",
+    "file": "020.txt"
+  },
+  {
+    "at": "2026-09-13T05:35:50.461Z",
+    "type": "action",
+    "command": "compose-body-header",
+    "keys": "PTTzzz terminal capture test 20260913-1335\r本篇用於終端畫面測試，完成後刪除。\r\r"
+  },
+  {
+    "at": "2026-09-13T05:35:50.677Z",
+    "type": "screen",
+    "file": "021.txt"
+  },
+  {
+    "at": "2026-09-13T05:35:58.046Z",
+    "type": "action",
+    "command": "compose-body-lines-01-15",
+    "keys": "Line 01 - pagination fixture\rLine 02 - pagination fixture\rLine 03 - pagination fixture\rLine 04 - pagination fixture\rLine 05 - pagination fixture\rLine 06 - pagination fixture\rLine 07 - pagination fixture\rLine 08 - pagination fixture\rLine 09 - pagination fixture\rLine 10 - pagination fixture\rLine 11 - pagination fixture\rLine 12 - pagination fixture\rLine 13 - pagination fixture\rLine 14 - pagination fixture\rLine 15 - pagination fixture\r"
+  },
+  {
+    "at": "2026-09-13T05:35:58.265Z",
+    "type": "screen",
+    "file": "022.txt"
+  },
+  {
+    "at": "2026-09-13T05:36:06.009Z",
+    "type": "action",
+    "command": "compose-body-lines-16-27",
+    "keys": "Line 16 - pagination fixture\rLine 17 - pagination fixture\rLine 18 - pagination fixture\rLine 19 - pagination fixture\rLine 20 - pagination fixture\rLine 21 - pagination fixture\rLine 22 - pagination fixture\rLine 23 - pagination fixture\rLine 24 - pagination fixture\rLine 25 - pagination fixture\rLine 26 - pagination fixture\rLine 27 - pagination fixture\rEND-OF-CAPTURE-BODY\r"
+  },
+  {
+    "at": "2026-09-13T05:36:06.277Z",
+    "type": "screen",
+    "file": "023.txt"
+  },
+  {
+    "at": "2026-09-13T05:36:14.118Z",
+    "type": "action",
+    "command": "compose-exit-menu",
+    "keys": "\u0018"
+  },
+  {
+    "at": "2026-09-13T05:36:14.344Z",
+    "type": "screen",
+    "file": "024.txt"
+  },
+  {
+    "at": "2026-09-13T05:36:23.344Z",
+    "type": "action",
+    "command": "publish-test-article",
+    "keys": "s\r"
+  },
+  {
+    "at": "2026-09-13T05:36:24.644Z",
+    "type": "screen",
+    "file": "025.txt"
+  },
+  {
+    "at": "2026-09-13T05:36:40.218Z",
+    "type": "action",
+    "command": "no-signature",
+    "keys": "0\r"
+  },
+  {
+    "at": "2026-09-13T05:36:40.439Z",
+    "type": "screen",
+    "file": "026.txt"
+  },
+  {
+    "at": "2026-09-13T05:36:44.697Z",
+    "type": "action",
+    "command": "continue",
+    "keys": "\r"
+  },
+  {
+    "at": "2026-09-13T05:36:44.930Z",
+    "type": "screen",
+    "file": "027.txt"
+  },
+  {
+    "at": "2026-09-13T05:36:50.659Z",
+    "type": "action",
+    "command": "select-created-article",
+    "keys": "290\r"
+  },
+  {
+    "at": "2026-09-13T05:36:50.875Z",
+    "type": "screen",
+    "file": "028.txt"
+  },
+  {
+    "at": "2026-09-13T05:36:57.721Z",
+    "type": "action",
+    "command": "created-article-AID",
+    "keys": "Q"
+  },
+  {
+    "at": "2026-09-13T05:36:57.950Z",
+    "type": "screen",
+    "file": "029.txt"
+  },
+  {
+    "at": "2026-09-13T05:37:07.417Z",
+    "type": "action",
+    "command": "continue",
+    "keys": "\r"
+  },
+  {
+    "at": "2026-09-13T05:37:07.659Z",
+    "type": "screen",
+    "file": "030.txt"
+  },
+  {
+    "at": "2026-09-13T05:37:12.366Z",
+    "type": "action",
+    "command": "created-article-first-page",
+    "keys": "\r"
+  },
+  {
+    "at": "2026-09-13T05:37:12.587Z",
+    "type": "screen",
+    "file": "031.txt"
+  },
+  {
+    "at": "2026-09-13T05:37:17.725Z",
+    "type": "action",
+    "command": "article-page-down",
+    "keys": "\u001b[6~"
+  },
+  {
+    "at": "2026-09-13T05:37:17.949Z",
+    "type": "screen",
+    "file": "032.txt"
+  },
+  {
+    "at": "2026-09-13T05:37:24.654Z",
+    "type": "action",
+    "command": "author-own-push-entry",
+    "keys": "X"
+  },
+  {
+    "at": "2026-09-13T05:37:24.869Z",
+    "type": "screen",
+    "file": "033.txt"
+  },
+  {
+    "at": "2026-09-13T05:37:31.205Z",
+    "type": "action",
+    "command": "push-test-content",
+    "keys": "capture-1335-push-once 測試留言\r"
+  },
+  {
+    "at": "2026-09-13T05:37:31.421Z",
+    "type": "screen",
+    "file": "034.txt"
+  },
+  {
+    "at": "2026-09-13T05:37:36.496Z",
+    "type": "action",
+    "command": "confirm-push-once",
+    "keys": "y\r"
+  },
+  {
+    "at": "2026-09-13T05:37:36.726Z",
+    "type": "screen",
+    "file": "035.txt"
+  },
+  {
+    "at": "2026-09-13T05:37:44.763Z",
+    "type": "action",
+    "command": "push-readback-open",
+    "keys": "\r"
+  },
+  {
+    "at": "2026-09-13T05:37:44.991Z",
+    "type": "screen",
+    "file": "036.txt"
+  },
+  {
+    "at": "2026-09-13T05:37:51.993Z",
+    "type": "action",
+    "command": "push-readback-end",
+    "keys": "\u001b[4~"
+  },
+  {
+    "at": "2026-09-13T05:37:52.214Z",
+    "type": "screen",
+    "file": "037.txt"
+  },
+  {
+    "at": "2026-09-13T05:38:06.537Z",
+    "type": "action",
+    "command": "board-reply-entry",
+    "keys": "y"
+  },
+  {
+    "at": "2026-09-13T05:38:06.751Z",
+    "type": "screen",
+    "file": "038.txt"
+  },
+  {
+    "at": "2026-09-13T05:38:18.183Z",
+    "type": "action",
+    "command": "reply-to-board-only",
+    "keys": "f\r"
+  },
+  {
+    "at": "2026-09-13T05:38:18.415Z",
+    "type": "screen",
+    "file": "039.txt"
+  },
+  {
+    "at": "2026-09-13T05:38:36.233Z",
+    "type": "action",
+    "command": "reply-keep-title",
+    "keys": "y\r"
+  },
+  {
+    "at": "2026-09-13T05:38:36.451Z",
+    "type": "screen",
+    "file": "040.txt"
+  },
+  {
+    "at": "2026-09-13T05:38:55.153Z",
+    "type": "action",
+    "command": "reply-without-quote",
+    "keys": "n\r"
+  },
+  {
+    "at": "2026-09-13T05:38:55.386Z",
+    "type": "screen",
+    "file": "041.txt"
+  },
+  {
+    "at": "2026-09-13T05:39:10.166Z",
+    "type": "action",
+    "command": "compose-board-reply",
+    "keys": "capture-1335-board-reply-once\r這是回文測試，完成後刪除。\r"
+  },
+  {
+    "at": "2026-09-13T05:39:10.383Z",
+    "type": "screen",
+    "file": "042.txt"
+  },
+  {
+    "at": "2026-09-13T05:39:19.153Z",
+    "type": "action",
+    "command": "reply-save-menu",
+    "keys": "\u0018"
+  },
+  {
+    "at": "2026-09-13T05:39:19.368Z",
+    "type": "screen",
+    "file": "043.txt"
+  },
+  {
+    "at": "2026-09-13T05:39:30.977Z",
+    "type": "action",
+    "command": "publish-board-reply",
+    "keys": "s\r"
+  },
+  {
+    "at": "2026-09-13T05:39:32.195Z",
+    "type": "screen",
+    "file": "044.txt"
+  },
+  {
+    "at": "2026-09-13T05:39:52.235Z",
+    "type": "action",
+    "command": "reply-no-signature",
+    "keys": "0\r"
+  },
+  {
+    "at": "2026-09-13T05:39:52.458Z",
+    "type": "screen",
+    "file": "045.txt"
+  },
+  {
+    "at": "2026-09-13T05:39:59.664Z",
+    "type": "action",
+    "command": "continue",
+    "keys": "\r"
+  },
+  {
+    "at": "2026-09-13T05:39:59.885Z",
+    "type": "screen",
+    "file": "046.txt"
+  },
+  {
+    "at": "2026-09-13T05:40:05.375Z",
+    "type": "action",
+    "command": "select-created-reply",
+    "keys": "291\r"
+  },
+  {
+    "at": "2026-09-13T05:40:05.590Z",
+    "type": "screen",
+    "file": "047.txt"
+  },
+  {
+    "at": "2026-09-13T05:40:10.723Z",
+    "type": "action",
+    "command": "reply-AID",
+    "keys": "Q"
+  },
+  {
+    "at": "2026-09-13T05:40:10.961Z",
+    "type": "screen",
+    "file": "048.txt"
+  },
+  {
+    "at": "2026-09-13T05:40:17.149Z",
+    "type": "action",
+    "command": "continue",
+    "keys": "\r"
+  },
+  {
+    "at": "2026-09-13T05:40:17.375Z",
+    "type": "screen",
+    "file": "049.txt"
+  },
+  {
+    "at": "2026-09-13T05:40:25.749Z",
+    "type": "action",
+    "command": "reply-readback",
+    "keys": "\r"
+  },
+  {
+    "at": "2026-09-13T05:40:25.989Z",
+    "type": "screen",
+    "file": "050.txt"
+  },
+  {
+    "at": "2026-09-13T05:40:32.893Z",
+    "type": "action",
+    "command": "return-from-reply",
+    "keys": "q"
+  },
+  {
+    "at": "2026-09-13T05:40:33.112Z",
+    "type": "screen",
+    "file": "051.txt"
+  },
+  {
+    "at": "2026-09-13T05:40:38.871Z",
+    "type": "action",
+    "command": "select-original-by-AID-for-edit",
+    "keys": "#1gfZPfeb\r"
+  },
+  {
+    "at": "2026-09-13T05:40:39.108Z",
+    "type": "screen",
+    "file": "052.txt"
+  },
+  {
+    "at": "2026-09-13T05:40:45.972Z",
+    "type": "action",
+    "command": "edit-own-article",
+    "keys": "E"
+  },
+  {
+    "at": "2026-09-13T05:40:46.193Z",
+    "type": "screen",
+    "file": "053.txt"
+  },
+  {
+    "at": "2026-09-13T05:40:53.201Z",
+    "type": "action",
+    "command": "edit-body-position",
+    "keys": "\u001b[B\u001b[B\u001b[B\u001b[B"
+  },
+  {
+    "at": "2026-09-13T05:40:53.414Z",
+    "type": "screen",
+    "file": "054.txt"
+  },
+  {
+    "at": "2026-09-13T05:40:59.347Z",
+    "type": "action",
+    "command": "insert-edit-marker",
+    "keys": "EDIT-1335-VERIFIED 編輯測試\r"
+  },
+  {
+    "at": "2026-09-13T05:40:59.565Z",
+    "type": "screen",
+    "file": "055.txt"
+  },
+  {
+    "at": "2026-09-13T05:41:05.009Z",
+    "type": "action",
+    "command": "edit-save-menu",
+    "keys": "\u0018"
+  },
+  {
+    "at": "2026-09-13T05:41:05.229Z",
+    "type": "screen",
+    "file": "056.txt"
+  },
+  {
+    "at": "2026-09-13T05:41:10.591Z",
+    "type": "action",
+    "command": "save-article-edit",
+    "keys": "s\r"
+  },
+  {
+    "at": "2026-09-13T05:41:11.929Z",
+    "type": "screen",
+    "file": "057.txt"
+  },
+  {
+    "at": "2026-09-13T05:41:26.968Z",
+    "type": "action",
+    "command": "edit-readback-first-page",
+    "keys": "\r"
+  },
+  {
+    "at": "2026-09-13T05:41:27.195Z",
+    "type": "screen",
+    "file": "058.txt"
+  },
+  {
+    "at": "2026-09-13T05:41:32.273Z",
+    "type": "action",
+    "command": "edit-record-readback",
+    "keys": "\u001b[4~"
+  },
+  {
+    "at": "2026-09-13T05:41:32.490Z",
+    "type": "screen",
+    "file": "059.txt"
+  },
+  {
+    "at": "2026-09-13T05:41:39.024Z",
+    "type": "action",
+    "command": "return-before-cleanup",
+    "keys": "q"
+  },
+  {
+    "at": "2026-09-13T05:41:39.258Z",
+    "type": "screen",
+    "file": "060.txt"
+  },
+  {
+    "at": "2026-09-13T05:41:50.021Z",
+    "type": "action",
+    "command": "select-reply-for-cleanup",
+    "keys": "#1gfZSfsx\r"
+  },
+  {
+    "at": "2026-09-13T05:41:50.236Z",
+    "type": "screen",
+    "file": "061.txt"
+  },
+  {
+    "at": "2026-09-13T05:41:58.527Z",
+    "type": "action",
+    "command": "delete-reply-prompt",
+    "keys": "d"
+  },
+  {
+    "at": "2026-09-13T05:41:58.742Z",
+    "type": "screen",
+    "file": "062.txt"
+  },
+  {
+    "at": "2026-09-13T05:42:06.255Z",
+    "type": "action",
+    "command": "cancel-delete-reply",
+    "keys": "n\r"
+  },
+  {
+    "at": "2026-09-13T05:42:06.469Z",
+    "type": "screen",
+    "file": "063.txt"
+  },
+  {
+    "at": "2026-09-13T05:42:13.292Z",
+    "type": "action",
+    "command": "delete-reply-prompt-again",
+    "keys": "d"
+  },
+  {
+    "at": "2026-09-13T05:42:13.514Z",
+    "type": "screen",
+    "file": "064.txt"
+  },
+  {
+    "at": "2026-09-13T05:42:19.478Z",
+    "type": "action",
+    "command": "confirm-delete-reply",
+    "keys": "y\r"
+  },
+  {
+    "at": "2026-09-13T05:42:19.696Z",
+    "type": "screen",
+    "file": "065.txt"
+  },
+  {
+    "at": "2026-09-13T05:42:24.329Z",
+    "type": "action",
+    "command": "continue",
+    "keys": "\r"
+  },
+  {
+    "at": "2026-09-13T05:42:24.557Z",
+    "type": "screen",
+    "file": "066.txt"
+  },
+  {
+    "at": "2026-09-13T05:42:29.813Z",
+    "type": "action",
+    "command": "select-original-for-cleanup",
+    "keys": "#1gfZPfeb\r"
+  },
+  {
+    "at": "2026-09-13T05:42:30.026Z",
+    "type": "screen",
+    "file": "067.txt"
+  },
+  {
+    "at": "2026-09-13T05:42:38.538Z",
+    "type": "action",
+    "command": "delete-original-prompt",
+    "keys": "d"
+  },
+  {
+    "at": "2026-09-13T05:42:38.757Z",
+    "type": "screen",
+    "file": "068.txt"
+  },
+  {
+    "at": "2026-09-13T05:42:49.573Z",
+    "type": "action",
+    "command": "confirm-delete-original",
+    "keys": "y\r"
+  },
+  {
+    "at": "2026-09-13T05:42:49.789Z",
+    "type": "screen",
+    "file": "069.txt"
+  },
+  {
+    "at": "2026-09-13T05:42:58.207Z",
+    "type": "action",
+    "command": "continue",
+    "keys": "\r"
+  },
+  {
+    "at": "2026-09-13T05:42:58.427Z",
+    "type": "screen",
+    "file": "070.txt"
+  },
+  {
+    "at": "2026-09-13T05:43:14.250Z",
+    "type": "action",
+    "command": "title-search-prompt",
+    "keys": "/"
+  },
+  {
+    "at": "2026-09-13T05:43:14.468Z",
+    "type": "screen",
+    "file": "071.txt"
+  },
+  {
+    "at": "2026-09-13T05:43:19.742Z",
+    "type": "action",
+    "command": "title-search-results",
+    "keys": "test test\r"
+  },
+  {
+    "at": "2026-09-13T05:43:19.964Z",
+    "type": "screen",
+    "file": "072.txt"
+  },
+  {
+    "at": "2026-09-13T05:43:27.029Z",
+    "type": "action",
+    "command": "read-filtered-designated-article",
+    "keys": "\r"
+  },
+  {
+    "at": "2026-09-13T05:43:27.280Z",
+    "type": "screen",
+    "file": "073.txt"
+  },
+  {
+    "at": "2026-09-13T05:43:32.278Z",
+    "type": "action",
+    "command": "filtered-push-warning",
+    "keys": "X"
+  },
+  {
+    "at": "2026-09-13T05:43:32.494Z",
+    "type": "screen",
+    "file": "074.txt"
+  },
+  {
+    "at": "2026-09-13T05:43:39.592Z",
+    "type": "action",
+    "command": "filtered-boo-input",
+    "keys": "2"
+  },
+  {
+    "at": "2026-09-13T05:43:39.811Z",
+    "type": "screen",
+    "file": "075.txt"
+  },
+  {
+    "at": "2026-09-13T05:43:46.205Z",
+    "type": "action",
+    "command": "cancel-empty-filtered-boo",
+    "keys": "\r"
+  },
+  {
+    "at": "2026-09-13T05:43:46.420Z",
+    "type": "screen",
+    "file": "076.txt"
+  },
+  {
+    "at": "2026-09-13T05:43:53.178Z",
+    "type": "action",
+    "command": "exit-title-search",
+    "keys": "q"
+  },
+  {
+    "at": "2026-09-13T05:43:53.394Z",
+    "type": "screen",
+    "file": "077.txt"
+  },
+  {
+    "at": "2026-09-13T05:43:59.582Z",
+    "type": "action",
+    "command": "board-list-push-entry",
+    "keys": "X"
+  },
+  {
+    "at": "2026-09-13T05:43:59.797Z",
+    "type": "screen",
+    "file": "078.txt"
+  },
+  {
+    "at": "2026-09-13T05:44:05.670Z",
+    "type": "action",
+    "command": "positive-push-input",
+    "keys": "1"
+  },
+  {
+    "at": "2026-09-13T05:44:05.883Z",
+    "type": "screen",
+    "file": "079.txt"
+  },
+  {
+    "at": "2026-09-13T05:44:20.731Z",
+    "type": "action",
+    "command": "cancel-empty-positive-push",
+    "keys": "\r"
+  },
+  {
+    "at": "2026-09-13T05:44:20.948Z",
+    "type": "screen",
+    "file": "080.txt"
+  },
+  {
+    "at": "2026-09-13T05:44:26.775Z",
+    "type": "action",
+    "command": "author-search-prompt",
+    "keys": "a"
+  },
+  {
+    "at": "2026-09-13T05:44:26.989Z",
+    "type": "screen",
+    "file": "081.txt"
+  },
+  {
+    "at": "2026-09-13T05:44:32.004Z",
+    "type": "action",
+    "command": "author-search-results",
+    "keys": "askz0\r"
+  },
+  {
+    "at": "2026-09-13T05:44:32.237Z",
+    "type": "screen",
+    "file": "082.txt"
+  },
+  {
+    "at": "2026-09-13T05:44:38.545Z",
+    "type": "action",
+    "command": "exit-author-search",
+    "keys": "q"
+  },
+  {
+    "at": "2026-09-13T05:44:38.767Z",
+    "type": "screen",
+    "file": "083.txt"
+  },
+  {
+    "at": "2026-09-13T05:45:01.441Z",
+    "type": "action",
+    "command": "push-threshold-prompt",
+    "keys": "Z"
+  },
+  {
+    "at": "2026-09-13T05:45:01.659Z",
+    "type": "screen",
+    "file": "084.txt"
+  },
+  {
+    "at": "2026-09-13T05:45:07.677Z",
+    "type": "action",
+    "command": "push-threshold-results",
+    "keys": "1\r"
+  },
+  {
+    "at": "2026-09-13T05:45:07.908Z",
+    "type": "screen",
+    "file": "085.txt"
+  },
+  {
+    "at": "2026-09-13T05:45:13.585Z",
+    "type": "action",
+    "command": "filtered-list-page-up",
+    "keys": "\u001b[5~"
+  },
+  {
+    "at": "2026-09-13T05:45:13.804Z",
+    "type": "screen",
+    "file": "086.txt"
+  },
+  {
+    "at": "2026-09-13T05:45:19.267Z",
+    "type": "action",
+    "command": "filtered-list-home",
+    "keys": "\u001b[1~"
+  },
+  {
+    "at": "2026-09-13T05:45:19.492Z",
+    "type": "screen",
+    "file": "087.txt"
+  },
+  {
+    "at": "2026-09-13T05:45:24.549Z",
+    "type": "action",
+    "command": "filtered-list-end",
+    "keys": "\u001b[4~"
+  },
+  {
+    "at": "2026-09-13T05:45:24.765Z",
+    "type": "screen",
+    "file": "088.txt"
+  },
+  {
+    "at": "2026-09-13T05:45:29.648Z",
+    "type": "action",
+    "command": "combined-title-prompt",
+    "keys": "/"
+  },
+  {
+    "at": "2026-09-13T05:45:29.862Z",
+    "type": "screen",
+    "file": "089.txt"
+  },
+  {
+    "at": "2026-09-13T05:45:36.313Z",
+    "type": "action",
+    "command": "combined-push-title-results",
+    "keys": "test test\r"
+  },
+  {
+    "at": "2026-09-13T05:45:36.534Z",
+    "type": "screen",
+    "file": "090.txt"
+  },
+  {
+    "at": "2026-09-13T05:45:41.643Z",
+    "type": "action",
+    "command": "exit-combined-search",
+    "keys": "q"
+  },
+  {
+    "at": "2026-09-13T05:45:41.871Z",
+    "type": "screen",
+    "file": "091.txt"
+  },
+  {
+    "at": "2026-09-13T05:45:46.361Z",
+    "type": "action",
+    "command": "no-results-title-prompt",
+    "keys": "/"
+  },
+  {
+    "at": "2026-09-13T05:45:46.579Z",
+    "type": "screen",
+    "file": "092.txt"
+  },
+  {
+    "at": "2026-09-13T05:45:54.267Z",
+    "type": "action",
+    "command": "title-search-no-results",
+    "keys": "pttzzz-no-match-20260913-unique\r"
+  },
+  {
+    "at": "2026-09-13T05:45:54.500Z",
+    "type": "screen",
+    "file": "093.txt"
+  },
+  {
+    "at": "2026-09-13T05:46:06.176Z",
+    "type": "action",
+    "command": "normal-board-home",
+    "keys": "\u001b[1~"
+  },
+  {
+    "at": "2026-09-13T05:46:06.398Z",
+    "type": "screen",
+    "file": "094.txt"
+  },
+  {
+    "at": "2026-09-13T05:46:11.662Z",
+    "type": "action",
+    "command": "normal-board-page-down",
+    "keys": "\u001b[6~"
+  },
+  {
+    "at": "2026-09-13T05:46:11.897Z",
+    "type": "screen",
+    "file": "095.txt"
+  },
+  {
+    "at": "2026-09-13T05:46:17.399Z",
+    "type": "action",
+    "command": "normal-board-end-cleanup-recheck",
+    "keys": "\u001b[4~"
+  },
+  {
+    "at": "2026-09-13T05:46:17.618Z",
+    "type": "screen",
+    "file": "096.txt"
+  },
+  {
+    "at": "2026-09-13T05:46:27.243Z",
+    "type": "action",
+    "command": "verify-designated-article-preserved",
+    "keys": "#1gfWDlNT\r"
+  },
+  {
+    "at": "2026-09-13T05:46:27.461Z",
+    "type": "screen",
+    "file": "097.txt"
+  },
+  {
+    "at": "2026-09-13T05:46:34.023Z",
+    "type": "action",
+    "command": "final-designated-readback",
+    "keys": "\r"
+  },
+  {
+    "at": "2026-09-13T05:46:34.279Z",
+    "type": "screen",
+    "file": "098.txt"
+  },
+  {
+    "at": "2026-09-13T05:46:41.318Z",
+    "type": "action",
+    "command": "main-menu-return",
+    "keys": "\u001a"
+  },
+  {
+    "at": "2026-09-13T05:47:00.093Z",
+    "type": "action",
+    "command": "hot-boards-after-Ctrl-Z",
+    "keys": "t"
+  },
+  {
+    "at": "2026-09-13T05:47:00.319Z",
+    "type": "screen",
+    "file": "099.txt"
+  },
+  {
+    "at": "2026-09-13T05:47:06.799Z",
+    "type": "action",
+    "command": "leave-Test",
+    "keys": "q"
+  },
+  {
+    "at": "2026-09-13T05:47:07.036Z",
+    "type": "screen",
+    "file": "100.txt"
+  },
+  {
+    "at": "2026-09-13T05:47:11.894Z",
+    "type": "action",
+    "command": "favorites-page-down",
+    "keys": "\u001b[6~"
+  },
+  {
+    "at": "2026-09-13T05:47:12.133Z",
+    "type": "screen",
+    "file": "101.txt"
+  },
+  {
+    "at": "2026-09-13T05:47:17.561Z",
+    "type": "action",
+    "command": "favorites-home",
+    "keys": "\u001b[1~"
+  },
+  {
+    "at": "2026-09-13T05:47:17.788Z",
+    "type": "screen",
+    "file": "102.txt"
+  },
+  {
+    "at": "2026-09-13T05:47:25.541Z",
+    "type": "action",
+    "command": "return-main-menu",
+    "keys": "q"
+  },
+  {
+    "at": "2026-09-13T05:47:25.776Z",
+    "type": "screen",
+    "file": "103.txt"
+  },
+  {
+    "at": "2026-09-13T05:47:33.678Z",
+    "type": "action",
+    "command": "logout-prompt",
+    "keys": "g\r"
+  },
+  {
+    "at": "2026-09-13T05:47:33.921Z",
+    "type": "screen",
+    "file": "104.txt"
+  },
+  {
+    "at": "2026-09-13T05:47:40.465Z",
+    "type": "action",
+    "command": "confirm-logout",
+    "keys": "y\r"
+  },
+  {
+    "at": "2026-09-13T05:47:40.867Z",
+    "type": "screen",
+    "file": "105.txt"
+  },
+  {
+    "at": "2026-09-13T05:47:49.541Z",
+    "type": "action",
+    "command": "finish-logout",
+    "keys": "\r"
+  },
+  {
+    "at": "2026-09-13T05:47:49.564Z",
+    "type": "disconnect",
+    "code": 1000
+  },
+  {
+    "at": "2026-09-13T05:47:58.683Z",
+    "type": "local-close"
+  }
+]

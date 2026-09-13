@@ -1,0 +1,24 @@
+ 作者  TEST_USER (新城站)                                          看板  Test 
+ 標題  [測試] pttzzz capture 20260913-1335                                    
+ 時間  Sun Sep 13 13:36:23 2026                                               
+───────────────────────────────────────
+
+EDIT-1335-VERIFIED 編輯測試
+PTTzzz terminal capture test 20260913-1335
+本篇用於終端畫面測試，完成後刪除。
+
+Line 01 - pagination fixture
+Line 02 - pagination fixture
+Line 03 - pagination fixture
+Line 04 - pagination fixture
+Line 05 - pagination fixture
+Line 06 - pagination fixture
+Line 07 - pagination fixture
+Line 08 - pagination fixture
+Line 09 - pagination fixture
+Line 10 - pagination fixture
+Line 11 - pagination fixture
+Line 12 - pagination fixture
+Line 13 - pagination fixture
+Line 14 - pagination fixture
+  瀏覽 第 1/2 頁 ( 47%)  目前顯示: 第 01~22 行  (y)回應(X%)推文(h)說明(←)離開 
