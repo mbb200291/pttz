@@ -96,6 +96,25 @@ type DriverArticleQuery = {
   minimumNativeScore?: number;
   limit?: number;
 };
+type DriverArticleRow = {
+  index: number;
+  title: string;
+  author: string;
+  date: string;
+  pushCount?: string;
+  fixed?: boolean;
+  mark?: string;
+};
+type DriverArticleBatch = {
+  items: readonly DriverArticleRow[];
+  exhausted: boolean;
+};
+
+function isDriverArticleBatch(
+  value: readonly DriverArticleRow[] | DriverArticleBatch,
+): value is DriverArticleBatch {
+  return "exhausted" in value;
+}
 
 /** Package-private transport seam. Exported from this module only for tests. */
 export interface BrowserGatewayDriver {
@@ -110,15 +129,7 @@ export interface BrowserGatewayDriver {
   ): Promise<void>;
   listBoards(source: { kind: "hot" | "favorite" | "category"; route?: readonly number[] }): Promise<readonly DriverBoardEntry[]>;
   searchBoards(prefix: string): Promise<readonly Board[]>;
-  listArticles?(input: DriverArticleQuery): Promise<readonly {
-    index: number;
-    title: string;
-    author: string;
-    date: string;
-    pushCount?: string;
-    fixed?: boolean;
-    mark?: string;
-  }[]>;
+  listArticles?(input: DriverArticleQuery): Promise<readonly DriverArticleRow[] | DriverArticleBatch>;
   execute(command: PttCommand): Promise<DriverWriteResult>;
 }
 
@@ -138,9 +149,15 @@ const positiveLimit = (limit?: number): number => {
 const normalizedPttId = (value: string): string => value.trim().toLowerCase();
 
 function gatewayFailure(error: unknown): GatewayError {
-  return error instanceof GatewayError
-    ? error
-    : new GatewayError("GATEWAY_FAILURE", "PTT gateway 操作失敗", true, error);
+  if (error instanceof GatewayError) return error;
+  if (
+    error instanceof Error &&
+    "code" in error &&
+    error.code === "ARTICLE_PAGE_STALLED"
+  ) {
+    return new GatewayError("GATEWAY_FAILURE", error.message, true, error);
+  }
+  return new GatewayError("GATEWAY_FAILURE", "PTT gateway 操作失敗", true, error);
 }
 
 async function gatewayCall<T>(call: () => Promise<T>): Promise<T> {
@@ -517,7 +534,7 @@ export class BrowserPttGateway implements PttGateway {
       }
       beforeIndex = value.beforeIndex;
     }
-    const rows = await gatewayCall(() => this.driver.listArticles!({
+    const result = await gatewayCall(() => this.driver.listArticles!({
       board: input.board,
       ...(beforeIndex ? { beforeIndex } : {}),
       ...(author ? { author } : {}),
@@ -525,6 +542,18 @@ export class BrowserPttGateway implements PttGateway {
       ...(minimumNativeScore === undefined ? {} : { minimumNativeScore }),
       limit: limit + 1,
     }));
+    let rows: readonly DriverArticleRow[];
+    let exhausted: boolean;
+    if (isDriverArticleBatch(result)) {
+      rows = result.items;
+      exhausted = result.exhausted;
+    } else {
+      rows = result;
+      exhausted = rows.length <= limit;
+    }
+    // Legacy test/custom drivers return only an array and retain the previous
+    // lookahead convention. The real browser transport reports exhaustion
+    // explicitly so a short terminal window is not mistaken for EOF.
     const selected = rows.slice(0, limit);
     const last = selected[selected.length - 1];
     return {
@@ -537,7 +566,7 @@ export class BrowserPttGateway implements PttGateway {
         ...(row.fixed === undefined ? {} : { pinned: row.fixed }),
         ...(row.mark === undefined ? {} : { mark: row.mark }),
       })),
-      ...(last && rows.length > selected.length
+      ...(last && !exhausted
         ? { nextCursor: this.issue({ kind: "article-page", signature, beforeIndex: last.index }) }
         : {}),
     };
@@ -592,6 +621,7 @@ function terminalGatewayDriver(driver: GatewayTerminalDriver): BrowserGatewayDri
       const rows: Awaited<ReturnType<TerminalDriver["listArticles"]>> = [];
       let beforeIndex = input.beforeIndex;
       const target = input.limit ?? 20;
+      let exhausted = false;
       while (rows.length < target) {
         const batch = input.minimumNativeScore !== undefined && input.keyword
           ? await driver.filterArticlesByTitleAndPush(
@@ -618,12 +648,25 @@ function terminalGatewayDriver(driver: GatewayTerminalDriver): BrowserGatewayDri
         rows.push(...fresh);
         // Terminal windows overlap and pins are not chronological cursors.
         const normalIndexes = batch.filter((row) => !row.fixed).map((row) => row.index);
-        if (!normalIndexes.length) break;
+        if (!normalIndexes.length) {
+          exhausted = true;
+          break;
+        }
         const oldestIndex = Math.min(...normalIndexes);
-        if (beforeIndex !== undefined && oldestIndex >= beforeIndex) break;
+        if (oldestIndex <= 1) {
+          exhausted = true;
+          break;
+        }
+        if (beforeIndex !== undefined && oldestIndex >= beforeIndex) {
+          throw new GatewayError(
+            "GATEWAY_FAILURE",
+            "文章列表尚未更新，請再試一次",
+            true,
+          );
+        }
         beforeIndex = oldestIndex;
       }
-      return rows;
+      return { items: rows, exhausted };
     },
     execute: async (command) => {
       let result: ActionResult;

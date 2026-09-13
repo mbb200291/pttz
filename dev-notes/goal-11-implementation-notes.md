@@ -123,3 +123,13 @@ Article 移除正文 trim；原始排版使用 pre 與局部 overflow-x，媒體
 瀏覽器使用本機 mockPtt，不登入真實 PTT。確認方向鍵選看板／Enter 進入、Ctrl+P 開發文、X 開留言、R 開回應，以及輸入文字不觸發快捷鍵；沒有實際送出文章或回文。文章預覽確認統計只保留一列。獨立程式碼審查指出篩選模式也需要最新頁定位，納入同一修正與回歸測試：同一搜尋條件分頁後刷新須回到最新結果，不重新疊加搜尋條件。
 
 2026-09-09 最終 `npm run verify` 通過：core 329、browser 171、Web 222 項測試，加上 11 項輔助測試、build、lint（0 errors、3 個既有 warnings）及 package smoke。共新增 13 項測試；統計列既有測試亦改為檢查核心校正票數與單一操作列。保留既有 bundle 大小與 Node 棄用警告。審查複驗無未解決的 Critical／Important 問題。
+
+## 看板分頁完整性
+
+修正兩個彼此放大的設計缺陷。browser 原先在送出終端翻頁鍵後固定等待 120ms，隨即把單次畫面快照當成結果；gateway 又以「這次沒有取得更小的文章編號」推斷已到底。終端重繪稍慢時，同一頁因此會被誤判成永久邊界。現在較舊頁必須觀察到更小文章編號或確定包含第一篇；逾時屬可重試的停滯，不再回傳空頁。browser-private gateway batch 另帶明確 `exhausted`，短頁不再等於到底，既有 `TerminalDriver.listArticles()` 陣列介面維持相容。
+
+Web 層原本依賴 Map 與回應的插入順序，refresh/load-more 一旦回傳重疊或亂序資料便會讓列表錯序；現在每次合併後固定以置頂狀態與文章數字索引排序。已有快取時的暫時重新驗證失敗也不再清除 `hasMore`，載入較舊文章失敗提供精簡的就地重試，成功後清除錯誤。
+
+PTT 看板列表只提供月／日，無法從稀疏且會刪文的索引可靠還原年份。公開契約補充 `ArticleSummary.publishedAt` 保留來源精度；UI 不虛構年份，改以文章編號為主要順序提示、月日為次要資訊。若未來需要完整年份，必須擴充來源資料契約或載入文章標頭，不能由月日猜測。
+
+2026-09-13 `npm run verify` 通過：core 374、browser 288、Web 308、輔助 11，packages/Web build 與 package smoke 全部成功；lint 為 0 errors，保留 3 個既有 Fast Refresh warnings。新增測試覆蓋延遲終端重繪、停滯、明確終點、短頁游標、亂序載入／刷新、快取重驗證失敗與就地重試。

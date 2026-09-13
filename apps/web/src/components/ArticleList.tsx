@@ -265,7 +265,7 @@ function ArticleRow({
         )}
       </div>
 
-      {/* Column 2: Date + index stacked */}
+      {/* Column 2: index + PTT's yearless month/day label */}
       <div
         style={{
           fontFamily: "var(--font-mono)",
@@ -274,8 +274,8 @@ function ArticleRow({
           lineHeight: 1.4,
         }}
       >
-        <div>{normalized.date}</div>
-        <div style={{ fontSize: 10, opacity: 0.7 }}>#{normalized.index}</div>
+        <div>#{normalized.index}</div>
+        <div style={{ fontSize: 10, opacity: 0.7 }}>{normalized.date}</div>
       </div>
 
       {/* Column 3: Title + meta */}
@@ -1582,6 +1582,25 @@ export function ArticleList({
           <span style={{ color: "oklch(0.86 0.16 75)", fontSize: 13 }}>{error}</span>
         ) : articles.length === 0 ? (
           <span style={{ color: "var(--text-dim)", fontSize: 13 }}>正在連線至 PTT…</span>
+        ) : error ? (
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+            <span style={{ color: "var(--text-muted)", fontSize: 13 }}>暫時無法載入</span>
+            <button
+              type="button"
+              onClick={handleLoadMore}
+              style={{
+                background: "transparent",
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+                color: "var(--text)",
+                cursor: "pointer",
+                fontSize: 13,
+                padding: "6px 10px",
+              }}
+            >
+              再試一次
+            </button>
+          </div>
         ) : !hasMore ? (
           <span style={{ color: "var(--text-dim)", fontSize: 12 }}>已到最舊文章</span>
         ) : supportsObserver ? (

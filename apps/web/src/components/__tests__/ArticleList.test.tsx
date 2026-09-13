@@ -10,6 +10,53 @@ afterEach(() => {
 });
 
 describe("ArticleList", () => {
+  it("presents the article index before PTT's yearless month/day label", async () => {
+    const { ArticleList } = await import("../ArticleList");
+    const { container } = render(
+      <ArticleList
+        boardName="Test"
+        onBack={() => {}}
+        onSelectArticle={() => {}}
+        onSelectArticleByAid={() => {}}
+        mockArticles={[{
+          index: 216,
+          mark: "",
+          pushCount: "",
+          date: "9/06",
+          author: "author",
+          title: "發文測試",
+        }]}
+      />,
+    );
+    const row = container.querySelector('[data-article-index="216"]');
+    expect(row).not.toBeNull();
+    expect(row!.textContent!.indexOf("#216")).toBeLessThan(row!.textContent!.indexOf("9/06"));
+  });
+  it("offers an inline retry when loading older articles temporarily fails", async () => {
+    const retry = vi.fn();
+    const { ArticleList } = await import("../ArticleList");
+    render(
+      <ArticleList
+        boardName="Test"
+        onBack={() => {}}
+        onSelectArticle={() => {}}
+        onSelectArticleByAid={() => {}}
+        mockArticles={[{
+          index: 216,
+          mark: "",
+          pushCount: "",
+          date: "9/06",
+          author: "author",
+          title: "發文測試",
+        }]}
+        mockError="文章列表尚未更新，請再試一次"
+        onMockLoadMore={retry}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "再試一次" }));
+    expect(retry).toHaveBeenCalledOnce();
+  });
   it("does not restore article focus behind an open sibling dialog", async () => {
     const { ArticleList } = await import("../ArticleList");
     const { writeBoardAnchorCache } = await import("../../lib/ptt/viewCache");

@@ -148,7 +148,24 @@ function appendCoreArticles(
 ): ArticleSummary[] {
   const merged = new Map(previous.map((article) => [articleKeyId(article.key), article]));
   for (const article of incoming) merged.set(articleKeyId(article.key), article);
-  return [...merged.values()];
+  return sortCoreArticles([...merged.values()]);
+}
+
+function sortCoreArticles(articles: readonly ArticleSummary[]): ArticleSummary[] {
+  return articles
+    .map((article, order) => ({ article, order }))
+    .sort((left, right) => {
+      const leftPinned = Boolean(left.article.pinned);
+      const rightPinned = Boolean(right.article.pinned);
+      if (leftPinned !== rightPinned) return leftPinned ? -1 : 1;
+      const leftIndex = "index" in left.article.key ? left.article.key.index : undefined;
+      const rightIndex = "index" in right.article.key ? right.article.key.index : undefined;
+      if (typeof leftIndex === "number" && typeof rightIndex === "number") {
+        return rightIndex - leftIndex;
+      }
+      return left.order - right.order;
+    })
+    .map(({ article }) => article);
 }
 
 function refreshCoreArticles(
@@ -164,7 +181,7 @@ function refreshCoreArticles(
     !article.pinned && typeof article.key.index === "number" && article.key.index < oldestIncoming &&
     !incomingIds.has(articleKeyId(article.key))
   );
-  return [...incoming, ...provenOlder];
+  return sortCoreArticles([...incoming, ...provenOlder]);
 }
 
 export function useBoard(
@@ -251,7 +268,7 @@ export function useBoard(
           if (cancelled || requestGeneration !== queryGenerationRef.current) return;
           const merged = cachedArticles.length > 0
             ? refreshCoreArticles(cachedArticles, next)
-            : next;
+            : sortCoreArticles(next);
           setArticles(merged);
           setHasMore(Boolean(nextCursorRef.current));
           if (next.length > 0) {
@@ -277,7 +294,7 @@ export function useBoard(
         .catch((err: unknown) => {
           if (cancelled || requestGeneration !== queryGenerationRef.current) return;
           setError(err instanceof Error ? err.message : "無法載入看板");
-          setHasMore(false);
+          if (cachedArticles.length === 0) setHasMore(false);
         })
         .finally(() => {
           if (!cancelled && requestGeneration === queryGenerationRef.current) {
@@ -311,6 +328,7 @@ export function useBoard(
 
     activeRequestRef.current = "load";
     setLoading(true);
+    setError(null);
     const requestGeneration = queryGenerationRef.current;
     fetchArticles(true, requestGeneration)
       .then((next) => {
@@ -364,7 +382,7 @@ export function useBoard(
         }
         setArticles((prev) => {
           const refreshed =
-            prev.length > 0 ? refreshCoreArticles(prev, next) : next;
+            prev.length > 0 ? refreshCoreArticles(prev, next) : sortCoreArticles(next);
           if (filter) {
             writeFilteredBoardCache(boardName, filter, refreshed);
           } else {

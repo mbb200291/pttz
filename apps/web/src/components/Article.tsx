@@ -959,9 +959,29 @@ export function Article({
               )}
             </div>
             {pushVoteError && (
-              <p role="alert" className="mb-3 text-sm text-red-400">
-                {pushVoteError}
-              </p>
+              <div
+                role={pushVoteError === "尚未同步" ? "status" : "alert"}
+                className="mb-3 flex items-center gap-3 text-sm text-gray-400"
+              >
+                <span>{pushVoteError}</span>
+                {pushVoteError === "尚未同步" && (
+                  <button
+                    type="button"
+                    disabled={liveReloading}
+                    onClick={() => {
+                      void liveReload().then((refreshed) => {
+                        if (refreshed) {
+                          setPushVoteError(null);
+                          clearWriteLocks();
+                        }
+                      });
+                    }}
+                    className="text-gray-200 underline underline-offset-4 hover:text-white disabled:opacity-50"
+                  >
+                    重新整理
+                  </button>
+                )}
+              </div>
             )}
             <PushThread
               pushes={article.pushes}
