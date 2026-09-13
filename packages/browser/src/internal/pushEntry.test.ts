@@ -1,5 +1,13 @@
-import { describe, expect, it } from "vitest";
-import { submitPushFromCurrentArticle } from "./terminalDriver.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { submitPushFromCurrentArticle as submitPush } from "./terminalDriver.js";
+import { runClock } from "../../test-support/realPttReplay.js";
+
+beforeEach(() => vi.useFakeTimers());
+afterEach(() => vi.useRealTimers());
+
+function submitPushFromCurrentArticle(...args: Parameters<typeof submitPush>) {
+  return runClock(submitPush(...args));
+}
 
 const menu = "您覺得這篇文章 1.值得推薦 2.給它噓聲 3.只加→註解 [1]?";
 const noBooMenu = "您覺得這篇文章 1.值得推薦 3.只加→註解 [1]?";
