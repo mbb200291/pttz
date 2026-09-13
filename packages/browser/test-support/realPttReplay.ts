@@ -9,7 +9,7 @@ export const fixture = (name: string) => readFileSync(resolve(root, name), "utf8
 export const current = (n: number) => fixture(`2026-09-13/kick-and-board/${String(n).padStart(3, "0")}.txt`);
 export const nested = (n: number) => fixture(`2026-09-13/nested-replies-1gfWDlNT/${String(n).padStart(3, "0")}.txt`);
 export function legacy(name: string, heading: string): string {
-  const raw = fixture(name);
+  const raw = fixture(`2026-08-31_2026-09-01/${name}`);
   const marker = `=== ${heading} ===`;
   const start = raw.indexOf(marker);
   if (start < 0) throw new Error(`Missing legacy section: ${heading}`);
