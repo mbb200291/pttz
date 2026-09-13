@@ -4792,15 +4792,15 @@ async function fetchArticleFromBotManuallyWithOpen(
     throw new Error(`無法進入看板 ${boardName}`);
   }
   recordArticleOpenTraceEvent(trace, "ensure_board_done", traceStartedAt);
-  await openArticle();
+  if (!(await openArticle())) return null;
   recordArticleOpenTraceEvent(trace, "send_open_done", traceStartedAt);
 
   let firstScreen: ArticleFirstScreenSnapshot | null = null;
   let initialScreenForProgressiveRead: string[] | null = null;
   if ((onPartial || onRawSnapshot) && bot.getLine) {
     firstScreen = await waitForArticleFirstScreen(bot, boardName, {
-      // Avoid blocking progressive paging for too long when terminal snapshots lag.
-      timeoutMs: 350,
+      // Only start paging once an article header is observed.
+      timeoutMs: 1800,
       previousFingerprint: trace.previousFingerprint,
       trace,
       traceStartedAt,
@@ -4822,7 +4822,7 @@ async function fetchArticleFromBotManuallyWithOpen(
         "first_screen_timeout",
         traceStartedAt,
       );
-      initialScreenForProgressiveRead = readScreenLines(bot);
+      return null;
     }
   }
 
@@ -4847,13 +4847,17 @@ async function fetchArticleFromBotManuallyWithOpen(
     Array.isArray(rawLines) ? `${rawLines.length} lines` : "no lines",
   );
 
+  // A failed open can leave getLines() on the board list. Never publish that
+  // screen as article content or send an article-exit key from the board list.
+  if (!Array.isArray(rawLines) || rawLines.length === 0) return null;
+  const rawFull = rawLines.join("\n");
+  const header = parseArticleHeaderBlock(rawFull);
+  if (!header.author && !header.title) return null;
+
   // Exit article view so the bot is in board list when the next serial task starts.
   options.signal?.throwIfAborted();
   if (!options.leaveOpen) await bot.send?.("q");
 
-  if (!Array.isArray(rawLines) || rawLines.length === 0) return null;
-
-  const rawFull = rawLines.join("\n");
   onRawSnapshot?.(rawFull, "final");
   const { body, sourceBody, revisions } = splitArticleBody(rawFull);
   const parsed = parseArticleHeaderBlock(body);

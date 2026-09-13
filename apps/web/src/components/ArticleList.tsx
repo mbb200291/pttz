@@ -170,7 +170,7 @@ function ArticleRow({
   onClick: (index: number, element: HTMLButtonElement) => void;
 }) {
   const normalized = legacySummary(article);
-  const isDeleted = article.title.includes("(已被刪除)");
+  const isDeleted = /[（(](?:本文)?已被刪除[）)]/.test(article.title);
   const isFixed = Boolean(normalized.fixed);
   const { category, displayTitle, isRe } = parseTitle(article.title);
 

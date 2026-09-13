@@ -10,6 +10,16 @@ afterEach(() => {
 });
 
 describe("ArticleList", () => {
+  it.each(["(本文已被刪除) [alice]", "(已被刪除) [alice]"])("disables deleted rows: %s", async (title) => {
+    const { ArticleList } = await import("../ArticleList");
+    const select = vi.fn();
+    const { container } = render(<ArticleList boardName="Test" onBack={() => {}} onSelectArticle={select} onSelectArticleByAid={() => {}}
+      mockArticles={[{ index: 286, mark: "", pushCount: "", date: "9/13", author: "-", title }]} />);
+    const row = container.querySelector('[data-article-index="286"]') as HTMLButtonElement;
+    expect(row.disabled).toBe(true);
+    fireEvent.click(row);
+    expect(select).not.toHaveBeenCalled();
+  });
   it("presents the article index before PTT's yearless month/day label", async () => {
     const { ArticleList } = await import("../ArticleList");
     const { container } = render(

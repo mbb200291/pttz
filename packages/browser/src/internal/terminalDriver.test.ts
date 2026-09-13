@@ -13,6 +13,24 @@ function readRealPttFixture(name: string): string {
   return readFileSync(existsSync(local) ? local : fromRepositoryRoot, "utf8");
 }
 
+it("does not publish a board screen when a deleted article fails to open", async () => {
+  const { fetchArticleFromBotManually } = await import("./terminalDriver.js");
+  const rows = ["【板主:hank2579】 看板《Test》", "[←]離開 [→]閱讀 [Ctrl-P]發表文章", "編號 日 期 作 者 文 章 標 題", buildBoardLine({ index: 286, date: "9/13", author: "-", title: "(本文已被刪除) [someone]" })];
+  const send = vi.fn(async () => true);
+  const partial = vi.fn();
+  const raw = vi.fn();
+  const result = await fetchArticleFromBotManually({
+    send, async enterBoardByName() { return true; },
+    getLine(index: number) { return { str: rows[index] ?? "" }; },
+    async getLines() { return rows; },
+  }, "Test", 286, partial, raw);
+  expect(result).toBeNull();
+  expect(partial).not.toHaveBeenCalled();
+  expect(raw).not.toHaveBeenCalled();
+  expect(send).not.toHaveBeenCalledWith("\x1b[6~");
+  expect(send).not.toHaveBeenCalledWith("q");
+});
+
 function fixtureSection(source: string, heading: string): string {
   const marker = `=== ${heading} ===`;
   const start = source.indexOf(marker);

@@ -4,7 +4,7 @@
  * 完整資料回來後切換到完整版（含推文討論串）。
  */
 
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useArticle } from "../hooks/useArticle";
 import { PushThread } from "./PushThread";
 import { ArticleRevisions } from "./ArticleRevisions";
@@ -166,42 +166,6 @@ function ArticleBody({ body }: { body: string }) {
   return <RichContent text={body} variant="body" />;
 }
 
-function LightweightPushList({
-  pushes,
-}: {
-  pushes: NonNullable<PartialArticleData["pushes"]>;
-}) {
-  const visiblePushes = pushes.filter((push) => push.visible !== false);
-  if (visiblePushes.length === 0) return null;
-
-  return (
-    <section className="mt-10 border-t border-gray-700 pt-6">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <span className="text-sm font-semibold tracking-wide text-gray-300">
-          回文
-        </span>
-        <span className="text-xs text-gray-500">已載入 {visiblePushes.length} 則</span>
-      </div>
-      <div className="space-y-2">
-        {visiblePushes.map((push) => (
-          <div
-            key={push.id}
-            className="rounded-xl border border-gray-800 bg-gray-900/70 px-3 py-2"
-          >
-            <div className="mb-1 flex items-center gap-2 text-xs text-gray-500">
-              <span className="font-medium text-sky-300">{push.author}</span>
-              {push.time ? <span>{push.time}</span> : null}
-            </div>
-            <pre className="whitespace-pre-wrap break-words font-mono text-sm leading-6 text-gray-200">
-              {push.content}
-            </pre>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function getViewerPushVote(push: AggregatedPush, currentUser?: string): -1 | 0 | 1 {
   if (push.votes?.viewerVote === "push") return 1;
   if (push.votes?.viewerVote === "boo") return -1;
@@ -233,21 +197,6 @@ function transitionVoteState(
         (next === -1 ? 1 : 0),
     },
   };
-}
-
-function PartialDiscussion({ partial }: { partial: PartialArticleData }) {
-  const pushes = partial.pushes ?? [];
-  const articleNotes = partial.articleNotes ?? [];
-
-  return (
-    <>
-      <ArticleEditRecords records={articleNotes} />
-      <LightweightPushList pushes={pushes} />
-      <div className="py-6 text-center text-gray-500 text-sm border-t border-gray-800">
-        完整討論串整理中…
-      </div>
-    </>
-  );
 }
 
 type PushTypeBadgeType = "push" | "boo" | "neutral";
@@ -423,7 +372,7 @@ export function Article({
     onBack,
   ]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!article) return;
     setArticleVote({
       value: getViewerArticleVote(article, currentUser),
@@ -692,8 +641,12 @@ export function Article({
         }
       : null;
 
-  const loadingArticle = loading ? partialArticle ?? cachedArticle ?? initialArticle : null;
+  const loadingArticle: PartialArticleData | null = loading ? partialArticle ?? cachedArticle ?? initialArticle : null;
   const displayedArticle = article ?? loadingArticle;
+  const displayedVotes = article ? articleVote.count : loadingArticle?.articleVotes ? {
+    push: loadingArticle.articleVotes.pushCount,
+    boo: loadingArticle.articleVotes.booCount,
+  } : { push: 0, boo: 0 };
 
   useEffect(() => {
     if (!import.meta.env.DEV || typeof window === "undefined") return;
@@ -717,7 +670,7 @@ export function Article({
   }, [article, articleIndex, boardName]);
 
   // Count all visible aggregated replies, including nested replies.
-  const replyCount = (article?.pushes ?? []).filter((push) =>
+  const replyCount = (displayedArticle?.pushes ?? []).filter((push) =>
     push.type !== "edit" &&
     push.visible !== false
   ).length;
@@ -882,7 +835,7 @@ export function Article({
               author={displayedArticle.author}
               board={displayedArticle.board}
               date={displayedArticle.date}
-              score={article?.score}
+              score={displayedArticle.score}
             />
             {displayedArticle.body || article ? (
               <ArticleBody key={`${boardName}:${articleAid ?? articleIndex}`} body={displayedArticle.body} />
@@ -890,10 +843,6 @@ export function Article({
               <div className="mb-8 py-4 text-sm text-gray-500">文章內容載入中…</div>
             )}
           </>
-        )}
-
-        {!article && loadingArticle && (
-          <PartialDiscussion partial={loadingArticle} />
         )}
 
         {/* 初次 loading，尚無任何內容 */}
@@ -909,10 +858,10 @@ export function Article({
         )}
 
         {/* 完整文章 */}
-        {article && (
+        {displayedArticle && (
           <>
-            <ArticleRevisions revisions={article.revisions ?? []} />
-            <ArticleEditRecords records={article.articleNotes} />
+            <ArticleRevisions revisions={displayedArticle.revisions ?? []} />
+            <ArticleEditRecords records={displayedArticle.articleNotes ?? []} />
 
             {/* One action row uses the core's corrected article vote totals. */}
             <div role="group" aria-label="文章推噓與回覆" style={{
@@ -927,15 +876,17 @@ export function Article({
             }}>
               <VotePair
                 value={articleVote.value}
-                count={articleVote.count}
+                count={displayedVotes}
+                countsPending={!article && !loadingArticle?.articleVotes}
+                reserveCountWidth
                 voters={{
-                  push: article.articlePushVoters ?? [],
-                  boo: article.articleBooVoters ?? [],
+                  push: article?.articlePushVoters ?? [],
+                  boo: article?.articleBooVoters ?? [],
                 }}
                 myVote={articleVote.value}
                 onPush={() => handleArticleVote("push")}
                 onBoo={() => handleArticleVote("boo")}
-                disabled={!isLoggedIn || isArticleAuthor || articleVotePending || articleVoteLocked}
+                disabled={!article || !isLoggedIn || isArticleAuthor || articleVotePending || articleVoteLocked}
                 size="lg"
               />
               <div
@@ -943,16 +894,16 @@ export function Article({
                 style={{ display: "flex", alignItems: "center", gap: 6 }}
               >
                 <PushTypeBadge type="neutral" />
-                <span style={{ fontWeight: 700, fontSize: 14, color: "var(--neutral-fg)", fontFamily: "var(--font-mono)" }}>{replyCount}</span>
+                <span style={{ display: "inline-block", width: "6ch", fontVariantNumeric: "tabular-nums", fontWeight: 700, fontSize: 14, color: "var(--neutral-fg)", fontFamily: "var(--font-mono)" }}>{displayedArticle.pushes ? replyCount : "—"}</span>
                 <span style={{ fontSize: 12, color: "var(--text-dim)" }}>回覆</span>
               </div>
-              {isArticleAuthor && (
-                <span style={{ color: "var(--text-dim)", fontSize: 12 }}>
+              {isLoggedIn && (
+                <span aria-hidden={!isArticleAuthor} style={{ visibility: isArticleAuthor ? "visible" : "hidden", color: "var(--text-dim)", fontSize: 12 }}>
                   作者本人, 使用 → 加註方式
                 </span>
               )}
               {isLoggedIn && (
-                <button type="button" onClick={openReply} aria-keyshortcuts="x" title="回覆此文（X）"
+                <button type="button" disabled={!article} onClick={openReply} aria-keyshortcuts="x" title="回覆此文（X）"
                   className="px-4 py-2 rounded-xl border border-gray-700 text-sm text-gray-300 hover:text-white hover:border-gray-500 transition-colors">
                   回覆此文
                 </button>
@@ -984,22 +935,24 @@ export function Article({
               </div>
             )}
             <PushThread
-              pushes={article.pushes}
-              score={article.score}
+              pushes={displayedArticle.pushes ?? []}
+              score={displayedArticle.score ?? 0}
               onRefresh={async () => {
+                if (!article) return false;
                 const refreshed = await liveReload();
                 if (refreshed) clearWriteLocks();
                 return refreshed;
               }}
-              refreshing={liveReloading}
+              refreshing={!article || liveReloading}
               currentUser={currentUser}
-              onReply={openReplyPush}
-              onEdit={openEditPush}
+              onReply={article ? openReplyPush : undefined}
+              onEdit={article ? openEditPush : undefined}
               pushVotes={pushVotes}
-              onVote={handlePushVote}
+              onVote={article ? handlePushVote : undefined}
               pushEdits={pushEdits}
               pendingVoteIds={new Set([...pendingPushVoteIds, ...lockedPushVoteIds])}
             />
+            {!article && <div role="status" className="py-6 text-center text-gray-500 text-sm">討論載入中…</div>}
           </>
         )}
       </div>

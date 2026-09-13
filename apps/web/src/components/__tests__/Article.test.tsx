@@ -72,6 +72,8 @@ describe("Article", () => {
               floorNumber: 1,
               anchorOrder: 1,
               sourceFloors: [1],
+              pushVoters: [],
+              booVoters: [],
             },
           ],
           articleNotes: [],
@@ -100,12 +102,10 @@ describe("Article", () => {
     expect(html).toContain("partial article");
     expect(html).toContain("https://youtu.be/dQw4w9WgXcQ");
     expect(html).toContain("播放 YouTube 影片");
-    expect(html).not.toContain("時間");
-    expect(html).not.toContain("推噓分");
-    expect(html).not.toContain("舊到新");
-    expect(html).toContain("回文");
+    expect(html).toContain("文章推噓與回覆");
+    expect(html).not.toContain("已載入 1 則");
     expect(html).not.toContain(">噓</pre>");
-    expect(html).toContain("完整討論串整理中…");
+    expect(html).toContain("討論載入中…");
   });
 
   it("renders structured revisions after the article body", async () => {

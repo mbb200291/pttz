@@ -141,7 +141,7 @@ describe("Article push voting", () => {
 
     expect((screen.getAllByRole("button", { name: "推" })[0] as HTMLButtonElement).disabled).toBe(false);
     expect((screen.getAllByRole("button", { name: "噓" })[0] as HTMLButtonElement).disabled).toBe(false);
-    expect(screen.queryByText("作者本人, 使用 → 加註方式")).toBeNull();
+    expect(screen.getByText("作者本人, 使用 → 加註方式").style.visibility).toBe("hidden");
   });
 
   it("renders authoritative article and reply vote totals from the core model", () => {
