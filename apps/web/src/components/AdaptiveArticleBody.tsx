@@ -1,17 +1,20 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { parseAnsiText } from "../lib/ansiText";
 import { isPreformattedArticle, readableAnsiStyle } from "../lib/articlePresentation";
-import { parseContentSegments } from "../lib/ptt/contentSegments";
+import { parseLocatedContentSegments, type ContentSegment } from "../lib/ptt/contentSegments";
 import { ImagePreview, YouTubePreview } from "./MediaPreview";
 import { TerminalGlyph } from "./TerminalGlyph";
+import { parseArticleFooter } from "../lib/articleFooter";
 
 export function AdaptiveArticleBody({ text }: { text: string }) {
   const parsed = useMemo(() => parseAnsiText(text), [text]);
-  const segments = useMemo(() => parseContentSegments(parsed.text), [parsed.text]);
+  const footer = useMemo(() => parseArticleFooter(parsed.text), [parsed.text]);
   const container = useRef<HTMLDivElement>(null);
   const measure = useRef<HTMLPreElement>(null);
   const [fits, setFits] = useState(false);
   const [forced, setForced] = useState(false);
+  const bodyEnd = !forced && footer ? footer.start : parsed.text.length;
+  const segments = useMemo(() => parseLocatedContentSegments(parsed.text.slice(0, bodyEnd)), [parsed.text, bodyEnd]);
   const preformatted = useMemo(() => isPreformattedArticle(parsed.text), [parsed.text]);
   const monospace = forced || preformatted;
 
@@ -33,8 +36,26 @@ export function AdaptiveArticleBody({ text }: { text: string }) {
 
   const original = forced || fits;
   // Match ptt-client's DBCS width for symbols as well as CJK characters.
-  const runs = parsed.runs.map((run, i) => <span key={i} style={forced ? run.style : readableAnsiStyle(run)}>{monospace ? run.text.split(/([^\u0000-\u00ff])/u).map((part, j) => j % 2
-    ? <TerminalGlyph key={j} text={part} /> : part) : run.text}</span>);
+  const renderRuns = (start = 0, end = parsed.text.length) => {
+    let offset = 0;
+    return parsed.runs.map((run, i) => {
+      const from = offset;
+      offset += run.text.length;
+      if (offset <= start || from >= end) return null;
+      const value = run.text.slice(Math.max(0, start - from), end - from);
+      return <span key={i} style={forced ? run.style : readableAnsiStyle(run)}>{monospace ? value.split(/([^\u0000-\u00ff])/u).map((part, j) => j % 2
+        ? <TerminalGlyph key={j} text={part} /> : part) : value}</span>;
+    });
+  };
+  const runs = renderRuns(0, bodyEnd);
+  const originalRuns = forced && footer ? (() => {
+    const start = parsed.text.indexOf(footer.url, footer.start);
+    return <>{renderRuns(0, start)}<a href={footer.url} target="_blank" rel="noopener noreferrer" className="underline">{renderRuns(start, start + footer.url.length)}</a>{renderRuns(start + footer.url.length)}</>;
+  })() : runs;
+  const preview = (segment: ContentSegment, key: number) => segment.kind === "image"
+    ? <ImagePreview key={key} url={segment.url} />
+    : segment.kind === "youtube" ? <YouTubePreview key={key} videoId={segment.videoId} url={segment.url} /> : null;
+  const textStyle = { whiteSpace: original ? "pre" : "pre-wrap", overflowWrap: original ? "normal" : "anywhere", margin: 0, font: "inherit", tabSize: 8 } as const;
   return <div className="mb-8" style={{ minWidth: 0, maxWidth: "100%" }}>
     <div className="mb-3 flex flex-wrap items-center gap-3">
       <button type="button" aria-pressed={forced} onClick={() => setForced(!forced)}
@@ -48,13 +69,22 @@ export function AdaptiveArticleBody({ text }: { text: string }) {
       <pre ref={measure} data-layout-measure="true" aria-hidden="true"
         style={{ position: "absolute", visibility: "hidden", pointerEvents: "none", whiteSpace: "pre", width: "max-content", margin: 0, font: "inherit", tabSize: 8 }}>{runs}</pre>
       <div role="region" aria-label="原始正文" tabIndex={original ? 0 : undefined} style={{ overflowX: original ? "auto" : "hidden", maxWidth: "100%" }}>
-        <pre style={{ whiteSpace: original ? "pre" : "pre-wrap", overflowWrap: original ? "normal" : "anywhere", margin: 0, font: "inherit", tabSize: 8 }}>{runs}</pre>
+        {forced || !segments.some(({ segment }) => segment.kind !== "text")
+          ? <pre style={textStyle}>{originalRuns}</pre>
+          : segments.map(({ segment, start, end }, i) => segment.kind === "text"
+            ? <pre key={i} style={textStyle}>{renderRuns(start, end)}</pre>
+            : preview(segment, i))}
       </div>
     </div>
-    {segments.some(segment => segment.kind !== "text") && <div className="mt-4">
-      {segments.map((segment, i) => segment.kind === "image"
-        ? <ImagePreview key={i} url={segment.url} />
-        : segment.kind === "youtube" ? <YouTubePreview key={i} videoId={segment.videoId} url={segment.url} /> : null)}
+    {!forced && footer && <section aria-label="文章資訊" className="mt-6 border-t pt-3 text-sm" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1">
+        <dt>發信站</dt><dd>{footer.station}</dd>
+        <dt>來源</dt><dd className="break-words">{footer.source}</dd>
+        <dt>文章連結</dt><dd><a href={footer.url} target="_blank" rel="noopener noreferrer" className="break-all underline" style={{ color: "var(--accent)" }}>{footer.url}</a></dd>
+      </dl>
+    </section>}
+    {forced && segments.some(({ segment }) => segment.kind !== "text") && <div className="mt-4">
+      {segments.map(({ segment }, i) => preview(segment, i))}
     </div>}
   </div>;
 }

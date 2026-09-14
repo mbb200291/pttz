@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { hasOpenNavigationDialog, navigateBoardGrid } from "../lib/keyboardNavigation";
+import { canUseShortcut, leaveSearchInput, type NavigationKeyEvent } from "../lib/keyboardNavigation";
 import { useBodyNavigation } from "../hooks/useBodyNavigation";
 
 export interface PopularBoard {
@@ -81,14 +81,17 @@ export function BoardInput({
   const [favoriteOverrides, setFavoriteOverrides] = useState<Record<string, boolean>>({});
   const popularGridRef = useRef<HTMLDivElement>(null);
   const navigationRef = useRef<HTMLDivElement>(null);
-  useBodyNavigation(navigationRef, navigateBoardGrid);
+  const boardInputRef = useRef<HTMLInputElement>(null);
+  const handleNavigation = (event: NavigationKeyEvent, scope?: HTMLElement) => {
+    if (event.key.toLowerCase() === "s" && canUseShortcut(event, false, scope) && !boardInputRef.current?.disabled) {
+      event.preventDefault();
+      boardInputRef.current?.focus();
+      return;
+    }
+  };
+  useBodyNavigation(navigationRef, handleNavigation);
 
   const isConnected = pttState === "ready";
-  useEffect(() => {
-    if (isConnected && document.activeElement === document.body && !hasOpenNavigationDialog()) {
-      navigationRef.current?.querySelector<HTMLElement>('[data-navigation-item]:not(:disabled)')?.focus({ preventScroll: true });
-    }
-  });
   const hasLivePopularBoards = Boolean(popularBoards?.length);
   const boards = hasLivePopularBoards ? popularBoards! : DEFAULT_BOARD_SHORTCUTS;
   const searchTerm = input.trim().toLowerCase();
@@ -228,7 +231,8 @@ export function BoardInput({
   return (
     <div
       ref={navigationRef}
-      onKeyDown={navigateBoardGrid}
+      tabIndex={-1}
+      onKeyDown={handleNavigation}
       style={{
         minHeight: "100vh",
         background: "var(--bg)",
@@ -402,9 +406,12 @@ export function BoardInput({
             <SearchIcon />
           </span>
           <input
+            ref={boardInputRef}
+            aria-keyshortcuts="s"
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(event) => leaveSearchInput(event, navigationRef.current)}
             placeholder="輸入看板名稱  例如  Gossiping"
             disabled={!isConnected}
             style={{

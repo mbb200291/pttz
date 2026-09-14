@@ -4210,10 +4210,31 @@ function buildPartialArticleFromRawLines(
   };
 }
 
-function appendUniqueArticleScreenLines(
+export function appendUniqueArticleScreenLines(
   lines: string[],
   screen: string[],
+  position?: { origin?: number; lastStart?: number },
 ): number {
+  const range = stripAnsi(screen[23] ?? "").match(/目前顯示[:：]\s*第\s*(\d+)\s*[~～]\s*(\d+)\s*行/u);
+  const start = range ? Number(range[1]) : 0;
+  const end = range ? Number(range[2]) : 0;
+  if (position && start > 0 && end >= start && end - start < 23 &&
+      (lines.length === 0 || position.origin !== undefined)) {
+    if (position.lastStart !== undefined && start > position.lastStart + 23) {
+      throw new Error("文章翻頁不連續，請重新載入文章");
+    }
+    position.origin ??= start;
+    const offset = start - position.origin;
+    if (offset < 0) throw new Error("文章翻頁位置改變，請重新載入文章");
+    const previousLength = lines.length;
+    // Preserve physical rows, including blank lines. The footer's end can lag
+    // behind newly appended pushes, so do not truncate the screen to that end.
+    while (lines.length < offset) lines.push("");
+    screen.slice(0, 23).forEach((line, index) => { lines[offset + index] = line; });
+    position.lastStart = start;
+    return Math.max(0, lines.length - previousLength);
+  }
+  if (position) { position.origin = undefined; position.lastStart = undefined; }
   let contentLines = screen.slice(0, 23);
   if (
     lines.length > 0 &&
@@ -4249,8 +4270,8 @@ function appendUniqueArticleScreenLines(
   let overlap = 0;
   for (let size = maxOverlap; size > 0; size -= 1) {
     if (
-      lines.slice(lines.length - size).join("\n") ===
-      contentLines.slice(0, size).join("\n")
+      lines.slice(lines.length - size).map((line) => stripAnsi(line).trimEnd()).join("\n") ===
+      contentLines.slice(0, size).map((line) => stripAnsi(line).trimEnd()).join("\n")
     ) {
       overlap = size;
       break;
@@ -4281,11 +4302,12 @@ async function readArticleLinesProgressively(
 
   const lines: string[] = [];
   let screen = initialScreen ?? readScreen();
+  const position: { origin?: number; lastStart?: number } = {};
   const maxPages = 300;
 
   for (let page = 0; page < maxPages; page += 1) {
     signal?.throwIfAborted();
-    const appended = appendUniqueArticleScreenLines(lines, screen);
+    const appended = appendUniqueArticleScreenLines(lines, screen, position);
     const partial = buildPartialArticleFromRawLines(lines, boardName);
     if (lines.length > 0) onRawSnapshot?.(lines.join("\n"), "incomplete");
     if (partial && !(page === 0 && initialPartialAlreadyEmitted)) {

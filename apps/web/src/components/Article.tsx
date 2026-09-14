@@ -9,7 +9,8 @@ import { useArticle } from "../hooks/useArticle";
 import { PushThread } from "./PushThread";
 import { ArticleRevisions } from "./ArticleRevisions";
 import { RichContent } from "./RichContent";
-import { canUseShortcut, navigateList } from "../lib/keyboardNavigation";
+import { canUseShortcut, type NavigationKeyEvent } from "../lib/keyboardNavigation";
+import { useBodyNavigation } from "../hooks/useBodyNavigation";
 import type { ArticleData, PartialArticleData } from "../hooks/useArticle";
 import type { ArticleEditRecord, ArticleSummary } from "../lib/ptt/uiArticle";
 import {
@@ -240,11 +241,6 @@ export function Article({
   onReplyToBoard,
 }: ArticleProps) {
   const navigationRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (document.activeElement === document.body && !document.querySelector('[role="dialog"], dialog[open]')) {
-      navigationRef.current?.focus({ preventScroll: true });
-    }
-  }, [boardName, articleIndex, articleAid]);
   const {
     article: liveArticle,
     partialArticle,
@@ -675,21 +671,27 @@ export function Article({
     push.visible !== false
   ).length;
 
+  function handleNavigation(event: NavigationKeyEvent, scope?: HTMLElement) {
+    if (article && !composer && canUseShortcut(event, false, scope)) {
+      const key = event.key.toLowerCase();
+      if (key === "x" && isLoggedIn) {
+        event.preventDefault();
+        openReply();
+      } else if (key === "r" && canReplyToBoard) {
+        event.preventDefault();
+        onReplyToBoard?.(article);
+      }
+    }
+    if (event.key === "ArrowLeft" && canUseShortcut(event, false, scope)) {
+      event.preventDefault();
+      onBack();
+    }
+  }
+  useBodyNavigation(navigationRef, handleNavigation);
+
   return (
-    <div ref={navigationRef} tabIndex={0} data-navigation-item aria-label="文章閱讀區，左方向鍵返回"
-      onKeyDown={(event) => {
-        if (article && !composer && canUseShortcut(event)) {
-          const key = event.key.toLowerCase();
-          if (key === "x" && isLoggedIn) {
-            event.preventDefault();
-            openReply();
-          } else if (key === "r" && canReplyToBoard) {
-            event.preventDefault();
-            onReplyToBoard?.(article);
-          }
-        }
-        if (event.key === "ArrowLeft" && event.target === event.currentTarget) navigateList(event, onBack);
-      }}
+    <div ref={navigationRef} tabIndex={-1} aria-label="文章閱讀區，左方向鍵返回"
+      onKeyDown={handleNavigation}
       style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--text)" }}>
       {/* 頂部導覽 */}
       <div style={{

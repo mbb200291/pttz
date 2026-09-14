@@ -16,7 +16,7 @@ import type {
   WheelEvent,
 } from "react";
 import { useRef, useEffect, useMemo, useState } from "react";
-import { canUseShortcut, hasOpenNavigationDialog, navigateList, type NavigationKeyEvent } from "../lib/keyboardNavigation";
+import { canUseShortcut, leaveSearchInput, type NavigationKeyEvent } from "../lib/keyboardNavigation";
 import { useBodyNavigation } from "../hooks/useBodyNavigation";
 import { useBoard } from "../hooks/useBoard";
 import type { BoardFilter } from "../lib/ptt/viewState";
@@ -722,6 +722,7 @@ export function ArticleList({
   const [customPushFilterOpen, setCustomPushFilterOpen] = useState(false);
   const pushFilterRef = useRef<HTMLDivElement>(null);
   const navigationRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   useBodyNavigation(navigationRef, handleNavigation);
 
   const {
@@ -824,7 +825,6 @@ export function ArticleList({
             row.getBoundingClientRect().top -
             cachedAnchor.viewportTop;
           window.scrollTo({ top: Math.max(0, targetTop), behavior: "auto" });
-          if (document.activeElement === document.body && !row.matches(":disabled") && !hasOpenNavigationDialog()) row.focus({ preventScroll: true });
           return;
         }
       }
@@ -887,6 +887,8 @@ export function ArticleList({
   }
 
   function handleSearchKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.nativeEvent.isComposing) return;
+    leaveSearchInput(e, navigationRef.current);
     if (e.key === "Enter") handleSearchCommit();
   }
 
@@ -1050,6 +1052,11 @@ export function ArticleList({
     activePushThreshold !== null && !PUSH_FILTER_PRESETS.has(activePushThreshold);
 
   function handleNavigation(event: NavigationKeyEvent, scope?: HTMLElement) {
+    if ((event.key.toLowerCase() === "s" || event.key === "/") && canUseShortcut(event, false, scope)) {
+      event.preventDefault();
+      searchInputRef.current?.focus();
+      return;
+    }
     if (event.key.toLowerCase() === "z" && canUseShortcut(event, false, scope)) {
       event.preventDefault();
       setCustomPushFilterOpen(true);
@@ -1060,12 +1067,16 @@ export function ArticleList({
       onCompose(observedCategoryOptions);
       return;
     }
-    navigateList(event, onBack, scope);
+    if (event.key === "ArrowLeft" && canUseShortcut(event, false, scope)) {
+      event.preventDefault();
+      onBack();
+    }
   }
 
   return (
     <div
       ref={navigationRef}
+      tabIndex={-1}
       onTouchStart={handleTouchStart}
       onKeyDown={handleNavigation}
       onTouchMove={handleTouchMove}
@@ -1257,6 +1268,8 @@ export function ArticleList({
             <input
               type="text"
               value={searchInput}
+              ref={searchInputRef}
+              aria-keyshortcuts="s /"
               onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={handleSearchKeyDown}
               placeholder="搜尋標題  或  #AID"

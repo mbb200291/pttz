@@ -43,10 +43,12 @@ describe("article loading presentation", () => {
     const body = screen.getByRole("region", { name: "原始正文" });
     expect(body.parentElement!.style.fontFamily).toBe("var(--font-mono)");
     expect(body.querySelectorAll("pre > span")[1]).toHaveStyle({ color: "#f28b82" });
-    const image = document.querySelector("img");
-    expect(image).toHaveAttribute("src", "https://i.example.test/a.jpg");
+    expect(document.querySelector("img")).toHaveAttribute("src", "https://i.example.test/a.jpg");
     fireEvent.click(screen.getByRole("button", { name: "原始排版" }));
     expect(body.querySelectorAll("pre > span")[1]).toHaveStyle({ color: "#aa0000" });
+    // Layout switching deliberately relocates media; loading completion must not remount it.
+    const image = document.querySelector("img");
+    expect(image).toHaveAttribute("src", "https://i.example.test/a.jpg");
 
     mocks.useArticle.mockReturnValue({ ...state, article, loading: false });
     rerender(<Article {...props} />);

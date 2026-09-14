@@ -11,6 +11,45 @@ afterEach(() => {
 });
 
 describe("BoardInput", () => {
+  it("leaves search with Escape without selecting a board", () => {
+    const enter = vi.fn();
+    render(<BoardInput pttState="ready" wsStatus="connected" onEnter={enter} favoriteBoards={[]} popularBoards={[{ name: "Test" }]} />);
+    const input = screen.getByRole("textbox") as HTMLInputElement;
+    input.focus();
+    fireEvent.change(input, { target: { value: "Tes" } });
+    fireEvent.keyDown(input, { key: "Escape", isComposing: true });
+    expect(document.activeElement).toBe(input);
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(document.activeElement?.hasAttribute("data-navigation-item")).toBe(false);
+    expect(input.value).toBe("Tes");
+    expect(enter).not.toHaveBeenCalled();
+  });
+  it("focuses board input with s from cards or the page without submitting", () => {
+    const enter = vi.fn();
+    render(<BoardInput pttState="ready" wsStatus="connected" onEnter={enter} favoriteBoards={[]} />);
+    const input = screen.getByRole("textbox") as HTMLInputElement;
+    fireEvent.keyDown(document.activeElement!, { key: "s" });
+    expect(document.activeElement).toBe(input);
+    input.blur();
+    fireEvent.keyDown(document.body, { key: "s" });
+    expect(document.activeElement).toBe(input);
+    expect(input.value).toBe("");
+    expect(enter).not.toHaveBeenCalled();
+  });
+  it("does not handle s while composing, using modifiers, or a dialog is open", () => {
+    render(<BoardInput pttState="ready" wsStatus="connected" onEnter={() => {}} favoriteBoards={[]} />);
+    const card = document.activeElement!;
+    for (const modifiers of [{ ctrlKey: true }, { metaKey: true }, { isComposing: true }]) {
+      fireEvent.keyDown(card, { key: "s", ...modifiers });
+      expect(document.activeElement).toBe(card);
+    }
+    const dialog = document.createElement("div");
+    dialog.setAttribute("role", "dialog"); document.body.append(dialog);
+    try {
+      fireEvent.keyDown(card, { key: "s" });
+      expect(document.activeElement).toBe(card);
+    } finally { dialog.remove(); }
+  });
   it("does not autofocus a background card while a sibling dialog is open", () => {
     const dialog = document.createElement("div"); dialog.setAttribute("role", "dialog"); document.body.append(dialog);
     try {
@@ -29,17 +68,17 @@ describe("BoardInput", () => {
     rerender(<BoardInput pttState="ready" wsStatus="connected" onEnter={open} favoriteBoards={[]} />);
     expect(screen.queryByRole("button", { name: "登出" })).toBeNull();
   });
-  it.each(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"])("restarts selection from body with %s and handles each key once", (key) => {
+  it.each(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"])("does not select boards or consume %s", (key) => {
     const open = vi.fn();
     const { unmount } = render(<BoardInput pttState="ready" wsStatus="connected" onEnter={open} favoriteBoards={[]}
       popularBoards={[{ name: "One" }, { name: "Two" }]} />);
     const first = screen.getByRole("button", { name: "One" });
     (document.activeElement as HTMLElement).blur();
-    expect(fireEvent.keyDown(document.body, { key })).toBe(false);
-    expect(document.activeElement).toBe(first);
+    expect(fireEvent.keyDown(document.body, { key })).toBe(true);
+    expect(document.activeElement).toBe(document.body);
     expect(open).not.toHaveBeenCalled();
     fireEvent.keyDown(first, { key: "ArrowRight" });
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Two" }));
+    expect(document.activeElement).toBe(document.body);
     unmount();
     expect(fireEvent.keyDown(document.body, { key })).toBe(true);
   });
@@ -58,14 +97,15 @@ describe("BoardInput", () => {
     dialog.remove();
     expect(document.activeElement).toBe(document.body);
   });
-  it("starts keyboard selection on entry and includes recent boards", async () => {
+  it("keeps native Enter activation without auto-selecting recent boards", async () => {
     const open = vi.fn();
     render(<BoardInput pttState="ready" wsStatus="connected" onEnter={open} favoriteBoards={[]}
       recentBoards={["Recent"]} popularBoards={[{ name: "Test" }]} />);
     const recent = screen.getByRole("button", { name: "Recent" });
-    expect(document.activeElement).toBe(recent);
+    expect(document.activeElement).toBe(document.body);
+    recent.focus();
     fireEvent.keyDown(recent, { key: "ArrowDown" });
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Test" }));
+    expect(document.activeElement).toBe(recent);
     fireEvent.keyDown(document.activeElement!, { key: "ArrowUp" });
     await (await import("@testing-library/user-event")).default.keyboard("{Enter}");
     expect(open).toHaveBeenCalledWith("Recent");
@@ -83,20 +123,20 @@ describe("BoardInput", () => {
     expect(document.activeElement).toBe(input);
     expect(open).not.toHaveBeenCalled();
   });
-  it("selects popular boards with horizontal arrows without opening", () => {
+  it("does not move card focus with horizontal arrows", () => {
     const open = vi.fn();
     render(<BoardInput pttState="ready" wsStatus="connected" onEnter={open} favoriteBoards={[]}
       popularBoards={[{ name: "Test", zh: "測試" }, { name: "Stock", zh: "股市" }]} />);
     const first = screen.getByRole("button", { name: "Test" });
-    const next = screen.getByRole("button", { name: "Stock" });
+
     first.focus();
     fireEvent.keyDown(first, { key: "ArrowRight" });
-    expect(document.activeElement).toBe(next);
-    fireEvent.keyDown(next, { key: "ArrowLeft" });
+    expect(document.activeElement).toBe(first);
+    fireEvent.keyDown(first, { key: "ArrowLeft" });
     expect(document.activeElement).toBe(first);
     expect(open).not.toHaveBeenCalled();
   });
-  it("moves vertically to the nearest board column in a visual grid", () => {
+  it("does not use grid geometry to move keyboard focus", () => {
     const open = vi.fn();
     render(<BoardInput pttState="ready" wsStatus="connected" onEnter={open} favoriteBoards={[]}
       popularBoards={["One", "Two", "Three", "Four"].map((name) => ({ name }))} />);
@@ -111,11 +151,11 @@ describe("BoardInput", () => {
     });
     buttons[0].focus();
     fireEvent.keyDown(buttons[0], { key: "ArrowRight" });
-    expect(document.activeElement).toBe(buttons[1]);
+    expect(document.activeElement).toBe(buttons[0]);
     fireEvent.keyDown(buttons[1], { key: "ArrowDown" });
-    expect(document.activeElement).toBe(buttons[3]);
+    expect(document.activeElement).toBe(buttons[0]);
     fireEvent.keyDown(buttons[3], { key: "ArrowLeft" });
-    expect(document.activeElement).toBe(buttons[2]);
+    expect(document.activeElement).toBe(buttons[0]);
     fireEvent.keyDown(buttons[2], { key: "ArrowUp" });
     expect(document.activeElement).toBe(buttons[0]);
     expect(open).not.toHaveBeenCalled();
