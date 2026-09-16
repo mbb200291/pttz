@@ -1,5 +1,27 @@
 [
   {
+    "id": "merge-stop-marker-closes-forced-continuation",
+    "primaryRule": "MERGE-003.4",
+    "rules": ["MERGE-003.1", "MERGE-003.4", "MERGE-002.5"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "前段。||", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "末段|!  ", "time": "01/01 12:01", "remainingContentColumns": 0 },
+      { "type": "neutral", "author": "alice", "content": "另起|!", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "最後|!", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "alice", "content": "前段。\n末段", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "另起", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "最後", "replyToAuthor": null, "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
     "id": "aggregation-five-minute-interleaving",
     "primaryRule": "MERGE-001.3",
     "rules": ["MERGE-001.1", "MERGE-001.3", "RAW-001.3"],

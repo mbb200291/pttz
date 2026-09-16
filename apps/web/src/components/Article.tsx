@@ -22,7 +22,7 @@ import type { VoteCount, PushEditData } from "./PushThread";
 import { Composer } from "./Composer";
 import type { ComposerMode, ComposerInitial } from "./Composer";
 import { usePttActions } from "../hooks/usePttActions";
-import type { ArticleKey } from "@pttzzz/core";
+import type { ArticleKey, ReplyDelivery, ReplyDraftInput } from "@pttzzz/core";
 import { Monogram } from "./Monogram";
 import { ScoreOrb } from "./ScoreOrb";
 import { canRetryWrite, formatWriteError, writeFingerprint } from "../lib/writeResult";
@@ -297,6 +297,9 @@ export function Article({
   const [composerSubmitting, setComposerSubmitting] = useState(false);
   const composerSubmittingRef = useRef(false);
   const [composerSubmitError, setComposerSubmitError] = useState<string | null>(null);
+  // Receipts outlive the modal, but intentionally remain local to this reader.
+  const replyDrafts = useRef(new Map<string, { input: ReplyDraftInput; delivery: ReplyDelivery }>());
+  const [replyDelivery, setReplyDelivery] = useState<ReplyDelivery>();
   const [lockedComposerFingerprints, setLockedComposerFingerprints] = useState<Set<string>>(new Set());
   const [deletingArticle, setDeletingArticle] = useState(false);
   const [deleteArticleError, setDeleteArticleError] = useState<string | null>(null);
@@ -498,20 +501,25 @@ export function Article({
 
   const openReply = useCallback(() => {
     setComposerSubmitError(null);
-    setComposer({ mode: "reply", initial: {} });
-  }, []);
+    const saved = replyDrafts.current.get(JSON.stringify([articleKey, null]));
+    setReplyDelivery(saved?.delivery);
+    setComposer({ mode: "reply", initial: saved ? { body: saved.input.content, pushType: saved.input.pushType } : {} });
+  }, [articleKey]);
 
   const openReplyPush = useCallback((push: AggregatedPush) => {
     setComposerSubmitError(null);
+    const saved = replyDrafts.current.get(JSON.stringify([articleKey, push.id]));
+    setReplyDelivery(saved?.delivery);
     setComposer({
       mode: "reply-push",
-      initial: {},
+      initial: saved ? { body: saved.input.content, pushType: "neutral" } : {},
       replyId: push.id,
     });
-  }, []);
+  }, [articleKey]);
 
   const openEditPush = useCallback((push: AggregatedPush) => {
     setComposerSubmitError(null);
+    setReplyDelivery(undefined);
     setComposer({
       mode: "edit-push",
       initial: {
@@ -569,6 +577,56 @@ export function Article({
 
     void (async () => {
       try {
+        if (composer && composer.mode !== "edit-push" && actions.sendReplyDraft) {
+          const key = JSON.stringify([articleKey, composer.replyId ?? null]);
+          const previous = replyDrafts.current.get(key);
+          if (previous && previous.delivery.status !== "paused") return;
+          const input: ReplyDraftInput = previous?.input ?? {
+            operationId: crypto.randomUUID(),
+            article: articleKey,
+            content: payload.body,
+            pushType: composer.mode === "reply-push" || isArticleAuthor ? "neutral" : payload.pushType,
+            ...(composer.replyId ? { replyId: composer.replyId } : {}),
+          };
+          const saveProgress = (delivery: ReplyDelivery) => {
+            replyDrafts.current.set(key, { input, delivery });
+            setReplyDelivery(delivery);
+          };
+          saveProgress(previous?.delivery ?? { operationId: input.operationId, status: "paused", confirmed: 0, total: 0 });
+          try {
+            const result = await actions.sendReplyDraft({ ...input, ...(previous ? { resume: true } : {}) }, saveProgress);
+            if (!result.ok) {
+              const last = replyDrafts.current.get(key)!.delivery;
+              if (result.error.outcome === "not-sent" && last.confirmed === 0) {
+                replyDrafts.current.delete(key);
+                setReplyDelivery(undefined);
+                setComposerSubmitError("尚未送出，請檢查內容後再試");
+              } else {
+                saveProgress({ ...last, status: result.error.outcome === "not-sent" ? "paused" : "uncertain" });
+                if (result.error.outcome !== "not-sent") void liveReload().catch(() => {});
+              }
+              return;
+            }
+            saveProgress(result.value);
+            if (result.value.status === "complete") {
+              try { await liveReload(); } finally {
+                replyDrafts.current.delete(key);
+                setReplyDelivery(undefined);
+                setComposer(null);
+              }
+            } else if (result.value.status === "uncertain") {
+              // A refresh is a read only; it cannot unlock or prove this write.
+              void liveReload().catch(() => {});
+            }
+          } catch {
+            const last = replyDrafts.current.get(key)?.delivery;
+            if (last) {
+              saveProgress({ ...last, status: "uncertain" });
+              void liveReload().catch(() => {});
+            }
+          }
+          return;
+        }
         let result;
         if (composer?.mode === "edit-push" && composer.replyId) {
           result = payload.editMode === "撤回"
@@ -975,6 +1033,10 @@ export function Article({
           initial={composer.initial}
           neutralOnly={isArticleAuthor && composer.mode === "reply"}
           submitting={composerSubmitting}
+          multipartEnabled={Boolean(actions.sendReplyDraft) && composer.mode !== "edit-push"}
+          delivery={composer.mode !== "edit-push" ? replyDelivery : undefined}
+          contentLocked={composer.mode !== "edit-push" && Boolean(replyDelivery)}
+          onRefresh={() => { void liveReload().catch(() => {}); }}
           isSubmitLocked={(payload) => lockedComposerFingerprints.has(composerFingerprint(payload))}
           submitError={composerSubmitError}
           onClose={handleComposerClose}

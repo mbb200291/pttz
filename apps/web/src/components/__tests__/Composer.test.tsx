@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -16,6 +17,25 @@ const defaultProps = {
 };
 
 describe("Composer", () => {
+  it.each(["reply", "reply-push"] as const)("allows long multipart %s drafts", (mode) => {
+    render(<Composer {...defaultProps} mode={mode} multipartEnabled initial={{ body: "文".repeat(100) }} />);
+    expect(screen.getByRole("button", { name: "送出" })).not.toBeDisabled();
+  });
+  it("locks all content controls on partial delivery and offers continuation", () => {
+    render(<Composer {...defaultProps} multipartEnabled contentLocked initial={{ body: "文".repeat(100) }}
+      delivery={{ operationId: "one", confirmed: 1, total: 3, status: "paused" }} />);
+    expect(screen.getByRole("textbox")).toBeDisabled();
+    for (const name of ["推", "噓", "→", "表情符號", "新增圖片"]) expect(screen.getByRole("button", { name })).toBeDisabled();
+    expect(screen.getByRole("status").textContent).toContain("1 / 3");
+    expect(screen.getByRole("button", { name: "繼續送出" })).not.toBeDisabled();
+  });
+  it("never enables uncertain delivery or removes edit limits", () => {
+    const { rerender } = render(<Composer {...defaultProps} multipartEnabled contentLocked initial={{ body: "text" }}
+      delivery={{ operationId: "one", confirmed: 1, total: 3, status: "uncertain" }} />);
+    expect(screen.getByRole("button", { name: "送出" })).toBeDisabled();
+    rerender(<Composer {...defaultProps} mode="edit-push" multipartEnabled initial={{ body: "text" }} />);
+    expect(screen.getByRole("button", { name: "送出" })).toBeDisabled();
+  });
   it.each(["push", "boo"] as const)("forces neutral floor replies even with initial %s", async (pushType) => {
     const onSubmit = vi.fn();
     render(<Composer {...defaultProps} mode="reply-push" initial={{ body: "回覆", pushType }} onSubmit={onSubmit} />);

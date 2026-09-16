@@ -69,6 +69,43 @@ class MemoryGateway implements PttGateway {
 }
 
 describe("PttzzzClient lifecycle", () => {
+  it("keeps legacy gateways compatible and never treats unknown draft failures as not-sent", async () => {
+    const gateway = new MemoryGateway();
+    const input = { operationId: "draft", article: indexKey, content: "x".repeat(160), pushType: "neutral" as const };
+    expect(await new PttzzzClient(gateway).sendReplyDraft(input)).toMatchObject({ ok: false, error: { code: "UNSUPPORTED", outcome: "not-sent" } });
+    const extended: PttGateway = Object.assign(gateway, { sendReplyDraft: async () => { throw new Error("lost connection"); } });
+    const client = new PttzzzClient(extended);
+    expect(await client.sendReplyDraft(input)).toMatchObject({ ok: false, error: { outcome: "uncertain", retryable: false } });
+    extended.sendReplyDraft = async () => { throw new GatewayError("REPLY_DRAFT_NOT_SENT", "unsupported symbol", true); };
+    expect(await client.sendReplyDraft(input)).toMatchObject({ ok: false, error: { outcome: "not-sent", retryable: true } });
+    expect(gateway.commands).toHaveLength(0);
+  });
+  it("projects partial and final articles using a copied aggregation profile", async () => {
+    const gateway = new MemoryGateway();
+    const rawText = raw("profile", "body", ["→ bob: first 08/22 10:00", "→ carol: aside。 08/22 10:01", "→ bob: last|! 08/22 10:04"].join("\n"));
+    gateway.sources = [
+      { articleKey: indexKey, completeness: "incomplete", revision: 1, rawText },
+      { articleKey: indexKey, completeness: "final", revision: 2, rawText },
+    ];
+    const aggregation = { nonconsecutiveGapMinutes: 3 };
+    const client = new PttzzzClient(gateway, { aggregation });
+    aggregation.nonconsecutiveGapMinutes = 5;
+    const lengths: number[] = [];
+    client.subscribe((event) => {
+      if (event.type === "article.partial" || event.type === "article.updated") lengths.push(event.article.replies.length);
+    });
+    expect((await client.getArticle({ article: indexKey })).ok).toBe(true);
+    expect(lengths).toEqual([3, 3]);
+    const defaultResult = await new PttzzzClient(gateway).getArticle({ article: indexKey });
+    expect(defaultResult.ok && defaultResult.value.replies.length).toBe(2);
+  });
+
+  it("rejects invalid aggregation settings before subscribing", () => {
+    const gateway = new MemoryGateway();
+    expect(() => new PttzzzClient(gateway, { aggregation: { nonconsecutiveGapMinutes: -1 } })).toThrow(RangeError);
+    expect(gateway.listeners.size).toBe(0);
+  });
+
   it("normalizes expected and unknown gateway failures into Result", async () => {
     const gateway = new MemoryGateway();
     const cause = new Error("socket closed");

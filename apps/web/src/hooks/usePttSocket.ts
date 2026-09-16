@@ -91,8 +91,8 @@ function getClient(fakeMode: boolean): PttzzzClient {
   const existing = clients[mode];
   if (existing) return existing;
   const client = fakeMode
-    ? new PttzzzClient(createFakeBrowserGateway())
-    : createBrowserClient();
+    ? new PttzzzClient(createFakeBrowserGateway(), { aggregation: { nonconsecutiveGapMinutes: 3 } })
+    : createBrowserClient({ aggregation: { nonconsecutiveGapMinutes: 3 } });
   clients[mode] = client;
   return client;
 }

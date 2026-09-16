@@ -3,9 +3,31 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   createLegacyFakePttAdapterForUi as createFakePttAdapter,
   FAKE_PTT_STORE_KEY,
+  createFakeTerminalDriver,
 } from "./fakeTerminalDriver.js";
+import { BrowserPttGateway } from "../gateway.js";
+import { PttzzzClient } from "@pttzzz/core";
 
 describe("fake PTT adapter", () => {
+  it("sends a multipart nested draft and reads it through the real client as one reply", async () => {
+    const client = new PttzzzClient(new BrowserPttGateway(createFakeTerminalDriver()), { aggregation: { nonconsecutiveGapMinutes: 3 } });
+    await client.login({ username: "david", password: "fake" });
+    const article = { board: "test", index: 1001 };
+    const before = await client.getArticle({ article });
+    const replyId = before.ok ? before.value.replies[0].replyId : "";
+    expect(replyId).not.toBe("");
+    const content = "中♥♡✈".repeat(22) + "\n第二行\n\n最後一行";
+    const input = { operationId: "nested", article, replyId, content, pushType: "push" as const };
+    const result = await client.sendReplyDraft(input);
+    expect(result).toMatchObject({ ok: true, value: { status: "complete" } });
+    await client.sendReplyDraft({ ...input, resume: true });
+    const after = await client.getArticle({ article });
+    const flatten = (replies: readonly import("@pttzzz/core").Reply[]): import("@pttzzz/core").Reply[] => replies.flatMap((reply) => [reply, ...flatten(reply.children)]);
+    const replies = after.ok ? flatten(after.value.replies) : [];
+    const own = replies.filter((reply) => reply.author === "david");
+    expect(own).toHaveLength(1);
+    expect(own[0]).toMatchObject({ content, replyTo: replyId });
+  });
   beforeEach(() => {
     localStorage.clear();
     sessionStorage.clear();

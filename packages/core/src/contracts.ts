@@ -253,6 +253,15 @@ export interface DeleteArticleInput { article: ArticleKey }
 export interface ReplyToArticleInput { article: ArticleKey; content: string; pushType: PushType }
 export interface ReplyArticleToBoardInput { article: ArticleKey; content: string; formatting?: readonly ArticleTextStyle[] }
 export interface ReplyToReplyInput { article: ArticleKey; replyId: ReplyId; content: string; pushType: PushType }
+/** Immutable draft identity. Reuse only to resume this exact draft. */
+export interface ReplyDraftInput extends ReplyToArticleInput { operationId: string; replyId?: ReplyId; resume?: boolean }
+export interface GatewayReplyDraftInput extends ReplyToArticleInput { operationId: string; floor?: number; resume?: boolean }
+export interface ReplyDelivery {
+  operationId: string;
+  status: "complete" | "paused" | "uncertain";
+  confirmed: number;
+  total: number;
+}
 export interface SectionChange { start: number; end: number; replacement: string }
 export type EditReplyInput =
   | { article: ArticleKey; replyId: ReplyId; mode: "append" | "replace"; content: string }
@@ -323,6 +332,8 @@ export interface PttGateway {
   filterArticles(input: FilterArticlesInput): Promise<ArticlePage>;
   readArticle(input: GetArticleInput): AsyncIterable<RawArticleSource>;
   execute(command: PttCommand): Promise<ActionReceipt>;
+  /** Optional transport capability; old gateways retain their single-push API. */
+  sendReplyDraft?(input: GatewayReplyDraftInput, onProgress?: (progress: ReplyDelivery) => void): Promise<ReplyDelivery>;
   subscribe(listener: (event: GatewayEvent) => void): Unsubscribe;
 }
 

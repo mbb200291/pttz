@@ -13,6 +13,35 @@ import type { ArticleEditRecord, OpEditedReplySegment, RawPush } from "./parser.
 
 const OP = "opUser";
 
+describe("aggregation profile and explicit stop marker", () => {
+  it.each([false, true])("strips |! and stops forward merge (full=%s)", (full) => {
+    const input = [push("alice", "first。||"), { ...push("alice", "last|!  "), isFullWidthLine: full }, push("alice", "separate")];
+    expect(aggregatePushes(input, OP).pushes.map((p) => p.content)).toEqual(["first。\nlast", "separate"]);
+    expect(aggregatePushes([input[1]], OP).pushes[0].content).toBe("last");
+  });
+
+  it.each([3, 4, 5, 6])("applies default five and configured three to interleaved gap %s", (minutes) => {
+    const input = [push("alice", "first"), push("bob", "aside。"), push("alice", "last", `01/01 12:0${minutes}`)];
+    expect(aggregatePushes(input, OP).pushes).toHaveLength(minutes <= 5 ? 2 : 3);
+    expect(aggregatePushes(input, OP, [], [], { nonconsecutiveGapMinutes: 3 }).pushes).toHaveLength(minutes <= 3 ? 2 : 3);
+  });
+
+  it.each(["01/01 12:06", ""])('ignores consecutive time gap "%s"', (time) => {
+    expect(aggregatePushes([push("alice", "first"), push("alice", "last", time)], OP, [], [], { nonconsecutiveGapMinutes: 3 }).pushes).toHaveLength(1);
+  });
+
+  it.each([-1, NaN, Infinity, -Infinity])("rejects invalid gap %s", (gap) => {
+    expect(() => aggregatePushes([], OP, [], [], { nonconsecutiveGapMinutes: gap })).toThrow(RangeError);
+  });
+
+  it("uses the same profile for both snapshot statuses, allowing zero", () => {
+    const input = [push("alice", "first"), push("bob", "aside。"), push("alice", "last", "01/01 12:01")];
+    for (const complete of [false, true]) {
+      expect(aggregateThreadSnapshot(input, OP, complete, { nonconsecutiveGapMinutes: 0 }).thread.pushes).toHaveLength(3);
+    }
+  });
+});
+
 it("withdraws the original reply after vote withdrawal and repeated edits", () => {
   const commands = [
     "測試", "推1樓", "撤回我對1樓的推", "更正我在1樓發言：測~試",

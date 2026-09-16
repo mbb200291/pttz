@@ -1,4 +1,6 @@
 import Ptt from "ptt-client";
+import { readPushConfirmation, ReplyDraftQueue } from "./multipartReply.js";
+import type { GatewayReplyDraftInput, ReplyDelivery } from "@pttzzz/core";
 import { articleTerminalLine, type TerminalLine } from "./terminalLine.js";
 import { formatEditorBody } from "./articleFormatting.js";
 import { ArticleSessionTracker } from "./articleSession.js";
@@ -128,6 +130,8 @@ export type ActionFailureCode =
   | "push-entry-timeout"
   | "push-content-prompt-timeout"
   | "push-confirm-timeout"
+  | "push-preflight-cancelled"
+  | "push-cancel-timeout"
   | "push-type-not-allowed";
 
 export interface ActionResult {
@@ -229,6 +233,7 @@ const DEFAULT_ARTICLE_REPLY_TIMEOUTS: ArticleReplyTimeouts = {
 };
 
 export interface TerminalDriver {
+  sendReplyDraft?(input: GatewayReplyDraftInput, onProgress?: (progress: ReplyDelivery) => void): Promise<ReplyDelivery>;
   send: (data: string) => Promise<boolean>;
   login: (
     username: string,
@@ -733,6 +738,8 @@ class PttClientTerminalDriver implements TerminalDriver {
   >();
   private readonly screenListeners = new Set<(screen: string) => void>();
   private readonly runSerial = createSerialTaskRunner();
+  private readonly replyDrafts = new ReplyDraftQueue();
+  private readonly replyDraftTargets = new Map<string, { key: ArticleKey; author: string; title: string }>();
   private readonly articleAidByRelativeIndex = new Map<string, string>();
   private readonly unresolvedRelativeArticleIndexes = new Set<string>();
   private lastFilterBoardName: string | null = null;
@@ -797,6 +804,7 @@ class PttClientTerminalDriver implements TerminalDriver {
   }
 
   private invalidateArticleSession(reason: string): void {
+    if (reason === "login" || reason === "disconnected" || reason === "connection-error") this.replyDrafts.invalidate();
     this.articleSessionEpoch += 1;
     this.articleSessionIdentity = undefined;
     this.articleSessionRawText = undefined;
@@ -1307,6 +1315,46 @@ class PttClientTerminalDriver implements TerminalDriver {
     return this.replyToArticle(`撤回我對${floor}樓的${direction}`, "neutral", boardName);
   }
 
+  async sendReplyDraft(input: GatewayReplyDraftInput, onProgress?: (progress: ReplyDelivery) => void): Promise<ReplyDelivery> {
+    input = { ...input, article: { ...input.article } };
+    return this.runSerial(async () => {
+      let key = this.replyDraftTargets.get(input.operationId)?.key ?? input.article;
+      let epoch = this.articleSessionEpoch;
+      let sender = "";
+      return this.replyDrafts.run(input, async () => {
+        await this.waitUntilLoggedIn();
+        if (key.index !== undefined && !this.replyDraftTargets.has(input.operationId)) {
+          const relative = `${key.board.toLowerCase()}:${key.index}`;
+          const aid = this.articleAidByRelativeIndex.get(relative);
+          if (aid) key = { board: key.board, aid };
+          else if (this.unresolvedRelativeArticleIndexes.has(relative)) throw new Error("請重新載入文章後再試");
+        }
+        epoch = this.articleSessionEpoch;
+        const acquired = await this.acquireArticleContext(key, epoch);
+        if (!acquired.ok) throw new Error("無法開啟文章");
+        const previous = this.replyDraftTargets.get(input.operationId);
+        if (previous && (previous.author !== acquired.identity.author || previous.title !== acquired.identity.title)) {
+          throw new Error("文章已變更，請先確認已送出的內容");
+        }
+        this.replyDraftTargets.set(input.operationId, { key, ...acquired.identity });
+        const layout = await measurePushCapacity(this.bot, () => this.articleSessionEpoch === epoch);
+        sender = layout.author;
+        return layout;
+      }, async (content, index, capacity) => {
+        if (this.articleSessionEpoch !== epoch) return { ok: false, code: "SESSION_CHANGED", message: "連線已變更", outcome: "not-sent", retryable: true };
+        const result = await this.executeSingleArticlePush({ type: "reply-article", article: key, content,
+          pushType: input.floor !== undefined || index > 0 ? "neutral" : input.pushType }, (screen) => {
+            const confirmed = readPushConfirmation(screen);
+            return confirmed !== null && confirmed.author.toLowerCase() === sender.toLowerCase() && confirmed.capacity === capacity && confirmed.content === content;
+          });
+        return result.ok ? { ok: true, outcome: "sent" } : {
+          ok: false, code: result.code ?? "PUSH_FAILED", message: result.reason ?? "回文未送出",
+          outcome: result.outcome ?? "uncertain", retryable: false,
+        };
+      }, onProgress);
+    });
+  }
+
   async executeArticleCommand(command: ArticleCommand): Promise<ActionResult> {
     return this.runSerial(async () => {
       if (
@@ -1389,6 +1437,7 @@ class PttClientTerminalDriver implements TerminalDriver {
     command: Exclude<ArticleCommand,
       | { type: "edit-article" | "delete-article" | "reply-article-to-board" }
     >,
+    confirmationGuard?: (screen: string) => boolean,
   ): Promise<ActionResult> {
     const key = command.article;
     const writeEpoch = this.articleSessionEpoch;
@@ -1438,6 +1487,7 @@ class PttClientTerminalDriver implements TerminalDriver {
         undefined,
         undefined,
         () => this.articleSessionEpoch === writeEpoch,
+        confirmationGuard,
       );
       let finalResult = result;
       const writeEvidence = writeEvidenceByResult.get(result);
@@ -3383,6 +3433,19 @@ async function waitForPushEntry(
   return null;
 }
 
+export async function measurePushCapacity(bot: WriteBot, valid: () => boolean = () => true): Promise<{ capacity: number; author: string }> {
+  let measured: ReturnType<typeof readPushConfirmation> = null;
+  const result = await submitPushFromCurrentArticle(bot, "x", "neutral", undefined, {}, valid, (screen) => {
+    measured = readPushConfirmation(screen);
+    return false;
+  });
+  if (!measured || result.ok || result.code !== "push-preflight-cancelled" || !valid()) {
+    throw new Error("無法確認推文容量，請重新載入文章後再試");
+  }
+  const confirmation = measured as { capacity: number; author: string };
+  return { capacity: confirmation.capacity, author: confirmation.author };
+}
+
 export async function submitPushFromCurrentArticle(
   bot: WriteBot,
   content: string,
@@ -3390,6 +3453,7 @@ export async function submitPushFromCurrentArticle(
   returnBoardName?: string,
   timeoutOverrides: Partial<SubmitPushTimeouts> = {},
   articleSessionIsValid: () => boolean = () => true,
+  confirmationGuard?: (screen: string) => boolean,
 ): Promise<ActionResult> {
   const trimmed = content.trim();
   if (!trimmed) return actionNotSent();
@@ -3539,6 +3603,20 @@ export async function submitPushFromCurrentArticle(
     : undefined;
 
   if (confirmationScreen) {
+    let accepted: boolean;
+    try { accepted = confirmationGuard?.(confirmationScreen) ?? true; }
+    catch { accepted = false; }
+    if (!accepted && articleSessionIsValid()) {
+      await sendAction("cancel", "n\r");
+      const cancelledAt = Date.now();
+      while (Date.now() - cancelledAt < timeouts.afterConfirmMs) {
+        if (isSameArticleScreen(previousScreen, stripAnsi(readVisibleScreen(bot)).replace(/\r/g, ""))) {
+          return actionNotSent("已取消確認", "push-preflight-cancelled", true);
+        }
+        await sleep(timeouts.pollMs);
+      }
+      return actionNotSent("請重新載入文章後再試", "push-cancel-timeout", true);
+    }
     if (!articleSessionIsValid()) {
       trace.outcome = "article-session-invalidated-after-content";
       return withWriteEvidence(actionUncertain(

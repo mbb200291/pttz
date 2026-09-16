@@ -1,4 +1,5 @@
 import { articleTextRuns } from "./articleFormatting.js";
+import type { ReplyDraftInput, ReplyDelivery } from "./contracts.js";
 import {
   GatewayError,
   articleKeyId,
@@ -55,6 +56,8 @@ import {
 import { extractArticleThreadEvents, parsePushBuffer, splitArticleBody, stripAnsi } from "./parser.js";
 import {
   aggregatePushes,
+  resolvePushAggregationOptions,
+  type PushAggregationOptions,
   normalizePttId,
   type AggregatedPush,
   type PushEditHistoryRecord,
@@ -206,6 +209,7 @@ function projectSource(
   revision: number,
   debug: boolean,
   viewerId?: string,
+  aggregation?: PushAggregationOptions,
 ): {
   article: PartialArticle | Article;
   replyFloors: Map<string, readonly number[]>;
@@ -214,7 +218,7 @@ function projectSource(
   const header = parseHeader(source.rawText);
   const split = splitArticleBody(source.rawText);
   const events = extractArticleThreadEvents(source.rawText);
-  const thread = aggregatePushes(parsePushBuffer(source.rawText), header.author, events.opReplySegments, events.editRecords);
+  const thread = aggregatePushes(parsePushBuffer(source.rawText), header.author, events.opReplySegments, events.editRecords, aggregation);
   const common = {
     key,
     revision,
@@ -291,7 +295,12 @@ function separatorBody(body: string): string {
   return (separator < 0 ? body : lines.slice(separator + 1).join("\n")).trim();
 }
 
+export interface PttzzzClientOptions {
+  aggregation?: PushAggregationOptions;
+}
+
 export class PttzzzClient {
+  private readonly aggregation: Required<PushAggregationOptions>;
   private readonly listeners = new Set<(event: CoreEvent) => void>();
   private readonly revisions = new Map<string, number>();
   private readonly generations = new Map<string, number>();
@@ -302,7 +311,8 @@ export class PttzzzClient {
   private gatewayUnsubscribe?: Unsubscribe;
   private gatewaySubscriptionGeneration = 0;
 
-  constructor(private readonly gateway: PttGateway) {
+  constructor(private readonly gateway: PttGateway, options: PttzzzClientOptions = {}) {
+    this.aggregation = resolvePushAggregationOptions(options.aggregation);
     this.attachGateway();
   }
 
@@ -398,6 +408,7 @@ export class PttzzzClient {
           revision,
           input.includeDebugMetadata ?? false,
           this.session?.userId,
+          this.aggregation,
         );
         const article = projection.article;
         const current = this.generations.get(id) === generation;
@@ -449,6 +460,24 @@ export class PttzzzClient {
 
   withdrawArticleVote(input: WithdrawArticleVoteInput): Promise<Result<void>> {
     return this.write({ type: "withdraw-article-vote", ...input });
+  }
+
+  async sendReplyDraft(input: ReplyDraftInput, onProgress?: (progress: ReplyDelivery) => void): Promise<Result<ReplyDelivery>> {
+    if (!input.operationId || !input.content.trim()) return fail({ code: "INVALID_INPUT", message: "回文不可為空", outcome: "not-sent", retryable: true });
+    if (!this.gateway.sendReplyDraft) return fail({ code: "UNSUPPORTED", message: "此連線不支援自動分段", outcome: "not-sent", retryable: false });
+    let floor: number | undefined;
+    if (input.replyId) {
+      const target = this.replyTarget(input.article, input.replyId);
+      if (!target.ok) return target;
+      floor = target.value[0];
+    }
+    try {
+      return ok(await this.gateway.sendReplyDraft({ operationId: input.operationId, article: { ...input.article },
+        content: input.content, pushType: floor === undefined ? input.pushType : "neutral", floor, resume: input.resume }, onProgress));
+    } catch (cause) {
+      const notSent = cause instanceof GatewayError && cause.code === "REPLY_DRAFT_NOT_SENT";
+      return fail({ code: "REPLY_DRAFT_FAILED", message: cause instanceof Error ? cause.message : "無法確認傳送結果", outcome: notSent ? "not-sent" : "uncertain", retryable: notSent });
+    }
   }
 
   async replyToReply(input: ReplyToReplyInput): Promise<Result<void>> {
