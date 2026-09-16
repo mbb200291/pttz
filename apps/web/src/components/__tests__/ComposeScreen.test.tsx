@@ -3,6 +3,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ComposeScreen } from "../ComposeScreen";
+// The transport dependency has no TypeScript declarations.
+// @ts-expect-error untyped codec
+import uao from "uao-js";
 
 afterEach(() => {
   cleanup();
@@ -28,14 +31,72 @@ const defaultReplyProps = {
 };
 
 describe("ComposeScreen", () => {
+  it("inserts a native symbol at the selection, restores the caret, and submits literal text", async () => {
+    const onSubmit = vi.fn();
+    render(<ComposeScreen {...defaultPostProps} initial={{ board: "Test", title: "test", body: "前文字後" }} onSubmit={onSubmit} />);
+    const input = screen.getByPlaceholderText("在這裡輸入文章內容…") as HTMLTextAreaElement;
+    input.focus(); input.setSelectionRange(1, 3);
+    await userEvent.click(screen.getByRole("button", { name: "表情符號" }));
+    await userEvent.click(screen.getByRole("button", { name: "插入 ♥" }));
+    expect(input.value).toBe("前♥後");
+    expect(document.activeElement).toBe(input);
+    expect([input.selectionStart, input.selectionEnd]).toEqual([2, 2]);
+    expect(screen.queryByRole("group", { name: "內建表情符號" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "表情符號" }));
+    await userEvent.click(screen.getByRole("button", { name: "插入 ☺" }));
+    expect(input.value).toBe("前♥☺後");
+    await userEvent.click(screen.getByRole("button", { name: "預覽" }));
+    expect(screen.getAllByText("前♥☺後").some((node) => !node.closest('[aria-hidden="true"]'))).toBe(true);
+    await userEvent.click(screen.getByRole("button", { name: "發文" }));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ body: "前♥☺後" }));
+  });
+  it("offers only symbols that survive the actual PTT UAO codec", async () => {
+    render(<ComposeScreen {...defaultPostProps} />);
+    await userEvent.click(screen.getByRole("button", { name: "表情符號" }));
+    const symbols = new Set<string>();
+    for (const name of ["常用圖案", "箭頭", "數學", "幾何圖形", "框線", "色塊", "數字", "圈字母", "標點與單位"]) {
+      await userEvent.click(screen.getByRole("button", { name }));
+      for (const button of screen.getAllByRole("button", { name: /^插入 / })) {
+        const symbol = button.textContent!;
+        expect(uao.decodeSync(uao.encodeSync(symbol))).toBe(symbol);
+        expect(symbols.has(symbol)).toBe(false);
+        symbols.add(symbol);
+      }
+    }
+    expect(symbols.size).toBeGreaterThan(380);
+    for (const symbol of ["✈", "✂", "☎", "✉", "☹", "♬"]) expect(symbols.has(symbol)).toBe(true);
+  });
+  it("keeps the insertion position when switching symbol categories", async () => {
+    render(<ComposeScreen {...defaultPostProps} initial={{ body: "前後" }} />);
+    const input = screen.getByPlaceholderText("在這裡輸入文章內容…") as HTMLTextAreaElement;
+    input.focus(); input.setSelectionRange(1, 1);
+    await userEvent.click(screen.getByRole("button", { name: "表情符號" }));
+    await userEvent.click(screen.getByRole("button", { name: "箭頭" }));
+    await userEvent.click(screen.getByRole("button", { name: "常用圖案" }));
+    await userEvent.click(screen.getByRole("button", { name: "插入 ✈" }));
+    expect(input.value).toBe("前✈後");
+    expect(input.selectionStart).toBe(2);
+    expect(document.activeElement).toBe(input);
+  });
+  it("dismisses the symbol palette with Escape without cancelling the draft", async () => {
+    const onCancel = vi.fn();
+    render(<ComposeScreen {...defaultPostProps} onCancel={onCancel} />);
+    await userEvent.click(screen.getByRole("button", { name: "表情符號" }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("group", { name: "內建表情符號" })).toBeNull();
+    expect(onCancel).not.toHaveBeenCalled();
+  });
   it("shows selected colors while editing and keeps the native input and selection", () => {
     render(<ComposeScreen {...defaultPostProps} initial={{ body: "前紅字後" }} />);
     const input = screen.getByPlaceholderText("在這裡輸入文章內容…") as HTMLTextAreaElement;
     input.focus();
     input.setSelectionRange(1, 3);
-    fireEvent.change(screen.getByRole("combobox", { name: "PTT 文字顏色" }), { target: { value: "31" } });
+    fireEvent.click(screen.getByRole("button", { name: "文字色：紅" }));
     const painted = screen.getByText("紅字");
     expect(painted.style.color).not.toBe("");
+    fireEvent.click(screen.getByRole("button", { name: "底色：藍" }));
+    expect(screen.getByText("紅字").style.backgroundColor).toBe("rgb(0, 0, 170)");
+    expect(screen.getByText("紅字").style.color).toBe("rgb(170, 0, 0)");
     expect(painted.closest('[aria-hidden="true"]')).not.toBeNull();
     expect(input.value).toBe("前紅字後");
     expect([input.selectionStart, input.selectionEnd]).toEqual([1, 3]);
@@ -44,6 +105,14 @@ describe("ComposeScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: "清除格式" }));
     expect(screen.queryByText("紅字")).toBeNull();
     expect(input.value).toBe("前紅字後");
+  });
+  it("offers native formatting without Markdown tools or implementation copy", () => {
+    render(<ComposeScreen {...defaultPostProps} />);
+    for (const title of ["連結", "引言", "程式碼", "清單"]) expect(screen.queryByTitle(title)).toBeNull();
+    expect(screen.queryByText("Markdown")).toBeNull();
+    expect(screen.queryByText(/既有文章目前以純文字載入/)).toBeNull();
+    expect(screen.getByRole("button", { name: "新增圖片" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "底色：紅" }).style.backgroundColor).toBe("rgb(170, 0, 0)");
   });
   it("loads existing ANSI body as plain editable text without leaking color code text", () => {
     render(<ComposeScreen {...defaultEditProps} initial={{ body: "\x1b[1;31m原文\x1b[0m" }} />);
@@ -66,10 +135,14 @@ describe("ComposeScreen", () => {
     input.focus(); input.setSelectionRange(1, 3);
     await userEvent.click(screen.getByRole("button", { name: "高亮／粗體" }));
     expect(input.value).toBe("前紅字後");
+    await userEvent.click(screen.getByRole("button", { name: "文字色：紅" }));
+    await userEvent.click(screen.getByRole("button", { name: "底色：藍" }));
     await userEvent.click(screen.getByRole("button", { name: "預覽" }));
     expect(screen.getByText("紅字").style.fontWeight).toBe("700");
+    expect(screen.getByText("紅字").style.color).toBe("rgb(255, 85, 85)");
+    expect(screen.getByText("紅字").style.backgroundColor).toBe("rgb(0, 0, 170)");
     await userEvent.click(screen.getByRole("button", { name: "發文" }));
-    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ body: "前紅字後", formatting: [{ start: 1, end: 3, bold: true }] }));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ body: "前紅字後", formatting: [{ start: 1, end: 3, bold: true, color: 31, backgroundColor: 44 }] }));
   });
   it("renders 發文 submit button in post mode", () => {
     render(<ComposeScreen {...defaultPostProps} />);

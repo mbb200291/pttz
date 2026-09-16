@@ -16,6 +16,52 @@ const defaultProps = {
 };
 
 describe("Composer", () => {
+  it.each(["push", "boo"] as const)("forces neutral floor replies even with initial %s", async (pushType) => {
+    const onSubmit = vi.fn();
+    render(<Composer {...defaultProps} mode="reply-push" initial={{ body: "回覆", pushType }} onSubmit={onSubmit} />);
+    for (const name of ["推", "噓", "→"]) expect(screen.queryByRole("button", { name })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "送出" }));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ body: "回覆", pushType: "neutral" }));
+  });
+  it("uses a monochrome image icon", () => {
+    render(<Composer {...defaultProps} />);
+    const button = screen.getByRole("button", { name: "新增圖片" });
+    expect(button.textContent).not.toContain("🖼");
+    expect(button.querySelector('svg[stroke="currentColor"]')).not.toBeNull();
+  });
+  it.each(["reply", "reply-push"] as const)("inserts native symbols into %s without formatting controls", async (mode) => {
+    const onSubmit = vi.fn();
+    render(<Composer {...defaultProps} mode={mode} initial={{ body: "前文字後" }} onSubmit={onSubmit} />);
+    const input = screen.getByRole("textbox") as HTMLTextAreaElement;
+    input.setSelectionRange(1, 3);
+    await userEvent.click(screen.getByRole("button", { name: "表情符號" }));
+    await userEvent.click(screen.getByRole("button", { name: "箭頭" }));
+    await userEvent.click(screen.getByRole("button", { name: "常用圖案" }));
+    await userEvent.click(screen.getByRole("button", { name: "插入 ✈" }));
+    expect(input.value).toBe("前✈後");
+    expect(input.selectionStart).toBe(2);
+    expect(document.activeElement).toBe(input);
+    expect(screen.queryByRole("group", { name: "內建表情符號" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /文字色|底色/ })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "送出" }));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ body: "前✈後" }));
+  });
+  it("closes the symbol palette before closing the reply on Escape", async () => {
+    const onClose = vi.fn();
+    render(<Composer {...defaultProps} onClose={onClose} />);
+    await userEvent.click(screen.getByRole("button", { name: "表情符號" }));
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("group", { name: "內建表情符號" })).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+  it("counts symbol bytes and blocks overflow", async () => {
+    render(<Composer {...defaultProps} initial={{ body: "a".repeat(79) }} />);
+    await userEvent.click(screen.getByRole("button", { name: "表情符號" }));
+    await userEvent.click(screen.getByRole("button", { name: "插入 ✈" }));
+    expect((screen.getByRole("button", { name: "送出" }) as HTMLButtonElement).disabled).toBe(true);
+  });
   it("does not send unchanged edits, but can withdraw a long merged reply", async () => {
     render(<Composer {...defaultProps} mode="edit-push" initial={{ body: "原文".repeat(50) }} />);
     const submit = screen.getByRole("button", { name: "送出" }) as HTMLButtonElement;

@@ -147,6 +147,8 @@ export interface Reply {
   viewerVote?: VoteDirection;
   isOp: boolean;
   visible: boolean;
+  /** Initial snapshot before edits, when retained by the source. Not an edit operation. */
+  originalVersion?: { content: string; createdAt?: string };
   edits: readonly EditRecord[];
   children: readonly Reply[];
   metadata?: ReplyMetadata;
@@ -244,7 +246,7 @@ export interface SearchArticlesInput { board: string; query: string; cursor?: st
 export interface FilterArticlesInput { board: string; author?: string; keyword?: string; minimumNativeScore?: number; cursor?: string; limit?: number }
 export interface GetArticleInput { article: ArticleKey; includeDebugMetadata?: boolean }
 /** Presentation offsets are UTF-16, start-inclusive/end-exclusive, not reply-edit indices. */
-export interface ArticleTextStyle { start: number; end: number; bold?: boolean; color?: 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 }
+export interface ArticleTextStyle { start: number; end: number; bold?: boolean; color?: 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37; backgroundColor?: 40 | 41 | 42 | 43 | 44 | 45 | 46 | 47 }
 export interface CreateArticleInput { board: string; category?: string; title: string; content: string; formatting?: readonly ArticleTextStyle[] }
 export interface EditArticleInput { article: ArticleKey; content: string; formatting?: readonly ArticleTextStyle[] }
 export interface DeleteArticleInput { article: ArticleKey }

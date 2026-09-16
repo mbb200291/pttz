@@ -76,12 +76,13 @@ export function AdaptiveArticleBody({ text }: { text: string }) {
             : preview(segment, i))}
       </div>
     </div>
-    {!forced && footer && <section aria-label="文章資訊" className="mt-6 border-t pt-3 text-sm" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>
-      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1">
-        <dt>發信站</dt><dd>{footer.station}</dd>
-        <dt>來源</dt><dd className="break-words">{footer.source}</dd>
-        <dt>文章連結</dt><dd><a href={footer.url} target="_blank" rel="noopener noreferrer" className="break-all underline" style={{ color: "var(--accent)" }}>{footer.url}</a></dd>
-      </dl>
+    {!forced && footer && <section aria-label="文章資訊" className="mt-6 flex items-center gap-3 rounded-xl border p-3 sm:gap-4 sm:p-4" style={{ borderColor: "var(--border)", background: "var(--surface)", minWidth: 0 }}>
+      <span className="flex shrink-0 items-center justify-center rounded-lg text-xs font-semibold" style={{ width: 42, height: 42, background: "var(--accent-dim)", color: "var(--accent)" }}>PTT</span>
+      <div className="min-w-0 flex-1">
+        <a href={footer.url} target="_blank" rel="noopener noreferrer" className="block underline decoration-transparent underline-offset-4 hover:decoration-current" style={{ color: "var(--text)", fontSize: 13, lineHeight: 1.6, overflowWrap: "anywhere" }}>{footer.url}</a>
+        <p className="mb-0 mt-1 text-xs leading-relaxed" style={{ color: "var(--text-muted)", overflowWrap: "anywhere" }}>{footer.station.replace(/\(ptt\.cc\)$/u, "")} · {footer.source.replace(/^(.+?)\s+\(([^()]+)\)$/u, "$2 · $1")}</p>
+      </div>
+      <a href={footer.url} target="_blank" rel="noopener noreferrer" aria-label="開啟 PTT 原文" className="shrink-0 p-1" style={{ color: "var(--accent)" }}><span aria-hidden="true">↗</span></a>
     </section>}
     {forced && segments.some(({ segment }) => segment.kind !== "text") && <div className="mt-4">
       {segments.map(({ segment }, i) => preview(segment, i))}

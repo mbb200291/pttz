@@ -391,7 +391,7 @@ function groupPushes(
     if (cur.intent.isControl || cur.intent.relativeUpstairs) {
       groups.push({
         pushes: [cur],
-        anchorOrder: cur.anchorOffset ?? i,
+        anchorOrder: cur.anchorOffset ?? cur.commandOrder,
         targetFloor: cur.intent.targetFloor ?? null,
       });
       continue;
@@ -400,7 +400,7 @@ function groupPushes(
     if (groups.length === 0) {
       groups.push({
         pushes: [cur],
-        anchorOrder: cur.anchorOffset ?? i,
+        anchorOrder: cur.anchorOffset ?? cur.commandOrder,
         targetFloor: cur.intent.targetFloor ?? null,
       });
       continue;
@@ -419,7 +419,7 @@ function groupPushes(
       // 從未出現過此作者
       groups.push({
         pushes: [cur],
-        anchorOrder: cur.anchorOffset ?? i,
+        anchorOrder: cur.anchorOffset ?? cur.commandOrder,
         targetFloor: cur.intent.targetFloor ?? null,
       });
       continue;
@@ -431,7 +431,7 @@ function groupPushes(
     if (lastPush.intent.isControl) {
       groups.push({
         pushes: [cur],
-        anchorOrder: cur.anchorOffset ?? i,
+        anchorOrder: cur.anchorOffset ?? cur.commandOrder,
         targetFloor: cur.intent.targetFloor ?? null,
       });
       continue;
@@ -442,7 +442,7 @@ function groupPushes(
     if (currentTarget !== sameGroup.targetFloor) {
       groups.push({
         pushes: [cur],
-        anchorOrder: cur.anchorOffset ?? i,
+        anchorOrder: cur.anchorOffset ?? cur.commandOrder,
         targetFloor: cur.intent.targetFloor ?? null,
       });
       continue;
@@ -461,7 +461,7 @@ function groupPushes(
     } else {
       groups.push({
         pushes: [cur],
-        anchorOrder: cur.anchorOffset ?? i,
+        anchorOrder: cur.anchorOffset ?? cur.commandOrder,
         targetFloor: cur.intent.targetFloor ?? null,
       });
     }
@@ -829,6 +829,9 @@ function parseAndApplyPushEdits(rawPushes: AnchoredRawPush[]): ParsedRawPush[] {
   for (const push of parsedPushes) {
     if (!push.intent.relativeUpstairs || push.intent.targetFloor === undefined) continue;
     if (!byFloor.get(push.intent.targetFloor)?.withdrawn) continue;
+    // Content replies keep their original parent, now represented by a tombstone.
+    // Pure relative votes retain the existing unavailable-target fallback.
+    if (!push.intent.isControl) continue;
     // Losing a target never redirects to another event. Keep edited text opaque.
     const content = push.editHistory.length
       ? push.intent.visibleContent
@@ -880,11 +883,16 @@ export function aggregatePushes(
     parsedPushes.filter((push) => push.intent.isControl).map((push) => push.commandOrder),
   );
 
+  // Retain fully withdrawn groups as structural anchors without reintroducing
+  // withdrawn fragments into partially visible aggregates.
+  const withdrawnGroups = groupPushes(
+    parsedPushes.filter((push) => !push.intent.isControl), controlOrders,
+  ).filter((group) => group.pushes.every((push) => push.withdrawn));
   // Step 1：分群
-  const groups = groupPushes(
+  const groups = [...groupPushes(
     parsedPushes.filter((push) => !push.withdrawn && !push.intent.isControl),
     controlOrders,
-  );
+  ), ...withdrawnGroups].sort((a, b) => a.pushes[0].commandOrder - b.pushes[0].commandOrder);
 
   // Step 2：每群合成一則 AggregatedPush（暫時 replyTo=null, score=0）
   const firstLayer: AggregatedPush[] = [];
@@ -903,7 +911,7 @@ export function aggregatePushes(
       id: replyIdFromAnchorFloor(sourceFloors),
       type: rep.type,
       author: rep.author,
-      content: editedGroup.content,
+      content: rep.withdrawn ? " " : editedGroup.content,
       time: lastTime,
       ipAddresses,
       isOP: normalizePttId(rep.author) === articleAuthorId,
@@ -914,7 +922,8 @@ export function aggregatePushes(
       sourceFloors,
       pushVoters: [],
       booVoters: [],
-      editHistory: editedGroup.history,
+      editHistory: rep.withdrawn ? withdrawnGroupEditHistory(g) : editedGroup.history,
+      ...(rep.withdrawn ? { visible: false } : {}),
     });
   }
 
@@ -944,7 +953,7 @@ export function aggregatePushes(
     const target = firstLayer.find((candidate) =>
       candidate.sourceFloors.includes(targetFloor),
     );
-    if (!target) continue;
+    if (!target || target.visible === false) continue;
 
     if (!voterDirectionMap.has(target.id)) {
       voterDirectionMap.set(target.id, new Map());
@@ -1014,7 +1023,7 @@ export function aggregatePushes(
         p.floorNumber = target.floorNumber;
       } else {
         p.replyTo = null;
-        p.content = mergeOriginalPushContents(groups[i].pushes);
+        if (p.visible !== false) p.content = mergeOriginalPushContents(groups[i].pushes);
         p.floorNumber = floor;
         floor++;
         topLevel.push(p);
@@ -1096,7 +1105,7 @@ export function aggregatePushes(
   const nativeNeutralCount = rawPushes.filter((push) => push.type === "neutral").length;
   const nestedVisibleFloors = new Set(
     firstLayer
-      .filter((push) => push.replyTo !== null)
+      .filter((push) => push.visible !== false && push.replyTo !== null)
       .flatMap((push) => push.sourceFloors),
   );
   const proposalExcludedFloors = new Set([
@@ -1111,38 +1120,10 @@ export function aggregatePushes(
   const articleBooCount = parsedPushes.filter((push) =>
     push.type === "boo" && !proposalExcludedFloors.has(push.rawFloor!),
   ).length;
-  const withdrawnPushes: AggregatedPush[] = groupPushes(
-    parsedPushes.filter((push) => !push.intent.isControl),
-    controlOrders,
-  )
-    .filter((group) => group.pushes.every((push) => push.withdrawn))
-    .map((group, index) => {
-      const sourceFloors = group.pushes.map((push) => push.rawFloor!);
-      const representative = group.pushes[0];
-      return {
-        id: replyIdFromAnchorFloor(sourceFloors),
-        type: representative.type,
-        author: representative.author,
-        content: " ",
-        time: group.pushes[group.pushes.length - 1].time,
-        ipAddresses: Array.from(new Set(group.pushes.flatMap((push) =>
-          push.ipAddress ? [push.ipAddress] : []
-        ))),
-        isOP: normalizePttId(representative.author) === articleAuthorId,
-        replyTo: null,
-        score: 0,
-        floorNumber: index,
-        anchorOrder: group.anchorOrder,
-        sourceFloors,
-        pushVoters: [],
-        booVoters: [],
-        editHistory: withdrawnGroupEditHistory(group),
-        visible: false,
-      };
-    });
+  const withdrawnPushes = threadPushes.filter((push) => push.visible === false);
 
   return {
-    pushes: threadPushes,
+    pushes: threadPushes.filter((push) => push.visible !== false),
     withdrawnPushes,
     articleNotes: articleEditRecords,
     articleScore: articlePushCount - articleBooCount,

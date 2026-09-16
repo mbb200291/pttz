@@ -10,6 +10,38 @@ afterEach(() => {
 });
 
 describe("ArticleList", () => {
+  it("skips deleted articles, retains selection across refresh and restores it after reading", async () => {
+    const { ArticleList } = await import("../ArticleList");
+    const open = vi.fn();
+    const props = { boardName: "KeyboardRestore", onBack: vi.fn(), onSelectArticle: open, onSelectArticleByAid: vi.fn(), mockArticles: [
+      { index: 3, title: "new", author: "a", date: "9/16", pushCount: "", mark: "" },
+      { index: 2, title: "(本文已被刪除)", author: "-", date: "9/16", pushCount: "", mark: "" },
+      { index: 1, title: "old", author: "b", date: "9/16", pushCount: "", mark: "" },
+    ] };
+    const { container, rerender, unmount } = render(<ArticleList {...props} />);
+    const selected = () => container.querySelector('[aria-current="true"]')?.getAttribute("data-article-index");
+    fireEvent.keyDown(document.body, { key: "ArrowDown" });
+    expect(selected()).toBe("3");
+    fireEvent.keyDown(document.body, { key: "ArrowDown" });
+    expect(selected()).toBe("1");
+    fireEvent.keyDown(document.body, { key: "ArrowDown" });
+    expect(selected()).toBe("1");
+    rerender(<ArticleList {...props} mockArticles={[{ ...props.mockArticles[0], index: 4 }, ...props.mockArticles]} />);
+    expect(selected()).toBe("1");
+    const input = screen.getByRole("textbox");
+    input.focus();
+    fireEvent.keyDown(input, { key: "ArrowUp" });
+    fireEvent.keyDown(input, { key: "ArrowRight" });
+    expect(selected()).toBe("1");
+    expect(open).not.toHaveBeenCalled();
+    input.blur();
+    fireEvent.keyDown(document.body, { key: "ArrowRight" });
+    expect(open).toHaveBeenCalledWith(expect.objectContaining({ index: 1 }));
+    unmount();
+    const restored = render(<ArticleList {...props} />);
+    expect(restored.container.querySelector('[aria-current="true"]')?.getAttribute("data-article-index")).toBe("1");
+    expect(document.activeElement).toBe(document.body);
+  });
   it.each(["s", "/"])("focuses search with %s and exits search without selecting articles", async (key) => {
     const { ArticleList } = await import("../ArticleList");
     const open = vi.fn();
@@ -108,18 +140,19 @@ describe("ArticleList", () => {
   it.each(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"])("uses fixed arrow behavior from body: %s", async (key) => {
     const { ArticleList } = await import("../ArticleList");
     const open = vi.fn(), back = vi.fn();
-    const { container, unmount } = render(<ArticleList boardName="Keyboard" onBack={back} onSelectArticle={open} onSelectArticleByAid={() => {}}
+    const { container, unmount } = render(<ArticleList boardName={`Keyboard-${key}`} onBack={back} onSelectArticle={open} onSelectArticleByAid={() => {}}
       mockLoading={false} mockArticles={[
         { index: 2, title: "First", author: "a", date: "9/8", pushCount: "1", mark: " " },
         { index: 1, title: "Second", author: "b", date: "9/8", pushCount: "1", mark: " " },
       ]} />);
     (document.activeElement as HTMLElement).blur();
-    expect(fireEvent.keyDown(document.body, { key })).toBe(key !== "ArrowLeft");
+    expect(fireEvent.keyDown(document.body, { key })).toBe(false);
     const first = container.querySelector<HTMLElement>('[data-article-index="2"]')!;
     expect(document.activeElement).toBe(document.body);
-    expect(open).not.toHaveBeenCalled(); expect(back).toHaveBeenCalledTimes(key === "ArrowLeft" ? 1 : 0);
+    expect(open).toHaveBeenCalledTimes(key === "ArrowRight" ? 1 : 0); expect(back).toHaveBeenCalledTimes(key === "ArrowLeft" ? 1 : 0);
+    open.mockClear();
     fireEvent.keyDown(first, { key: "ArrowRight" });
-    expect(open).not.toHaveBeenCalled();
+    expect(open).toHaveBeenCalledWith(expect.objectContaining({ index: 2 }));
     unmount(); expect(fireEvent.keyDown(document.body, { key })).toBe(true);
   });
   it("opens threshold with z from body or a row, but not input/modifiers/dialog/selection", async () => {
@@ -161,7 +194,7 @@ describe("ArticleList", () => {
     fireEvent.keyDown(container.querySelector("input")!, { key: "p", ctrlKey: true });
     expect(compose).not.toHaveBeenCalled();
   });
-  it("keeps arrows from selecting or opening rows while Left always returns", async () => {
+  it("selects article rows independently of element focus and opens with Right", async () => {
     const { ArticleList } = await import("../ArticleList");
     const open = vi.fn();
     const back = vi.fn();
@@ -175,9 +208,13 @@ describe("ArticleList", () => {
     first.focus();
     fireEvent.keyDown(first, { key: "ArrowDown" });
     expect(document.activeElement).toBe(first);
+    expect(first.getAttribute("aria-current")).toBe("true");
+    fireEvent.keyDown(first, { key: "ArrowDown" });
+    expect(second.getAttribute("aria-current")).toBe("true");
+    expect(document.activeElement).toBe(first);
     expect(open).not.toHaveBeenCalled();
     fireEvent.keyDown(second, { key: "ArrowRight" });
-    expect(open).not.toHaveBeenCalled();
+    expect(open).toHaveBeenCalledWith(expect.objectContaining({ index: 1 }));
     fireEvent.keyDown(second, { key: "ArrowLeft" });
     expect(back).toHaveBeenCalledOnce();
   });

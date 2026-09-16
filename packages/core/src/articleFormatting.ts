@@ -1,6 +1,6 @@
 import type { ArticleTextStyle } from "./contracts.js";
 
-export interface ArticleTextRun { text: string; bold?: boolean; color?: ArticleTextStyle["color"] }
+export interface ArticleTextRun { text: string; bold?: boolean; color?: ArticleTextStyle["color"]; backgroundColor?: ArticleTextStyle["backgroundColor"] }
 
 /** Validates the opt-in formatting contract without interpreting text as markup. */
 export function articleTextRuns(content: string, formatting: readonly ArticleTextStyle[] = []): ArticleTextRun[] {
@@ -19,12 +19,14 @@ export function articleTextRuns(content: string, formatting: readonly ArticleTex
       style.start < previous || style.end <= style.start || style.end > content.length ||
       !boundary(style.start) || !boundary(style.end) ||
       (style.bold !== undefined && typeof style.bold !== "boolean") ||
-      (style.color !== undefined && (!Number.isInteger(style.color) || style.color < 30 || style.color > 37))) {
+      (style.color !== undefined && (!Number.isInteger(style.color) || style.color < 30 || style.color > 37)) ||
+      (style.backgroundColor !== undefined && (!Number.isInteger(style.backgroundColor) || style.backgroundColor < 40 || style.backgroundColor > 47))) {
       throw new Error("文章格式範圍或樣式無效");
     }
     if (style.start > previous) runs.push({ text: content.slice(previous, style.start) });
     runs.push({ text: content.slice(style.start, style.end), ...(style.bold ? { bold: true } : {}),
-      ...(style.color === undefined ? {} : { color: style.color }) });
+      ...(style.color === undefined ? {} : { color: style.color }),
+      ...(style.backgroundColor === undefined ? {} : { backgroundColor: style.backgroundColor }) });
     previous = style.end;
   }
   if (previous < content.length) runs.push({ text: content.slice(previous) });

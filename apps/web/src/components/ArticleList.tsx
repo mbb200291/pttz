@@ -165,9 +165,11 @@ export function extractCategoryOptionsFromArticles(
 function ArticleRow({
   article,
   onClick,
+  selected,
 }: {
   article: DisplayArticleSummary;
   onClick: (index: number, element: HTMLButtonElement) => void;
+  selected: boolean;
 }) {
   const normalized = legacySummary(article);
   const isDeleted = /[（(](?:本文)?已被刪除[）)]/.test(article.title);
@@ -189,6 +191,7 @@ function ArticleRow({
       type="button"
       data-article-index={normalized.index}
       data-navigation-item
+      aria-current={selected ? "true" : undefined}
       className="focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-400"
       data-fixed-article={isFixed ? "true" : undefined}
       onClick={handleClick}
@@ -198,7 +201,8 @@ function ArticleRow({
         gridTemplateColumns: "44px 56px 1fr auto",
         gap: 14,
         padding: "10px 20px",
-        background: isFixed ? "var(--accent-soft)" : "transparent",
+        background: selected ? "var(--accent-dim)" : isFixed ? "var(--accent-soft)" : "transparent",
+        boxShadow: selected ? "inset 3px 0 var(--accent)" : undefined,
         borderBottom: "1px solid var(--border)",
         width: "100%",
         textAlign: "left",
@@ -208,13 +212,13 @@ function ArticleRow({
         transition: "background 0.15s",
       }}
       onMouseEnter={(e) => {
-        if (!isFixed && !isDeleted) {
+        if (!selected && !isFixed && !isDeleted) {
           (e.currentTarget as HTMLButtonElement).style.background =
             "var(--surface)";
         }
       }}
       onMouseLeave={(e) => {
-        if (!isFixed && !isDeleted) {
+        if (!selected && !isFixed && !isDeleted) {
           (e.currentTarget as HTMLButtonElement).style.background =
             "transparent";
         }
@@ -722,6 +726,8 @@ export function ArticleList({
   const [customPushFilterOpen, setCustomPushFilterOpen] = useState(false);
   const pushFilterRef = useRef<HTMLDivElement>(null);
   const navigationRef = useRef<HTMLDivElement>(null);
+  const [articleSelection, setArticleSelection] = useState(() => ({ board: boardName, index: readBoardAnchorCache(boardName)?.articleIndex ?? null as number | null }));
+  const selectedIndex = articleSelection.board === boardName ? articleSelection.index : null;
   const searchInputRef = useRef<HTMLInputElement>(null);
   useBodyNavigation(navigationRef, handleNavigation);
 
@@ -1052,6 +1058,19 @@ export function ArticleList({
     activePushThreshold !== null && !PUSH_FILTER_PRESETS.has(activePushThreshold);
 
   function handleNavigation(event: NavigationKeyEvent, scope?: HTMLElement) {
+    if (["ArrowUp", "ArrowDown", "ArrowRight"].includes(event.key) && canUseShortcut(event, false, scope)) {
+      event.preventDefault();
+      const rows = Array.from(navigationRef.current?.querySelectorAll<HTMLButtonElement>("button[data-article-index]:not(:disabled)") ?? []);
+      const current = rows.findIndex(row => Number(row.dataset.articleIndex) === selectedIndex);
+      const next = current < 0 ? 0 : event.key === "ArrowUp" ? Math.max(0, current - 1)
+        : event.key === "ArrowDown" ? Math.min(rows.length - 1, current + 1) : current;
+      const row = rows[next];
+      if (!row) return;
+      setArticleSelection({ board: boardName, index: Number(row.dataset.articleIndex) });
+      if (event.key === "ArrowRight") row.click();
+      else row.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+      return;
+    }
     if ((event.key.toLowerCase() === "s" || event.key === "/") && canUseShortcut(event, false, scope)) {
       event.preventDefault();
       searchInputRef.current?.focus();
@@ -1557,7 +1576,9 @@ export function ArticleList({
           <ArticleRow
             key={displayIndex(a)}
             article={a}
+            selected={selectedIndex === displayIndex(a)}
             onClick={(index, element) => {
+              setArticleSelection({ board: boardName, index });
               lastSelectionRef.current = {
                 boardName,
                 index,

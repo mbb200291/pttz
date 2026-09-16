@@ -9,6 +9,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { articleTextRuns, type ArticleTextStyle } from "@pttzzz/core";
 import { applyArticleStyle, rebaseArticleStyles, ARTICLE_COLORS, ARTICLE_BRIGHT_COLORS } from "../lib/articleFormatting";
 import { RichContent } from "./RichContent";
+import { NativeSymbolPalette } from "./NativeSymbolPalette";
 import { uploadToImgur } from "../lib/imgur";
 import {
   normalizeCategoryOptions,
@@ -17,6 +18,7 @@ import {
 import type { ArticleRevision } from "../lib/ptt/uiArticle";
 
 export type ComposeMode = "post" | "edit-article" | "reply-article";
+
 
 export interface ComposePayload {
   board: string;
@@ -43,28 +45,6 @@ interface ComposeScreenProps {
   submitError?: string | null;
   onCancel: () => void;
   onSubmit: (payload: ComposePayload) => void;
-}
-
-/** Insert / wrap text in textarea at current selection */
-function applyTextTransform(
-  el: HTMLTextAreaElement,
-  transform: (selected: string, before: string, after: string) => {
-    text: string;
-    selStart: number;
-    selEnd: number;
-  },
-  setBody: (v: string) => void,
-) {
-  const value = el.value;
-  const start = el.selectionStart;
-  const end = el.selectionEnd;
-  const selected = value.slice(start, end);
-  const { text, selStart, selEnd } = transform(selected, value.slice(0, start), value.slice(end));
-  setBody(text);
-  requestAnimationFrame(() => {
-    el.focus();
-    el.setSelectionRange(selStart, selEnd);
-  });
 }
 
 export function ComposeScreen({
@@ -96,6 +76,8 @@ export function ComposeScreen({
     });
   }, []);
   const [formatMessage, setFormatMessage] = useState("");
+  const [symbolsOpen, setSymbolsOpen] = useState(false);
+  const [symbolGroup, setSymbolGroup] = useState(0);
   const [preview, setPreview] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -105,6 +87,21 @@ export function ComposeScreen({
 
   const draftTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const pendingCaret = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    if (pendingCaret.current === null || !bodyRef.current) return;
+    bodyRef.current.focus();
+    bodyRef.current.setSelectionRange(pendingCaret.current, pendingCaret.current);
+    pendingCaret.current = null;
+  }, [body, symbolsOpen]);
+  const insertSymbol = (symbol: string) => {
+    const input = bodyRef.current;
+    if (!input) return;
+    const start = input.selectionStart, end = input.selectionEnd;
+    pendingCaret.current = start + symbol.length;
+    setBody(body.slice(0, start) + symbol + body.slice(end));
+    setSymbolsOpen(false);
+  };
   const bodyPaintRef = useRef<HTMLDivElement>(null);
   // Keep the painted text on the native textarea's exact content grid,
   // including scrollbar width, user resizing and caret-driven scrolling.
@@ -125,9 +122,7 @@ export function ComposeScreen({
     const input = bodyRef.current;
     if (!input || input.selectionStart === input.selectionEnd) { setFormatMessage("請先選取要套用格式的文字"); return; }
     const start = input.selectionStart, end = input.selectionEnd;
-    const existing = formatting.find((range) => range.start <= start && range.end >= end);
-    const combined = Object.keys(style).length ? { ...(existing ? { bold: existing.bold, color: existing.color } : {}), ...style } : {};
-    const next = applyArticleStyle(formatting, start, end, combined);
+    const next = applyArticleStyle(formatting, start, end, style, true);
     try { articleTextRuns(body, next); }
     catch (error) { setFormatMessage(error instanceof Error ? error.message : "格式無效"); return; }
     setDraft({ body, formatting: next });
@@ -176,6 +171,12 @@ export function ComposeScreen({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        if (symbolsOpen) {
+          e.preventDefault();
+          setSymbolsOpen(false);
+          bodyRef.current?.focus();
+          return;
+        }
         if (submitting) return;
         onCancel();
         return;
@@ -186,7 +187,7 @@ export function ComposeScreen({
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onCancel, handleSubmit, submitting]);
+  }, [onCancel, handleSubmit, submitting, symbolsOpen]);
 
   // Image upload
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -223,65 +224,8 @@ export function ComposeScreen({
     }
   };
 
-  // Toolbar action helpers
-  const prefixLines = (prefix: string) => {
-    const el = bodyRef.current;
-    if (!el) return;
-    applyTextTransform(
-      el,
-      (selected, before, after) => {
-        const lines = selected || "";
-        const prefixed = lines
-          .split("\n")
-          .map((l) => prefix + l)
-          .join("\n");
-        return {
-          text: before + prefixed + after,
-          selStart: before.length,
-          selEnd: before.length + prefixed.length,
-        };
-      },
-      setBody,
-    );
-  };
 
-  const handleLinkToolbar = () => {
-    const el = bodyRef.current;
-    if (!el) return;
-    applyTextTransform(
-      el,
-      (selected, before, after) => {
-        const inner = selected ? `[${selected}](url)` : "[文字](url)";
-        return {
-          text: before + inner + after,
-          selStart: before.length,
-          selEnd: before.length + inner.length,
-        };
-      },
-      setBody,
-    );
-  };
 
-  const handleCodeToolbar = () => {
-    const el = bodyRef.current;
-    if (!el) return;
-    applyTextTransform(
-      el,
-      (selected, before, after) => {
-        const inner = selected || "code";
-        const isMultiline = inner.includes("\n");
-        const wrapped = isMultiline
-          ? "```\n" + inner + "\n```"
-          : "`" + inner + "`";
-        return {
-          text: before + wrapped + after,
-          selStart: before.length,
-          selEnd: before.length + wrapped.length,
-        };
-      },
-      setBody,
-    );
-  };
 
   const charCount = body.length;
   const readingTime = Math.max(1, Math.ceil(charCount / 300));
@@ -662,9 +606,6 @@ export function ComposeScreen({
             </span>
           </div>
 
-          <p style={{ color: "var(--text-dim)", fontSize: 12 }}>
-            選取文字可套用 PTT 高亮及文字色彩；斜體／刪除線不支援。既有文章目前以純文字載入，編輯不保留原色碼。
-          </p>
           <p role="status" style={{ color: "var(--text-dim)", fontSize: 12 }}>{formatMessage}</p>
           {formattedPreview.error && <p role="alert">{formattedPreview.error}</p>}
           {/* PTT formatting toolbar + body */}
@@ -695,86 +636,25 @@ export function ComposeScreen({
                 >
                   B
                 </button>
-                <select aria-label="PTT 文字顏色" value="" style={toolbarBtnStyle}
-                  onChange={(event) => applyStyle({ color: Number(event.target.value) as ArticleTextStyle["color"] })}>
-                  <option value="" disabled>文字顏色</option>
-                  {["黑", "紅", "綠", "黃", "藍", "紫", "青", "白"].map((name, index) => <option key={name} value={30 + index}>{name}</option>)}
-                </select>
-                <button type="button" onClick={() => applyStyle({})} style={toolbarBtnStyle}>清除格式</button>
-
-                {/* Separator */}
-                <span
-                  style={{
-                    width: 1,
-                    height: 18,
-                    background: "var(--border)",
-                    margin: "0 2px",
-                    flexShrink: 0,
-                  }}
-                />
-
-                {/* Link icon */}
-                <button
-                  type="button"
-                  onClick={handleLinkToolbar}
-                  style={toolbarBtnStyle}
-                  title="連結"
-                >
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                    <path d="M6.5 9.5a4 4 0 005.657 0l2-2a4 4 0 00-5.657-5.657L7.25 3.09" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                    <path d="M9.5 6.5a4 4 0 00-5.657 0l-2 2a4 4 0 005.657 5.657l1.25-1.25" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                  </svg>
-                </button>
-
-                {/* Quote icon */}
-                <button
-                  type="button"
-                  onClick={() => prefixLines("> ")}
-                  style={toolbarBtnStyle}
-                  title="引言"
-                >
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                    <path d="M3 4h10M3 8h7M3 12h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                  </svg>
-                </button>
-
-                {/* Code icon */}
-                <button
-                  type="button"
-                  onClick={handleCodeToolbar}
-                  style={{ ...toolbarBtnStyle, fontFamily: "var(--font-mono)", fontSize: 12 }}
-                  title="程式碼"
-                >
-                  {"</>"}
-                </button>
-
-                {/* List icon */}
-                <button
-                  type="button"
-                  onClick={() => prefixLines("- ")}
-                  style={toolbarBtnStyle}
-                  title="清單"
-                >
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                    <circle cx="3" cy="5" r="1.2" fill="currentColor" />
-                    <circle cx="3" cy="9" r="1.2" fill="currentColor" />
-                    <circle cx="3" cy="13" r="1.2" fill="currentColor" />
-                    <path d="M6 5h7M6 9h7M6 13h7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                  </svg>
-                </button>
-
-                {/* Separator */}
-                <span
-                  style={{
-                    width: 1,
-                    height: 18,
-                    background: "var(--border)",
-                    margin: "0 2px",
-                    flexShrink: 0,
-                  }}
-                />
+                {(["文字色", "底色"] as const).map((label) => (
+                  <div key={label} role="group" aria-label={label} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 6px", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 12, color: "var(--text-muted)", marginRight: 2 }}>{label}</span>
+                    {ARTICLE_COLORS.map((color, index) => {
+                      const name = ["黑", "紅", "綠", "黃", "藍", "紫", "青", "白"][index];
+                      return <button key={color} type="button" aria-label={label + "：" + name} title={label + "：" + name}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => applyStyle(label === "文字色" ? { color: (30 + index) as ArticleTextStyle["color"] } : { backgroundColor: (40 + index) as ArticleTextStyle["backgroundColor"] })}
+                        style={{ width: 24, height: 24, padding: 0, borderRadius: 5, border: "1px solid var(--text-dim)", backgroundColor: color, cursor: "pointer" }} />;
+                    })}
+                  </div>
+                ))}
+                <button type="button" onClick={() => applyStyle({})} style={{ ...toolbarBtnStyle, width: "auto", padding: "0 8px" }}>清除格式</button>
 
                 {/* Image upload */}
+                <button type="button" aria-label="表情符號" title="表情符號" aria-expanded={symbolsOpen}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => setSymbolsOpen((open) => !open)}
+                  style={{ ...toolbarBtnStyle, fontSize: 22 }}>☺</button>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -811,19 +691,8 @@ export function ComposeScreen({
                     </svg>
                   )}
                 </button>
+                {symbolsOpen && <NativeSymbolPalette groupIndex={symbolGroup} onGroupChange={setSymbolGroup} onSelect={insertSymbol} disabled={submitting} />}
 
-                {/* Right: Markdown label */}
-                <div style={{ flex: 1 }} />
-                <span
-                  style={{
-                    fontFamily: "var(--font-mono)",
-                    fontSize: 11,
-                    color: "var(--text-dim)",
-                    userSelect: "none",
-                  }}
-                >
-                  Markdown
-                </span>
               </div>
 
               {/* Body textarea */}
@@ -832,6 +701,7 @@ export function ComposeScreen({
                 <div ref={bodyPaintRef} style={{ boxSizing: "border-box", fontWeight: 400, padding: "18px 20px", whiteSpace: "pre-wrap", overflowWrap: "break-word", fontFamily: "var(--font-mono)", fontSize: 15, lineHeight: 1.7, tabSize: 8, color: "var(--text)" }}>
                   {formattedPreview.runs.map((run, index) => <span key={index} style={{
                     color: run.color === undefined ? undefined : (run.bold ? ARTICLE_BRIGHT_COLORS : ARTICLE_COLORS)[run.color - 30],
+                    backgroundColor: run.backgroundColor === undefined ? undefined : ARTICLE_COLORS[run.backgroundColor - 40],
                     textShadow: run.bold ? "0.4px 0 currentColor" : undefined,
                   }}>{run.text}</span>)}
                   {"\n"}
@@ -889,7 +759,7 @@ export function ComposeScreen({
               }}
             >
               {formatting.length ? <pre aria-label="PTT 格式預覽" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontFamily: "var(--font-mono)", background: "#000", color: "#aaa", padding: 12 }}>
-                {formattedPreview.runs.map((run, index) => <span key={index} style={{ fontWeight: run.bold ? 700 : 400, color: (run.bold ? ARTICLE_BRIGHT_COLORS : ARTICLE_COLORS)[(run.color ?? 37) - 30] }}>{run.text}</span>)}
+                {formattedPreview.runs.map((run, index) => <span key={index} style={{ backgroundColor: run.backgroundColor === undefined ? undefined : ARTICLE_COLORS[run.backgroundColor - 40], fontWeight: run.bold ? 700 : 400, color: (run.bold ? ARTICLE_BRIGHT_COLORS : ARTICLE_COLORS)[(run.color ?? 37) - 30] }}>{run.text}</span>)}
               </pre> : <RichContent text={body} variant="body" />}
             </div>
           )}

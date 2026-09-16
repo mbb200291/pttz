@@ -12,6 +12,7 @@ import { ArticleList } from "./components/ArticleList";
 import { Article } from "./components/Article";
 import { LoginModal } from "./components/LoginModal";
 import { ComposeScreen } from "./components/ComposeScreen";
+import { ShortcutHelp } from "./components/ShortcutHelp";
 import type { ArticleSummary } from "./lib/ptt/uiArticle";
 import type { ArticleData } from "./hooks/useArticle";
 import type { AggregatedPush } from "./lib/ptt/uiTypes";
@@ -196,6 +197,16 @@ const MOCK_ARTICLE: ArticleData = {
 };
 
 export default function App() {
+  useEffect(() => {
+    // Page commands are explicit shortcuts, not sequential element navigation.
+    const handleTab = (event: KeyboardEvent) => {
+      if (event.key === "Tab" && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        event.preventDefault();
+      }
+    };
+    document.addEventListener("keydown", handleTab, true);
+    return () => document.removeEventListener("keydown", handleTab, true);
+  }, []);
   const isPreview = previewMode !== null;
   const { wsStatus, pttState, client } = usePttSocket();
   const { boards: hotBoards, loading: hotBoardsLoading } = useHotBoards(!isPreview);
@@ -261,6 +272,7 @@ export default function App() {
     <>
       {/* 登入對話框：偵測到 PTT 登入畫面時自動出現 */}
       <LoginModal pttState={modalPttState} wsStatus={effectiveWsStatus} />
+      <ShortcutHelp key={view.type} page={view.type} />
 
       {view.type === "home" && (
         <BoardInput

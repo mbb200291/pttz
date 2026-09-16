@@ -72,7 +72,8 @@ function replyPush(reply: Reply, order: number): AggregatedPush {
     id: reply.replyId,
     type: reply.pushType,
     author: reply.author,
-    content: reply.content,
+    content: reply.visible ? reply.content : " ",
+    visible: reply.visible,
     ipAddresses: [],
     time: reply.createdAt ?? "",
     isOP: reply.isOp,
@@ -85,13 +86,22 @@ function replyPush(reply: Reply, order: number): AggregatedPush {
     votes: reply.votes,
     pushVoters: [],
     booVoters: [],
-    editHistory: reply.edits.map((edit, index) => ({
+    editHistory: [
+      ...(reply.originalVersion ? [{
+        kind: "original" as const,
+        content: reply.originalVersion.content,
+        time: reply.originalVersion.createdAt ?? "",
+        commandOrder: 0,
+        resultContent: reply.originalVersion.content,
+      }] : []),
+      ...reply.edits.map((edit, index) => ({
       kind: edit.kind,
       content: edit.content,
       time: edit.createdAt ?? "",
-      commandOrder: index,
+      commandOrder: index + (reply.originalVersion ? 1 : 0),
       resultContent: edit.resultContent,
     })),
+    ],
   };
 }
 
@@ -99,7 +109,6 @@ function flattenReplies(replies: readonly Reply[]): AggregatedPush[] {
   const result: AggregatedPush[] = [];
   const visit = (items: readonly Reply[]) => {
     for (const reply of items) {
-      if (!reply.visible) continue;
       result.push(replyPush(reply, result.length));
       visit(reply.children);
     }

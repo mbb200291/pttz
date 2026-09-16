@@ -135,6 +135,11 @@ function isOperationEdit(
   return edit.kind !== "original";
 }
 
+function originalReplyVersion(push: AggregatedPush): Pick<Reply, "originalVersion"> {
+  const original = push.editHistory?.find((edit) => edit.kind === "original");
+  return original ? { originalVersion: { content: original.resultContent, ...(original.time ? { createdAt: original.time } : {}) } } : {};
+}
+
 function replyTree(pushes: readonly AggregatedPush[], debug: boolean, viewerId?: string): Reply[] {
   const children = new Map<string, Reply[]>();
   const pushById = new Map(pushes.map((push) => [push.id, push]));
@@ -151,7 +156,7 @@ function replyTree(pushes: readonly AggregatedPush[], debug: boolean, viewerId?:
     }
     return depth;
   };
-  const replies = pushes.map((push): Reply => ({
+  const replies = [...pushes].sort((a, b) => a.anchorOrder - b.anchorOrder).map((push): Reply => ({
     replyId: push.id,
     author: push.author,
     content: push.content,
@@ -169,6 +174,7 @@ function replyTree(pushes: readonly AggregatedPush[], debug: boolean, viewerId?:
     ...viewerVote(viewerId, push.pushVoters, push.booVoters),
     isOp: push.isOP,
     visible: push.visible ?? true,
+    ...originalReplyVersion(push),
     edits: (push.editHistory ?? []).filter(isOperationEdit).map((edit) => ({
       kind: edit.kind,
       author: push.author,
