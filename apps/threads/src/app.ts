@@ -1,5 +1,7 @@
 import { articleKeyId, ok, type Article, type ArticleSummary, type PartialArticle, type PttzzzClient, type Reply, type Result } from "@pttzzz/core";
 import { feedBody, loadFeed, type FeedSnapshot } from "./feed";
+import { articleLink, parseArticleLink } from "./articleLink";
+import { attachPullRefresh } from "./pullRefresh";
 import { RequestScope } from "./requestScope";
 import { mediaFromText, updateMedia } from "./media";
 
@@ -19,6 +21,9 @@ function button(text: string, action: () => void, className = ""): HTMLButtonEle
 export function mountApp(root: HTMLElement, client: PttzzzClient, preview = false): () => void {
   const scope = new RequestScope();
   let user = "";
+  let refreshing: Promise<void> | undefined;
+  let refreshButton: HTMLButtonElement | undefined;
+  let sharedKey = parseArticleLink(location.href);
   let feed: FeedSnapshot = {items:[],errors:[],completed:0,total:0};
   type CachedArticle = { snapshot?: Article | PartialArticle; pending?: Promise<Result<Article>>; error?: string };
   const articleCache = new Map<string, CachedArticle>();
@@ -75,8 +80,11 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
   status.setAttribute("role","status");
   const content = node("section");
   const footer = node("footer", "PTT 的討論，不只一種閱讀方式。");
-  main.append(status,content);
+  const pullIndicator=node("div","","pull-indicator");
+  pullIndicator.setAttribute("role","status");
+  main.append(pullIndicator,status,content);
   root.replaceChildren(header,main,footer);
+  const stopPull=attachPullRefresh(root,pullIndicator,refresh,()=>Boolean(user) && !refreshing && !sharedKey);
 
   function showStatus(text: string): void { status.textContent=text; }
   function heading(text: string): HTMLHeadingElement {
@@ -139,7 +147,10 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
         account.replaceChildren(); content.replaceChildren(heading("正在登出…"));
         void client.disconnect().then(()=>reset("已登出。"),()=>reset("連線清理失敗，請重新整理。"));
       }));
-      await refresh();
+      if(sharedKey) {
+        feed={items:[{key:sharedKey,title:"分享的文章",author:""}],errors:[],completed:0,total:0};
+        expanded.add(articleKeyId(sharedKey)); renderFeed();
+      } else await refresh();
     } catch { if (current()) showStatus("讀取失敗，請稍後再試。"); }
   }
 
@@ -179,18 +190,28 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
     stopPreviews = () => {
       active = false; queue.length = 0; observer?.disconnect(); previewUpdates.clear();
     };
-    const title=heading("熱門討論");
+    const title=heading(sharedKey ? "分享的文章" : "熱門討論");
     const top=node("div","","feed-heading");
-    top.append(title,button("重新整理",()=>void refresh()));
+    refreshButton=button(sharedKey ? "返回熱門討論" : "重新整理",()=>{
+      if(sharedKey) {
+        sharedKey=undefined;
+        const url=new URL(location.href);
+        for(const key of ["board","aid","index"]) url.searchParams.delete(key);
+        history.replaceState(null,"",url);
+      }
+      void refresh();
+    },"refresh-button");
+    top.append(title,refreshButton);
     const explanation=node("p",preview
       ? "示例資料 · 非即時熱門 · 預覽未套用推數門檻"
-      : "前五個熱門看板 · PTT 原生推數至少 20 · 各板最多六篇，依來源交錯排列","muted");
+      : sharedKey ? "" : "熱門看板精選","muted");
     const list=node("div","","feed");
     for (const article of feed.items) {
       const id = articleKeyId(article.key);
       const item=node("article","","feed-item");
       item.dataset.articleId=id;
-      item.append(node("span",article.author.slice(0,2).toUpperCase(),"avatar"));
+      const avatar=node("span",article.author.slice(0,2).toUpperCase() || "P","avatar");
+      item.append(avatar);
       const details=node("div","","item-detail");
       const toggleExpanded=():void=>{
         if (expanded.has(id)) expanded.delete(id); else { expanded.add(id); enqueue(article); }
@@ -198,8 +219,10 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
       };
       const titleButton=button(article.title,toggleExpanded,"item-title");
       titleButton.dataset.articleId=id;
-      details.append(node("span",article.author+" · "+article.key.board,"byline"),
-        titleButton);
+      const byline=node("div","","byline");
+      const authorName=node("strong",article.author);
+      byline.append(authorName,node("span",article.key.board,"board-name"),node("time",article.publishedAt ?? "","published-at"));
+      details.append(byline,titleButton);
       const body=node("div","","feed-body");
       body.id="feed-body-"+feed.items.indexOf(article);
       const loading=node("p","內文等待載入…","muted excerpt-status");
@@ -211,10 +234,40 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
       const history=node("details"); history.hidden=true;
       history.append(node("summary","文章編輯紀錄"));
       const replyContent=node("div");
-      discussion.append(counts,native,history,node("h2","回覆"),replyContent);
+      const replyHeading=node("h2","回覆"); replyHeading.tabIndex=-1;
+      discussion.dataset.noPullRefresh="";
+      discussion.append(replyHeading,replyContent,counts,native,history);
+      replyContent.append(node("p","回覆讀取中…","muted"));
+      const votes=node("span","推 — · 噓 —","article-votes");
+      const discussionButton=button("討論 —",()=>{
+        toggleExpanded();
+        if(expanded.has(id)) { replyHeading.focus({preventScroll:true}); replyHeading.scrollIntoView?.({block:"nearest"}); }
+      },"discussion-action");
+      discussionButton.setAttribute("aria-controls",discussion.id);
+      const sharePanel=node("div","","share-panel"); sharePanel.hidden=true;
+      sharePanel.dataset.noPullRefresh="";
+      const shareInput=node("input"); shareInput.readOnly=true; shareInput.setAttribute("aria-label","分享連結");
+      shareInput.value=articleLink(article.key,location.href,preview);
+      shareInput.addEventListener("click",()=>shareInput.select());
+      const shareStatus=node("span","","muted"); shareStatus.setAttribute("role","status");
+      const copy=async ():Promise<void>=>{
+        sharePanel.hidden=false; shareStatus.textContent="";
+        try { await navigator.clipboard.writeText(shareInput.value); shareStatus.textContent="已複製連結"; }
+        catch { shareStatus.textContent="選取連結以複製"; shareInput.focus(); shareInput.select(); }
+      };
+      sharePanel.append(shareInput,button("複製",()=>void copy()),button("關閉",()=>{sharePanel.hidden=true;shareButton.focus();}),shareStatus);
+      const shareButton=button("分享",()=>{
+        if(typeof navigator.share!=="function") {void copy();return;}
+        shareButton.disabled=true;
+        void navigator.share({title:titleButton.textContent ?? article.title,url:shareInput.value}).catch(error=>{
+          if(error?.name!=="AbortError") return copy();
+        }).finally(()=>{shareButton.disabled=false;});
+      },"share-action");
+      shareButton.setAttribute("aria-label","分享文章");
       titleButton.setAttribute("aria-controls",body.id+" "+discussion.id);
       toggle.setAttribute("aria-controls",body.id+" "+discussion.id);
       const media=node("div","","media-strip"); media.tabIndex=0; media.hidden=true;
+      media.dataset.noPullRefresh="";
       media.setAttribute("role","region"); media.setAttribute("aria-label","文章媒體，可左右捲動");
       let mediaText: string | undefined;
       let discussionSnapshot: Article | PartialArticle | undefined;
@@ -233,7 +286,9 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
       const update=():void=>{
         const entry=articleCache.get(id);
         const snapshot=entry?.snapshot;
-        const text=snapshot?.body===undefined ? undefined : feedBody(snapshot.body,article);
+        if(sharedKey && snapshot?.title) titleButton.textContent=snapshot.title;
+        if(snapshot?.author) {authorName.textContent=snapshot.author;avatar.textContent=snapshot.author.slice(0,2).toUpperCase();}
+        const text=snapshot?.body===undefined ? undefined : feedBody(snapshot.body,{...article,title:snapshot.title ?? article.title,author:snapshot.author ?? article.author});
         if (text!==undefined && body.textContent!==text) body.textContent=text;
         if(text!==mediaText) {mediaText=text;updateMedia(media,mediaFromText(text ?? ""));}
         const isExpanded=expanded.has(id);
@@ -242,6 +297,13 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
         toggle.setAttribute("aria-expanded",String(isExpanded));
         toggle.hidden=!isExpanded;
         discussion.hidden=!isExpanded;
+        const replyCount=snapshot ? visibleReplyCount(snapshot.replies) : undefined;
+        const complete=snapshot?.completeness==="final";
+        votes.textContent=snapshot?.articleVotes ? `推 ${snapshot.articleVotes.pushCount} · 噓 ${snapshot.articleVotes.booCount}${complete ? "" : " · 更新中"}` : "推 — · 噓 —";
+        discussionButton.textContent=`討論 ${replyCount===undefined ? "—" : String(replyCount)+(complete ? "" : "+")}`;
+        discussionButton.setAttribute("aria-expanded",String(isExpanded));
+        discussionButton.setAttribute("aria-label",`${isExpanded ? "收合" : "展開"}討論，${replyCount===undefined ? "尚未讀取" : `${replyCount} 則回覆${complete ? "" : "，讀取中"}`}`);
+        if(!snapshot) replyContent.replaceChildren(node("p",entry?.error ? "留言未能載入，請重試內文。" : "回覆讀取中…","muted"));
         if(isExpanded && snapshot && snapshot!==discussionSnapshot) {
           discussionSnapshot=snapshot;
           counts.textContent=snapshot.articleVotes ? `文章推 ${snapshot.articleVotes.pushCount} / 噓 ${snapshot.articleVotes.booCount}` : "文章統計讀取中…";
@@ -249,21 +311,20 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
           history.hidden=snapshot.completeness!=="final" || !snapshot.articleEdits.length;
           if(snapshot.completeness==="final") for(const edit of snapshot.articleEdits) history.append(node("pre",edit.marker+"\n"+edit.content));
           replyContent.replaceChildren(replies(snapshot.replies,snapshot.completeness==="final"));
-          if(!snapshot.replies.some(reply=>reply.visible || reply.children.length)) replyContent.append(node("p",snapshot.completeness==="final"?"尚無回覆":"回覆讀取中…","muted"));
+          if(!replyCount) replyContent.append(node("p",snapshot.completeness==="final"?"尚無回覆":"回覆讀取中…","muted"));
         }
-        const complete=snapshot?.completeness==="final";
         loading.textContent=entry?.error ?? (complete ? (text?.trim() ? "" : "（無內文）") : entry?.pending ? (text ? "正在讀取其餘內容…" : "內文讀取中…") : queued.has(id) ? "內文排隊中…" : "內文等待載入…");
         loading.hidden=!loading.textContent;
         retry.hidden=!entry?.error;
       };
       const actions=node("div","","feed-actions");
-      actions.append(toggle,retry,
-        node("span",[article.publishedAt,article.nativeScoreLabel ?? article.nativeScore?.toString()].filter(Boolean).join(" · "),"muted"));
-      details.append(body,media,loading,actions,discussion);
+      actions.append(votes,discussionButton,shareButton);
+      const readingActions=node("div","","reading-actions"); readingActions.append(toggle,retry);
+      details.append(body,media,loading,readingActions,actions,sharePanel,discussion);
       previewUpdates.set(id,update); update();
       item.append(details); list.append(item);
       observer?.observe(item);
-      if (!observer) enqueue(article);
+      if (!observer || sharedKey) enqueue(article);
     }
     if (!feed.items.length) list.append(node("p","這次沒有取得符合條件的文章。可以稍後重新整理。","empty"));
     const errors=node("div","","errors");
@@ -271,10 +332,17 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
     content.replaceChildren(top,explanation,errors,list);
     showStatus("");
   }
-  async function refresh(): Promise<void> {
+  function refresh(): Promise<void> {
+    if(refreshing) return refreshing;
+    refreshing=performRefresh().finally(()=>{refreshing=undefined;main.classList.remove("refreshing");if(refreshButton) refreshButton.disabled=false;});
+    return refreshing;
+  }
+  async function performRefresh(): Promise<void> {
+    if(refreshButton) refreshButton.disabled=true;
+    main.classList.add("refreshing");
     stopPreviews();
     const current=scope.next();
-    content.replaceChildren(heading("正在整理討論…"),node("p","依序讀取熱門看板，不會自動發文或回覆。","muted"));
+    if(!feed.items.length) content.replaceChildren(heading("正在整理討論…"));
     showStatus("讀取熱門看板…");
     try {
       // Public reads cannot be cancelled; let the current body finish before switching boards.
@@ -314,5 +382,11 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
   }
   renderLogin();
   if(preview) void login("preview","preview");
-  return ()=>{clearPreviews();scope.invalidate();unsubscribe();root.replaceChildren();};
+  return ()=>{stopPull();clearPreviews();scope.invalidate();unsubscribe();root.replaceChildren();};
+}
+
+function visibleReplyCount(replies: readonly Reply[]): number {
+  const queue=[...replies]; let count=0;
+  while(queue.length) {const reply=queue.pop()!;if(reply.visible) count++;queue.push(...reply.children);}
+  return count;
 }

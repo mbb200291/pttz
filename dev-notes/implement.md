@@ -106,3 +106,8 @@ npm run verify    # tests + helper tests + build + lint + pack/example smoke
 - [Public contracts](../packages/core/docs/contracts.md)
 - [Core development guide](../packages/core/docs/DEVELOPMENT_GUIDE.md)
 - [Core whitepaper](../docs/whitepaper/pttzzz-core.md)
+
+
+## Goal 12 串流互動修訂（2026-09-16）
+
+Threads UI 的文章列固定顯示核心文章推噓、可見回覆樹節點數與討論／分享入口。分享 URL 使用公開 board + aid/index，登入後直接載入目標文章，返回串流同步清除定位參數。頂部下拉和按鈕共用刷新操作與既有讀取佇列，等待期間保留舊畫面、成功後替換。外觀維持單欄深色並加入可停用的動態回饋；完整資料流程與限制集中於 apps/threads/README.md。真實登入後留言問題依使用者指示另行追查。

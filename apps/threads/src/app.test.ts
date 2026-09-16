@@ -15,7 +15,7 @@ beforeEach(() => {
     disconnect() {}
   });
 });
-afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); });
+afterEach(() => { window.history.replaceState(null,"","/"); dispose?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); });
 function setup(count = 1) {
   const listeners=new Set<(event: CoreEvent) => void>();
   const resolvers=new Map<number,(value: Result<Article>) => void>();
@@ -271,4 +271,108 @@ it("expands replies inline, keeps media stable and ignores media or text selecti
   expect(card.querySelector<HTMLElement>(".inline-discussion")!.hidden).toBe(true);
   expect(card.querySelector("iframe")).toBe(frame);
   test.finish();
+});
+
+it("exposes discussion before loading and counts visible nested replies without treating unknown as zero", async () => {
+  const test=setup();
+  const open=await screen.findByRole("button",{name:"展開討論，尚未讀取"});
+  expect(document.querySelector(".article-votes")?.textContent).toContain("推 —");
+  fireEvent.click(open);
+  expect(screen.getByText("回覆讀取中…")).toBeTruthy();
+  const child={replyId:"child",author:"child",content:"Nested reply",pushType:"neutral" as const,depth:1,score:0,votes:{pushCount:0,booCount:0,score:0},visible:true,isOp:false,edits:[],children:[]};
+  test.emit({type:"article.partial",articleKey:{board:"Test",index:1},revision:1,article:{key:{board:"Test",index:1},revision:1,completeness:"incomplete",body:"Body",articleVotes:{pushCount:4,booCount:2,score:2},replies:[{...child,replyId:"hidden",visible:false,content:"Hidden control",children:[child]}]}});
+  expect(screen.getByText("Nested reply")).toBeTruthy();
+  expect(screen.queryByText("Hidden control")).toBeNull();
+  expect(document.querySelector(".article-votes")?.textContent).toContain("推 4");
+  expect(open.textContent).toContain("討論 1+");
+  fireEvent.click(open);
+  expect(document.querySelector<HTMLElement>(".inline-discussion")!.hidden).toBe(true);
+  test.finish();
+  await waitFor(()=>expect(open.textContent).toContain("討論 0"));
+});
+
+it("offers a selectable share URL when clipboard access fails without expanding the article", async () => {
+  setup();
+  Object.defineProperty(navigator,"clipboard",{configurable:true,value:{writeText:vi.fn().mockRejectedValue(new Error("denied"))}});
+  Object.defineProperty(navigator,"share",{configurable:true,value:undefined});
+  fireEvent.click(await screen.findByRole("button",{name:"分享文章"}));
+  const field=await screen.findByRole("textbox",{name:"分享連結"}) as HTMLInputElement;
+  expect(new URL(field.value).searchParams.get("board")).toBe("Test");
+  expect(new URL(field.value).searchParams.get("index")).toBe("1");
+  expect(new URL(field.value).searchParams.get("preview")).toBe("1");
+  expect(screen.getByRole("button",{name:/A <script>title/}).getAttribute("aria-expanded")).toBe("false");
+  expect(screen.queryByText("已複製連結")).toBeNull();
+});
+
+it("opens a shared article outside the hot feed after login", async () => {
+  window.history.replaceState(null,"","/?preview=1&board=Other&aid=Shared123");
+  const test=setup();
+  await waitFor(()=>expect(test.client.getArticle).toHaveBeenCalledWith({article:{board:"Other",aid:"Shared123"}}));
+  expect(screen.getByRole("heading",{name:"分享的文章"})).toBeTruthy();
+  window.history.replaceState(null,"","/");
+});
+
+it("keeps the previous feed visible and prevents repeated refresh commands while waiting", async () => {
+  const test=setup();
+  fireEvent.click(await screen.findByRole("button",{name:/A <script>title/}));
+  test.finish(); await screen.findByText("Secret body");
+  let resolveBoards: ((value: Awaited<ReturnType<PttzzzClient["listBoards"]>>) => void) | undefined;
+  test.client.listBoards.mockImplementationOnce(()=>new Promise(resolve=>{resolveBoards=resolve;}));
+  const refresh=screen.getByRole("button",{name:"重新整理"});
+  fireEvent.click(refresh); fireEvent.click(refresh);
+  expect(screen.getByText("Secret body")).toBeTruthy();
+  expect((refresh as HTMLButtonElement).disabled).toBe(true);
+  await waitFor(()=>expect(test.client.listBoards).toHaveBeenCalledTimes(2));
+  resolveBoards!(ok({kind:"boards",items:[]}));
+  await screen.findByText(/這次沒有取得/);
+  expect(test.client.listBoards).toHaveBeenCalledTimes(2);
+});
+
+it("clears the shared article URL when returning to the hot feed", async () => {
+  window.history.replaceState(null,"","/?preview=1&board=Test&index=1");
+  const test=setup();
+  const back=await screen.findByRole("button",{name:"返回熱門討論"});
+  test.finish(); await screen.findByText("Secret body");
+  fireEvent.click(back);
+  await screen.findByRole("heading",{name:"熱門討論"});
+  expect(new URL(location.href).searchParams.has("board")).toBe(false);
+  expect(new URL(location.href).searchParams.has("index")).toBe(false);
+  expect(new URL(location.href).searchParams.get("preview")).toBe("1");
+});
+
+it("does not claim share success or copy when the native share sheet is cancelled", async () => {
+  setup();
+  const writeText=vi.fn();
+  Object.defineProperty(navigator,"clipboard",{configurable:true,value:{writeText}});
+  Object.defineProperty(navigator,"share",{configurable:true,value:vi.fn().mockRejectedValue(new DOMException("cancelled","AbortError"))});
+  const share=await screen.findByRole("button",{name:"分享文章"});
+  fireEvent.click(share);
+  await waitFor(()=>expect((share as HTMLButtonElement).disabled).toBe(false));
+  expect(writeText).not.toHaveBeenCalled();
+  expect(screen.queryByRole("textbox",{name:"分享連結"})).toBeNull();
+});
+
+it("wires top pull refresh to a single feed reload while preserving the readable feed", async () => {
+  const test=setup();
+  await screen.findByRole("button",{name:/A <script>title/});
+  const target=document.querySelector(".feed-heading")!;
+  const pull=()=>{
+    fireEvent.touchStart(target,{touches:[{identifier:1,clientX:10,clientY:20}]});
+    fireEvent.touchMove(target,{touches:[{identifier:1,clientX:12,clientY:110}],cancelable:true});
+    fireEvent.touchEnd(target,{touches:[]});
+  };
+  let resolveBoards: ((value: Awaited<ReturnType<PttzzzClient["listBoards"]>>) => void) | undefined;
+  test.client.listBoards.mockImplementationOnce(()=>new Promise(resolve=>{resolveBoards=resolve;}));
+  pull();
+  const refresh=screen.getByRole("button",{name:"重新整理"});
+  expect((refresh as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.getByRole("button",{name:/A <script>title/})).toBeTruthy();
+  expect(document.querySelector(".pull-indicator")?.getAttribute("data-state")).toBe("refreshing");
+  pull(); fireEvent.click(refresh);
+  await waitFor(()=>expect(test.client.listBoards).toHaveBeenCalledTimes(2));
+  resolveBoards!(ok({kind:"boards",items:[]}));
+  await screen.findByText(/這次沒有取得/);
+  await waitFor(()=>expect(document.querySelector(".pull-indicator")?.getAttribute("data-state")).toBe("idle"));
+  expect((screen.getByRole("button",{name:"重新整理"}) as HTMLButtonElement).disabled).toBe(false);
+  expect(test.client.listBoards).toHaveBeenCalledTimes(2);
 });
