@@ -31,3 +31,13 @@
 依賴使用 worktree 獨立 node_modules；離線快取缺失後按 lockfile 安裝，未引用主工作區的 workspace links。
 
 新 worktree 必須先執行 `npm run build:packages`，Web 測試才能載入 core/internal 的公開套件輸出。`npm run verify` 通過：core 357、browser 168、Web 205 項測試，11 項 smoke 輔助測試、build、lint 與 package smoke。保留既有 3 項 lint、bundle 大小與 Node 棄用警告。
+
+## 噓樓上補齊
+
+`噓樓上` 現在與 `推樓上` 共用相對樓號解析；方向由文字指令決定，與 PTT 原始推噓類別分開。有效純投票隱藏、目標回文扣分；空白或全／半形冒號後的正文保留為嵌套回覆。既有來源樓號聚合、投票去重及明確樓號撤票流程不變。
+
+新增 11 項噓樓上測試，另將原有不支援測試改為詞界與句中提及兩例，淨增加 12 項。涵蓋無前文、缺樓、隱藏控制事件、無效目標不繼承舊回覆、目標撤回不改投，以及正文不重新解析。實作前確認 4 項單元測試與 2 項 fixture 斷言失敗；擴充相對語句的方向辨識後全部通過。
+
+既有 `upstairs-boo-is-not-supported` fixture 更名為 `upstairs-boo-vote`，同步修正 THREAD-005 與 HTML 對照範例。先前紀錄的「尚不支援」為該階段歷史狀態，以此節為準。
+
+驗證：`npm run build:packages && npm run verify` 通過，core 375、browser 168、Web 205 項測試及 11 項 smoke 輔助測試全數通過；build、lint（0 error，既有 3 warnings）與 package smoke 通過。保留既有 bundle 大小及 Node 棄用警告。`git diff --check` 通過。HTML 僅更新靜態案例內容，未進行瀏覽器視覺驗證；未操作真實 PTT。
