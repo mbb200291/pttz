@@ -379,17 +379,16 @@
         </div>
         <p class="explanation">「推樓上的貓」、「回樓上住戶」和句中「我想推樓上」均保留為一般回文，不嵌套也不新增回文票。 <a href="../fixtures/thread-events/thread.json">fixture：<code>upstairs-word-boundaries</code></a></p>
       </article>
-      <article class="case" id="upstairs-boo-is-not-supported" data-fixture="upstairs-boo-is-not-supported">
-        <div class="case-title"><span class="case-id">UP 09 · THREAD-005.1</span><h3>第一版不支援噓樓上</h3></div>
+      <article class="case" id="upstairs-boo-vote" data-fixture="upstairs-boo-vote">
+        <div class="case-title"><span class="case-id">UP 09 · THREAD-005.1</span><h3>噓樓上：對前一原始樓號扣分</h3></div>
         <div class="comparison">
           <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="faint">1F</span> <span class="neutral">→</span> alice: 我們週末去走步道吧。 <span class="faint">09/08 12:00</span><br><span class="faint">2F</span> <span class="boo">噓</span> bob: 噓樓上 <span class="faint">09/08 12:00</span></div></div>
           <div><div class="column-label">解析後局部 UI</div><div class="ui">
-            <div class="ui-bar">2 則可見回覆（包含嵌套） · 文章分數 -1 · PTT 原生 -1</div>
-            <div class="reply-card"><div class="reply-head"><span class="author">alice</span><span class="reply-score">0</span></div><p class="reply-body">我們週末去走步道吧。</p></div>
-            <div class="reply-card"><div class="reply-head"><span class="author">bob</span><span class="reply-score">0</span></div><p class="reply-body">噓樓上</p></div>
+            <div class="ui-bar">1 則可見回覆（包含嵌套） · 文章分數 0 · PTT 原生 -1</div>
+            <div class="reply-card"><div class="reply-head"><span class="author">alice</span><span class="reply-score">-1</span></div><p class="reply-body">我們週末去走步道吧。</p></div>
           </div></div>
         </div>
-        <p class="explanation">「噓樓上」目前不是相對回文指令，保持一般文字。此例原始 PTT 類別是噓，所以提案文章及原生文章都扣 1；Alice 回文不扣分。 <a href="../fixtures/thread-events/thread.json">fixture：<code>upstairs-boo-is-not-supported</code></a></p>
+        <p class="explanation">「噓樓上」對 Alice 回文扣 1，純投票隱藏。提案文章分數為 0；PTT 原生噓仍保留為 −1。 <a href="../fixtures/thread-events/thread.json">fixture：<code>upstairs-boo-vote</code></a></p>
       </article>
       <article class="case" id="upstairs-invalid-reference-breaks-inheritance" data-fixture="upstairs-invalid-reference-breaks-inheritance">
         <div class="case-title"><span class="case-id">UP 10 · THREAD-005.3</span><h3>無效樓上：不繼承作者較早的回覆對象</h3></div>

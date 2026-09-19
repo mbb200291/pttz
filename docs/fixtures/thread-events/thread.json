@@ -99,7 +99,7 @@
     }
   },
   {
-    "id": "upstairs-boo-is-not-supported",
+    "id": "upstairs-boo-vote",
     "primaryRule": "THREAD-005.1",
     "rules": [
       "THREAD-005.1"
@@ -125,13 +125,7 @@
           "author": "alice",
           "content": "我們週末去走步道吧。",
           "replyToAuthor": null,
-          "score": 0
-        },
-        {
-          "author": "bob",
-          "content": "噓樓上",
-          "replyToAuthor": null,
-          "score": 0
+          "score": -1
         }
       ],
       "nativeArticleScore": -1,
@@ -140,8 +134,8 @@
     },
     "expectedArticleScores": {
       "articlePushCount": 0,
-      "articleBooCount": 1,
-      "articleScore": -1,
+      "articleBooCount": 0,
+      "articleScore": 0,
       "nativePushCount": 0,
       "nativeBooCount": 1,
       "nativeArticleScore": -1

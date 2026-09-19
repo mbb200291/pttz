@@ -805,7 +805,7 @@ function parseAndApplyPushEdits(rawPushes: AnchoredRawPush[]): ParsedRawPush[] {
     const rawFloor = push.rawFloor ?? index + 1;
     const previous = parsedPushes[index - 1];
     // Match only explicit prefixes. Never interpret an edit command's payload.
-    const relative = /^\s*(?:推樓上(?=$|\s|[：:])|回樓上\s*[：:])/u.test(push.content);
+    const relative = /^\s*(?:[推噓]樓上(?=$|\s|[：:])|回樓上\s*[：:])/u.test(push.content);
     let intent = parsePushIntent(push.content);
     if (relative) {
       if (previous && previous.rawFloor === rawFloor - 1 && !previous.intent.isControl) {
