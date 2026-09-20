@@ -589,7 +589,11 @@ describe("terminal driver module", () => {
       content: "PRIVATE_DRAFT",
       pushType: "neutral",
     })).resolves.toMatchObject({ ok: false, outcome: "not-sent" });
-    expect(sent).toEqual(["42\r\r", "X"]);
+    // Acquiring a complete readback baseline may page before opening push
+    // entry. Once the unknown overlay appears, no cleanup/write is safe.
+    expect(sent[0]).toBe("42\r\r");
+    expect(sent).toContain("X");
+    expect(sent.slice(sent.indexOf("X"))).toEqual(["X"]);
   });
 
   it("writes to a title-search result by its captured AID instead of its relative index", async () => {
@@ -1266,6 +1270,52 @@ describe("terminal driver module", () => {
     } finally {
       match.mockRestore();
     }
+  });
+
+  it("reacquires the original article before writing after a capacity probe returns to the board", async () => {
+    const mod = await import("./terminalDriver.js");
+    const sent: string[] = [];
+    const boardRows = [
+      "看板《Test》", "[←]離開 [→]閱讀 [Ctrl-P]發表文章",
+      buildBoardLine({ index: 42, date: "08/22", author: "alice", title: "目標文章" }),
+    ];
+    const articleRows = [
+      "作者  alice 看板 Test", "標題  目標文章", "時間  Sat Aug 22 10:00:00 2026",
+      "───────────────────────────────────────", "文章內容",
+      ...Array.from({ length: 18 }, () => ""), "瀏覽 第 1/1 頁 (100%)",
+    ];
+    let rows = boardRows;
+    let input = false;
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      getLine(index: number) { return { str: rows[index] ?? "" }; },
+      async getLines() { return rows; },
+      async send(command: string) {
+        sent.push(command);
+        if (command === "42\r\r") rows = articleRows;
+        else if (command === "q" || command === "n\r") rows = boardRows;
+        else if (command === "X") rows = ["1.值得推薦 2.給它噓聲 3.只加註解"];
+        else if (command === "3") { rows = ["→ TEST_USER:"]; input = true; }
+        else if (command === "y\r") rows = articleRows;
+        else if (input && command.endsWith("\r")) {
+          rows = [`→ TEST_USER:${command.slice(0, -1).padEnd(53)} 確定[y/N]:`];
+          input = false;
+        }
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+    await driver.readArticleSource({ board: "Test", index: 42 }, () => undefined);
+    await expect(mod.measurePushCapacity(bot)).resolves.toEqual({ capacity: 52, author: "TEST_USER" });
+    sent.length = 0;
+    await expect(driver.executeArticleCommand({
+      type: "reply-article", article: { board: "Test", index: 42 }, content: "正式回文", pushType: "neutral",
+    })).resolves.toEqual({ ok: true, outcome: "sent" });
+    expect(sent.indexOf("42\r\r")).toBeGreaterThanOrEqual(0);
+    expect(sent.indexOf("X")).toBeGreaterThan(sent.indexOf("42\r\r"));
+    expect(sent.filter((command) => command === "y\r")).toHaveLength(1);
   });
 
   it("invalidates an exact-snapshot mismatch and uses the existing locate-and-reopen checks", async () => {

@@ -129,6 +129,32 @@ Do not expose raw source floors in ordinary UI unless the product explicitly cho
 
 ## Semantic writes
 
+### Automatic reply drafts
+
+Use `client.sendReplyDraft({ operationId, article, content, pushType, replyId?, resume? }, onProgress?)`
+for a whole reply draft. The browser gateway measures capacity, encodes and splits
+it; do not split by UI character count or add protocol markers yourself. Omit
+`replyId` for an article comment; target a loaded reply by its stable `replyId`
+for a nested reply. Nested drafts always use native neutral comments.
+
+This optional gateway capability returns `Result<ReplyDelivery>`. Check `status`
+as well as `ok`: `complete` means all `total` pieces were confirmed; `paused`
+retains `confirmed` and can be explicitly resumed with the same immutable ID and
+payload; `uncertain` is not safe to resend. Progress observers are informational.
+Do not interpret a read refresh as evidence that a write was absent. Old gateways
+without this capability return an unsupported result without falling back to an
+unsafe one-shot write. Existing single-write methods retain their contracts.
+
+The reference composer retains drafts while its Article component remains mounted,
+including closing/reopening the modal. Navigation or reload does not provide
+durable recovery. Browser receipts also live in memory and become unusable across
+authentication changes. Never invent a fresh ID to retry a partially sent draft.
+
+Default aggregation follows rules 0.3: two minutes for nonconsecutive fragments,
+no time cap for consecutive fragments, with author/target/control/terminator
+boundaries still enforced. A custom `aggregation.nonconsecutiveGapMinutes` is an
+explicit nonstandard profile and must be applied to both partial and final reads.
+
 Send semantic DTOs and let core/browser format PTT control text. Reply and vote operations target `replyId`; they do not target a card position or a guessed floor:
 
 ```ts
@@ -148,7 +174,7 @@ await client.voteReply({
 
 `replyArticleToBoard()` creates a PTT article and is not a push reply. `editArticle()` edits the article body; `editReply()` edits a reply through the whitepaper's control semantics. Never concatenate control prefixes in UI code.
 
-Load the article before acting on a reply so the client can resolve its `replyId` to source events. Check the `Result` of every write and reload when needed to reconcile displayed state; successful writes return `void`, not a new article identity. `editArticle({ article, content })` does not require an edit summary. Section edits use `mode: "section"` with `changes`, rather than a `content` field; consult the contract and fixtures for range semantics. Do not infer write permission from a successful local preview.
+Load the article before acting on a reply so the client can resolve its `replyId` to source events. Check the `Result` of every write and reload when needed to reconcile displayed state. Legacy single-write methods return `void` on success, not a new article identity; draft delivery methods return the delivery state described above. `editArticle({ article, content })` does not require an edit summary. Section edits use `mode: "section"` with `changes`, rather than a `content` field; consult the contract and fixtures for range semantics. Do not infer write permission from a successful local preview.
 
 ## Errors and uncertain writes
 

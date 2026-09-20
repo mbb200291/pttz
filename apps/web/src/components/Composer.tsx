@@ -9,6 +9,7 @@ import { NativeSymbolPalette } from "./NativeSymbolPalette";
 import { uploadToImgur } from "../lib/imgur";
 import { approximatePttBytes } from "../lib/ptt/pttBytes";
 import { replyEditDifference } from "../lib/replyEditDifference";
+import type { ReplyDelivery } from "@pttzzz/core";
 
 export type ComposerMode = "reply" | "reply-push" | "edit-push";
 export type EditPushMode = "補充" | "更正" | "區段" | "撤回";
@@ -45,6 +46,10 @@ export function Composer({
   submitLocked = false,
   isSubmitLocked,
   submitError = null,
+  multipartEnabled = false,
+  contentLocked = false,
+  delivery,
+  onRefresh,
   onClose,
   onSubmit,
 }: {
@@ -55,6 +60,10 @@ export function Composer({
   submitLocked?: boolean;
   isSubmitLocked?: (payload: ComposerPayload) => boolean;
   submitError?: string | null;
+  multipartEnabled?: boolean;
+  contentLocked?: boolean;
+  delivery?: ReplyDelivery;
+  onRefresh?: () => void;
   onClose: () => void;
   onSubmit: (payload: ComposerPayload) => void;
 }): JSX.Element {
@@ -69,6 +78,8 @@ export function Composer({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [symbolsOpen, setSymbolsOpen] = useState(false);
   const [symbolGroup, setSymbolGroup] = useState(0);
+  const editingLocked = submitting || contentLocked;
+  const multipart = multipartEnabled && mode !== "edit-push";
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -81,7 +92,7 @@ export function Composer({
   }, [body, symbolsOpen]);
   const insertSymbol = (symbol: string) => {
     const input = textareaRef.current;
-    if (!input || submitting) return;
+    if (!input || editingLocked) return;
     const start = input.selectionStart, end = input.selectionEnd;
     pendingCaret.current = start + symbol.length;
     setBody(body.slice(0, start) + symbol + body.slice(end));
@@ -125,9 +136,12 @@ export function Composer({
   const remaining = MAX_BYTES - (mode === "edit-push" && editMode === "撤回" ? 0 : approximatePttBytes(submittedContent));
   const isSubmitDisabled =
     submitting ||
+    uploading ||
+    delivery?.status === "uncertain" ||
+    delivery?.status === "complete" ||
     submitLocked ||
     Boolean(isSubmitLocked?.(currentPayload)) ||
-    remaining < 0 ||
+    (!multipart && remaining < 0) ||
     (isSectionEdit && body === (initial.body ?? "")) ||
     (mode === "edit-push" && editMode === "區段" && (
       !Number.isInteger(sectionStart) || !Number.isInteger(sectionEnd) ||
@@ -152,7 +166,7 @@ export function Composer({
     const file = e.target.files?.[0];
     // Reset input so the same file can be picked again later
     if (fileInputRef.current) fileInputRef.current.value = "";
-    if (!file) return;
+    if (!file || editingLocked) return;
 
     setUploading(true);
     setUploadError(null);
@@ -223,7 +237,7 @@ export function Composer({
             <div className="flex gap-2">
               {PUSH_TYPES.map(({ value, label }) => {
                 const isActive = effectivePushType === value;
-                const typeDisabled = submitting || (neutralOnly && value !== "neutral");
+                const typeDisabled = editingLocked || (neutralOnly && value !== "neutral");
                 const activeClass =
                   value === "push"
                     ? "bg-green-500/15 text-green-300"
@@ -286,7 +300,7 @@ export function Composer({
           <textarea
             ref={textareaRef}
             value={body}
-            disabled={submitting}
+            disabled={editingLocked}
             onChange={(e) => {
               setBody(e.target.value);
               if (uploadError) setUploadError(null);
@@ -295,13 +309,13 @@ export function Composer({
             className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-sky-500 resize-none"
             placeholder="輸入內容…"
           />
-          <span
+          {!multipart && <span
             className={`absolute bottom-3 right-3 text-xs ${
               remaining < 10 ? "text-red-400" : "text-gray-500"
             }`}
           >
             {remaining}
-          </span>
+          </span>}
         </div>
 
         {/* Upload error */}
@@ -315,11 +329,15 @@ export function Composer({
         )}
 
         {/* Footer */}
-        {symbolsOpen && <NativeSymbolPalette groupIndex={symbolGroup} onGroupChange={setSymbolGroup} onSelect={insertSymbol} disabled={submitting} />}
+        {delivery && <div role="status" className="flex items-center justify-between text-xs text-gray-400">
+          <span>{delivery.status === "uncertain" ? "尚未確認" : "已送出"} · {delivery.confirmed} / {delivery.total}</span>
+          {delivery.status === "uncertain" && onRefresh && <button type="button" onClick={onRefresh} className="text-sky-400">重新整理</button>}
+        </div>}
+        {symbolsOpen && <NativeSymbolPalette groupIndex={symbolGroup} onGroupChange={setSymbolGroup} onSelect={insertSymbol} disabled={editingLocked} />}
         <div className="flex items-center justify-between gap-3">
           {/* Image upload */}
           <div className="flex items-center gap-2">
-            <button type="button" aria-label="表情符號" aria-expanded={symbolsOpen} disabled={submitting}
+            <button type="button" aria-label="表情符號" aria-expanded={symbolsOpen} disabled={editingLocked}
               onMouseDown={(event) => event.preventDefault()} onClick={() => setSymbolsOpen((open) => !open)}
               className="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-400 hover:text-gray-200 text-xl disabled:opacity-40">☺</button>
             <input
@@ -329,6 +347,7 @@ export function Composer({
               className="hidden"
               onChange={handleImageChange}
               aria-label="上傳圖片"
+              disabled={editingLocked}
             />
             <button
               type="button"
@@ -336,7 +355,7 @@ export function Composer({
                 if (uploadError) setUploadError(null);
                 fileInputRef.current?.click();
               }}
-              disabled={uploading || submitting}
+              disabled={uploading || editingLocked}
               className="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-400 hover:text-gray-200 text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               aria-label="新增圖片"
             >
@@ -355,7 +374,7 @@ export function Composer({
             disabled={isSubmitDisabled}
             className="px-6 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium text-white transition-colors"
           >
-            {submitting ? "送出中…" : "送出"}
+            {submitting ? "送出中…" : delivery?.status === "paused" ? "繼續送出" : "送出"}
           </button>
         </div>
       </div>

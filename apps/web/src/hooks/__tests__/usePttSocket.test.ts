@@ -7,6 +7,7 @@ const listeners = new Set<(event: CoreEvent) => void>();
 const unsubscribe = vi.fn();
 const connect = vi.fn().mockResolvedValue({ ok: true, value: undefined });
 const login = vi.fn().mockResolvedValue({ ok: true, value: { userId: "user" } });
+const clientOptions = vi.fn();
 let fakeMode = false;
 let fakeUser: string | null = null;
 const listBoards = vi.fn();
@@ -24,7 +25,7 @@ const client = {
   }),
 } as unknown as PttzzzClient;
 
-vi.mock("@pttzzz/browser", () => ({ createBrowserClient: () => client }));
+vi.mock("@pttzzz/browser", () => ({ createBrowserClient: (...args: unknown[]) => { clientOptions(...args); return client; } }));
 vi.mock("@pttzzz/browser/testing", () => ({
   createFakeBrowserGateway: () => ({}),
   getFakePttCurrentUser: () => fakeUser,
@@ -33,7 +34,7 @@ vi.mock("@pttzzz/browser/testing", () => ({
 vi.mock("@pttzzz/core", async (importOriginal) => ({
   ...await importOriginal<typeof import("@pttzzz/core")>(),
   PttzzzClient: class {
-    constructor() { return client; }
+    constructor(_gateway: unknown, options?: unknown) { clientOptions(options); return client; }
   },
 }));
 
@@ -48,6 +49,14 @@ import {
 } from "../usePttSocket";
 
 describe("public PttzzzClient socket bridge", () => {
+  it.each([false, true])("uses the same default aggregation profile (fake=%s)", async (fake) => {
+    fakeMode = fake;
+    const { unmount } = renderHook(() => usePttSocket());
+    await waitFor(() => expect(connect).toHaveBeenCalled());
+    expect(clientOptions).toHaveBeenCalled();
+    expect(clientOptions.mock.calls.every((args) => args[0] === undefined)).toBe(true);
+    unmount();
+  });
   it("logs out only this client and clears local credentials without logging in again", async () => {
     usePttSocketStore.setState({ client, pttState: "ready", wsStatus: "connected", credentials: { username: "user", password: "secret" }, loginError: "old" });
     await submitLogout();

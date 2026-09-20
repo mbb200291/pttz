@@ -116,12 +116,12 @@ describe("parsePushBuffer", () => {
     expect(pushes[0]).toMatchObject({
       author: "neoa01",
       content: "新聞：專家：「跑山獸的存在」讓7.5億消",
-      remainingContentColumns: 3,
+      remainingContentColumns: 2,
     });
     expect(pushes[1]).toMatchObject({
       author: "neoa01",
       content: "短句",
-      remainingContentColumns: 36,
+      remainingContentColumns: 35,
     });
   });
 
@@ -133,12 +133,12 @@ describe("parsePushBuffer", () => {
     expect(pushes[0]).toMatchObject({
       author: "CMCC",
       content: "函釋是在說明可以列入，懂嗎？ 而非限制必須",
-      remainingContentColumns: 1,
+      remainingContentColumns: 0,
     });
     expect(pushes[1]).toMatchObject({
       author: "CMCC",
       content: "列入，因為政治獻金有稅法上優勢，所以釋法",
-      remainingContentColumns: 2,
+      remainingContentColumns: 1,
     });
   });
 
@@ -150,7 +150,7 @@ describe("parsePushBuffer", () => {
     expect(pushes[0]).toMatchObject({
       author: "alisabonsai",
       content: "候選人在選舉的時候只想要曝光換選",
-      remainingContentColumns: 3,
+      remainingContentColumns: 2,
     });
   });
 
@@ -161,7 +161,7 @@ describe("parsePushBuffer", () => {
       "推 antiSOC     : 川：華許幹的好 我來找買點                         08/29 16:56",
     ].join("\n"));
 
-    expect(pushes.map((push) => push.remainingContentColumns)).toEqual([1, 4, 24]);
+    expect(pushes.map((push) => push.remainingContentColumns)).toEqual([0, 3, 23]);
   });
 
   it("distinguishes unaligned long IDs from aligned author padding", () => {
@@ -174,15 +174,15 @@ describe("parsePushBuffer", () => {
       author: push.author,
       remaining: push.remainingContentColumns,
     }))).toEqual([
-      { author: "SouthEast62", remaining: 4 },
-      { author: "frank111", remaining: 3 },
+      { author: "SouthEast62", remaining: 3 },
+      { author: "frank111", remaining: 2 },
     ]);
   });
 
   it("treats one remaining column as full and two as not full", () => {
     const pushes = parsePushBuffer([
-      `→ alice: ${"a".repeat(55)}  08/24 13:21`,
-      `→ alice: ${"a".repeat(54)}   08/24 13:22`,
+      `→ alice: ${"a".repeat(54)}   08/24 13:21`,
+      `→ alice: ${"a".repeat(53)}    08/24 13:22`,
     ].join("\n"));
 
     expect(pushes.map((push) => push.remainingContentColumns)).toEqual([1, 2]);
@@ -199,11 +199,11 @@ describe("parsePushBuffer", () => {
     ].join("\n"));
 
     expect(pushes.map((push) => push.remainingContentColumns)).toEqual([
-      22,
-      7,
-      4,
-      2,
+      21,
+      6,
       3,
+      1,
+      2,
     ]);
   });
 

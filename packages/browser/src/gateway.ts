@@ -1,4 +1,5 @@
 import { articleTextRuns } from "@pttzzz/core";
+import type { GatewayReplyDraftInput, ReplyDelivery } from "@pttzzz/core";
 import {
   GatewayError,
   type ActionReceipt,
@@ -118,6 +119,7 @@ function isDriverArticleBatch(
 
 /** Package-private transport seam. Exported from this module only for tests. */
 export interface BrowserGatewayDriver {
+  sendReplyDraft?(input: GatewayReplyDraftInput, onProgress?: (progress: ReplyDelivery) => void): Promise<ReplyDelivery>;
   connect(): Promise<void>;
   login(username: string, password: string, disconnectExisting: boolean): Promise<{ ok: true } | { ok: false; reason: string }>;
   disconnect(): Promise<void>;
@@ -342,6 +344,11 @@ export class BrowserPttGateway implements PttGateway {
       wake?.();
       wake = undefined;
     }
+  }
+
+  async sendReplyDraft(input: GatewayReplyDraftInput, onProgress?: (progress: ReplyDelivery) => void): Promise<ReplyDelivery> {
+    if (!this.driver.sendReplyDraft) throw new GatewayError("REPLY_DRAFT_NOT_SENT", "此連線不支援自動分段", false);
+    return this.driver.sendReplyDraft(input, onProgress);
   }
 
   async execute(command: PttCommand): Promise<ActionReceipt> {
@@ -667,6 +674,10 @@ function terminalGatewayDriver(driver: GatewayTerminalDriver): BrowserGatewayDri
         beforeIndex = oldestIndex;
       }
       return { items: rows, exhausted };
+    },
+    sendReplyDraft: (input, onProgress) => {
+      if (!driver.sendReplyDraft) throw new GatewayError("REPLY_DRAFT_NOT_SENT", "此連線不支援自動分段", false);
+      return driver.sendReplyDraft(input, onProgress);
     },
     execute: async (command) => {
       let result: ActionResult;

@@ -3,7 +3,7 @@
  *
  * 依照 idea.md 的規則：
  * 1. 同作者推文在前一則可續接時合併
- * 2. 可續接條件：未用終止符，或以 || 明確標記續接
+ * 2. 可續接條件：未用終止符，或以 | 明確標記續接；_ 切斷後續合併
  * 3. 「回x樓：...」識別為嵌套回覆
  * 4. 原 po 回覆標示 isOP
  * 5. 計算每則聚合推文的 score（明確投票的 push - boo）
@@ -126,9 +126,25 @@ export function detectArticleVote(content: string): "push" | "boo" | null {
 }
 
 // 同作者不連續但允許合併的最大時間間隔（分鐘）
-const TIME_GAP_MINUTES = 5;
-const CONTINUATION_MARKER_RE = /\|\|\s*$/u;
+const TIME_GAP_MINUTES = 2;
+const CONTINUATION_MARKER_RE = /\|\s*$/u;
+const STOP_MARKER_RE = /_\s*$/u;
+// Consume exactly one latest-rule marker; preceding symbols remain literal.
+const MERGE_MARKER_RE = /[|_]\s*$/u;
 const END_TERMINATOR_RE = /[。.!?！？;；]$/u;
+
+export interface PushAggregationOptions {
+  /** Maximum gap for interleaved fragments; consecutive fragments ignore time. Default: 2. */
+  nonconsecutiveGapMinutes?: number;
+}
+
+export function resolvePushAggregationOptions(options: PushAggregationOptions = {}): Required<PushAggregationOptions> {
+  const nonconsecutiveGapMinutes = options.nonconsecutiveGapMinutes ?? TIME_GAP_MINUTES;
+  if (!Number.isFinite(nonconsecutiveGapMinutes) || nonconsecutiveGapMinutes < 0) {
+    throw new RangeError("nonconsecutiveGapMinutes must be finite and nonnegative");
+  }
+  return { nonconsecutiveGapMinutes };
+}
 
 // ─── 工具函式 ─────────────────────────────────────────────────────────────────
 
@@ -137,7 +153,7 @@ function hasContinuationMarker(content: string): boolean {
 }
 
 function stripContinuationMarker(content: string): string {
-  return content.replace(CONTINUATION_MARKER_RE, "").trimEnd();
+  return content.replace(MERGE_MARKER_RE, "").trimEnd();
 }
 
 function isFullPushLine(push: ParsedRawPush): boolean {
@@ -148,6 +164,7 @@ function isFullPushLine(push: ParsedRawPush): boolean {
 }
 
 function canContinueFromPush(push: ParsedRawPush): boolean {
+  if (STOP_MARKER_RE.test(push.structuralContent)) return false;
   if (hasContinuationMarker(push.structuralContent)) return true;
 
   const visibleContent = stripContinuationMarker(push.structuralContent);
@@ -155,14 +172,21 @@ function canContinueFromPush(push: ParsedRawPush): boolean {
 }
 
 function mergePushContents(pushes: ParsedRawPush[]): string {
+  return joinPushFragments(
+    pushes,
+    pushes.map((push) => stripContinuationMarker(push.intent.visibleContent)),
+  );
+}
+
+/** Join already-visible text without interpreting opaque edit payloads as wire syntax. */
+function joinPushFragments(pushes: readonly ParsedRawPush[], contents: readonly string[]): string {
   if (pushes.length === 0) return "";
 
-  let merged = stripContinuationMarker(pushes[0].intent.visibleContent);
+  let merged = contents[0];
   for (let i = 1; i < pushes.length; i += 1) {
     const previous = pushes[i - 1];
-    const current = stripContinuationMarker(pushes[i].intent.visibleContent);
     const separator = isFullPushLine(previous) ? "" : "\n";
-    merged += `${separator}${current}`;
+    merged += `${separator}${contents[i]}`;
   }
 
   return merged;
@@ -228,14 +252,12 @@ function groupEditResult(
   );
   if (commands.length === 0) return { content: originalContent };
 
-  const fragmentContents = group.pushes.map((push) => push.structuralContent);
+  // Strip original wire markers once; subsequent replacement payloads stay opaque.
+  const fragmentContents = group.pushes.map((push) => stripContinuationMarker(push.structuralContent));
   const appendedContents: string[] = [];
   let flattenedContent: string | null = null;
   const renderFragments = () => {
-    const merged = mergePushContents(group.pushes.map((push, index) => ({
-      ...push,
-      intent: { ...push.intent, visibleContent: fragmentContents[index] },
-    })));
+    const merged = joinPushFragments(group.pushes, fragmentContents);
     return appendedContents.length > 0 ? `${merged}\n${appendedContents.join("\n")}` : merged;
   };
   let content = originalContent;
@@ -381,6 +403,7 @@ interface PushGroup {
 function groupPushes(
   rawPushes: ParsedRawPush[],
   controlOrders: ReadonlySet<number> = new Set(),
+  nonconsecutiveGapMinutes = TIME_GAP_MINUTES,
 ): PushGroup[] {
   const groups: PushGroup[] = [];
 
@@ -451,7 +474,7 @@ function groupPushes(
     const prevGlobal = rawPushes[i - 1];
     const isConsecutive = prevGlobal.author === cur.author;
     const timeDiff = timeDiffMinutes(lastPush.time, cur.time);
-    const timeOk = timeDiff !== null && timeDiff <= TIME_GAP_MINUTES;
+    const timeOk = timeDiff !== null && timeDiff <= nonconsecutiveGapMinutes;
     const hasControlBetween = Array.from(controlOrders).some((order) =>
       order > lastPush.commandOrder && order < cur.commandOrder,
     );
@@ -876,7 +899,9 @@ export function aggregatePushes(
   articleAuthor: string,
   opReplySegments: OpEditedReplySegment[] = [],
   articleEditRecords: ArticleEditRecord[] = [],
+  options: PushAggregationOptions = {},
 ): AggregatedThread {
+  const { nonconsecutiveGapMinutes } = resolvePushAggregationOptions(options);
   const articleAuthorId = normalizePttId(articleAuthor);
   const parsedPushes = parseAndApplyPushEdits(rawPushes);
   const controlOrders = new Set(
@@ -886,12 +911,13 @@ export function aggregatePushes(
   // Retain fully withdrawn groups as structural anchors without reintroducing
   // withdrawn fragments into partially visible aggregates.
   const withdrawnGroups = groupPushes(
-    parsedPushes.filter((push) => !push.intent.isControl), controlOrders,
+    parsedPushes.filter((push) => !push.intent.isControl), controlOrders, nonconsecutiveGapMinutes,
   ).filter((group) => group.pushes.every((push) => push.withdrawn));
   // Step 1：分群
   const groups = [...groupPushes(
     parsedPushes.filter((push) => !push.withdrawn && !push.intent.isControl),
     controlOrders,
+    nonconsecutiveGapMinutes,
   ), ...withdrawnGroups].sort((a, b) => a.pushes[0].commandOrder - b.pushes[0].commandOrder);
 
   // Step 2：每群合成一則 AggregatedPush（暫時 replyTo=null, score=0）
@@ -1146,10 +1172,11 @@ export function aggregateThreadSnapshot(
   rawPushes: AnchoredRawPush[],
   articleAuthor: string,
   complete: boolean,
+  options: PushAggregationOptions = {},
 ): AggregatedThreadSnapshot {
   return {
     status: complete ? "final" : "incomplete",
-    thread: aggregatePushes(rawPushes, articleAuthor),
+    thread: aggregatePushes(rawPushes, articleAuthor, [], [], options),
   };
 }
 

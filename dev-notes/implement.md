@@ -1,5 +1,7 @@
 # pttzzz 實作概況
 
+Goal 11 長回文：規則 0.3.0 使用 `|`／`_`、非連續兩分鐘，保留舊 `||`／`|!` 讀取相容。browser 從取消的確認畫面量測容量，以 UAO 編碼規劃並由真正核心預驗證，再逐段核對確認畫面與送達證據；續送只從未送片段開始，unknown 不重送。Web 輸入整份草稿並保留目前文章窗格的進度。編輯內容與原始尾標解析分離，避免字面符號被移除。詳見 [長文設計](goal-11-multipart-reply-design.md)、[規則對齊計畫](goal-11-multipart-rules-update-plan.md) 與 [實作紀錄](goal-11-multipart-reply-implementation-notes.md)。
+
 Goal 11 可驗證文章工作階段：browser 完整讀文後可私下保留經 key、作者、標題與終端 snapshot 核對的文章畫面；推文型命令驗證成功便直接重用，否則沿用既有定位／重開／AID 與身分檢查。搜尋結果的相對編號必須先取得 canonical AID 才可寫入；連線版本在正文與確認前後持續核對，送出後無法證明回到同篇文章時回傳 `uncertain`。session 狀態不進入 `@pttzzz/core` 公開契約。
 
 Goal 11 推文安全：入口依延遲 terminal prompt 嚴格轉移並記錄不含正文的語意 action trace；neutral 意外落入原生推／噓框會取消並停止，不降級、不自動重送。自動測試只使用 fake gateway 與 transcript，沒有真實 PTT 寫入。
@@ -119,6 +121,8 @@ Goal 11 格式階段：core/browser/Web 0.3.0 新增獨立 ArticleTextStyle 範�
 Goal 11 後續：Web 文章統計合併為核心校正票數操作列；首頁加入空間方向鍵導覽，文章 X／R 與看板 Ctrl+P 僅開啟既有編輯器。browser 最新頁讀取重新定位終端，舊頁排除重疊／置底並推進游標；useBoard 同步請求鎖與 generation 保護刷新、載入更多及快取重驗證。詳見 [Goal 11 實作紀錄](goal-11-implementation-notes.md)。
 
 Goal 11 分頁完整性：browser 較舊頁導航改為等待可觀察進展，停滯是可重試錯誤而非列表終點；browser-private article batch 明確回報 `exhausted`。Web 合併後一律依置頂與文章索引排序，暫時載入錯誤保留游標並提供重試。PTT 列表日期只有月日，UI 以索引呈現權威順序，不推測年份；完整限制見 core contracts 與 [Goal 11 實作紀錄](goal-11-implementation-notes.md)。
+
+Goal 11 長回文欄寬修正：core 共用容量計算扣除正文固定分隔空白；browser 以實測容量核對讀回格式，送出前經實體文字解析與聚合逐字驗證，避免 sender 自填剩餘欄數掩蓋 receiver 差異。實錄七段回文納入離線回歸；本輪未重新連線 PTT。
 
 - [Goal 9 architecture design](goal-9-core-architecture-design.md)
 - [Goal 9 implementation plan](goal-9-implementation-plan.md)

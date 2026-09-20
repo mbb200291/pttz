@@ -6,7 +6,7 @@
 
 文章發表、本文編輯與回應至看板可附加 `ArticleTextStyle[]`；正文與格式分離，普通文字語意不變。範圍採 UTF-16 左含右不含，不得重疊或切開 surrogate pair；樣式僅高亮與前景色 30–37。Core 與 browser 都在送出前驗證。詳細介面、預覽及錯誤處理見 [UI 開發指南](./DEVELOPMENT_GUIDE.md#article-text-formatting-corebrowser-03)。
 
-此為實作層公開 API 加法擴充，套件為 0.3.0，白皮書規則仍為 0.2.x。原始 body／回文規則及 Article DTO 不改；其他 gateway 必須明確實作此欄位，不可承諾未知 gateway 會自動支援。
+此為實作層公開 API 加法擴充，套件為 0.3.0。文字格式欄位本身不改變 body／回文語意及 Article DTO；其他 gateway 必須明確實作此欄位，不可承諾未知 gateway 會自動支援。目前規則相容性為 0.3.x，詳見白皮書。
 
 ## 漸進讀取狀態
 

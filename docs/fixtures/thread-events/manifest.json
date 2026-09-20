@@ -1,6 +1,11 @@
 {
-  "specVersion": "0.2.0",
+  "specVersion": "0.3.0",
   "schema": "schema.json",
+  "senderRules": {
+    "THREAD-006.1": "packages/browser/src/internal/multipartReply.test.ts",
+    "THREAD-006.2": "packages/browser/src/internal/multipartReply.test.ts",
+    "THREAD-006.3": "packages/browser/src/internal/multipartReply.test.ts"
+  },
   "fixtures": [
     "raw.json",
     "merge.json",

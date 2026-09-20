@@ -2,9 +2,27 @@
 
 Official browser gateway and client factory for `@pttzzz/core`.
 
-The current package version is `0.3.0`, targeting rules `0.2.x`. See
+The current package version is `0.3.0`, targeting rules `0.3.x`. See
 [package.json](./package.json) for dependencies and compatibility declarations.
 These declarations do not establish npm publication status.
+
+## Automatic reply drafts
+
+Drafts are limited to 1,000 half-width units (500 full-width characters), measured with the PTT UAO codec after outer-whitespace and CRLF normalization. Internal newlines count as one unit. Generated target prefixes and markers do not count toward this limit, but do count toward each packet's capacity. Oversized drafts are rejected without publishing any packet or truncating the draft.
+
+`PttzzzClient.sendReplyDraft` accepts an immutable `operationId`, full text,
+article and optional target reply. The browser measures capacity from a cancelled
+confirmation, plans UAO-safe pieces, validates their aggregate result, and sends
+them serially. Each confirmation must match the exact sender, text and capacity.
+New drafts use `|` only when continuation needs it; their final piece ends in
+natural punctuation or `_`. Old `||` / `|!` remain readable. The default
+nonconsecutive merge window is two minutes, including in the web client.
+
+Check `ReplyDelivery.status`, not only `Result.ok`: only `complete` means all pieces
+were confirmed. `paused` may resume with the same ID and immutable payload;
+`uncertain` must not retry blindly. Receipts are in-memory and invalidated across
+authentication changes. The fake gateway uses the same planner and receipt queue.
+No live PTT posting is part of the automated validation.
 
 ## Article formatting
 

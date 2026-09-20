@@ -1,6 +1,6 @@
-import { PttzzzClient } from "@pttzzz/core";
+import { PttzzzClient, type PttzzzClientOptions } from "@pttzzz/core";
 import { createBrowserGateway } from "./gateway.js";
 
-export function createBrowserClient(): PttzzzClient {
-  return new PttzzzClient(createBrowserGateway());
+export function createBrowserClient(options?: PttzzzClientOptions): PttzzzClient {
+  return new PttzzzClient(createBrowserGateway(), options);
 }

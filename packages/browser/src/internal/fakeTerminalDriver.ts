@@ -6,7 +6,10 @@ import type {
   PttCommand,
   PushType,
   RawArticleSource,
+  GatewayReplyDraftInput,
+  ReplyDelivery,
 } from "@pttzzz/core";
+import { encodedReplyBytes, ReplyDraftQueue } from "./multipartReply.js";
 import type { BrowserGatewayDriver } from "../gateway.js";
 import { formatEditorBody } from "./articleFormatting.js";
 import type {
@@ -20,6 +23,7 @@ import type {
 } from "./terminalDriver.js";
 import {
   aggregatePushes,
+  pushContentCapacity,
   formatBoardReplyTitle,
   formatEditPush,
   splitArticleBody,
@@ -350,6 +354,7 @@ export function createLegacyFakePttAdapterForUi() {
 }
 
 export class FakePttAdapter {
+  private readonly replyDrafts = new ReplyDraftQueue();
   private status: ConnectionStatus = "connected";
   private currentUser: string | null = getFakePttCurrentUser();
   private currentArticle: { boardName: string; articleIndex: number } | null = null;
@@ -363,6 +368,7 @@ export class FakePttAdapter {
   }
 
   async login(username: string): Promise<LoginResult> {
+    this.replyDrafts.invalidate();
     const nextUser = username.trim() || DEFAULT_USER;
     this.currentUser = nextUser;
     sessionStorage.setItem(FAKE_USER_KEY, nextUser);
@@ -649,6 +655,7 @@ export class FakePttAdapter {
   }
 
   async disconnect(): Promise<void> {
+    this.replyDrafts.invalidate();
     this.status = "closed";
     this.emitStatus("closed");
   }
@@ -704,6 +711,21 @@ export class FakePttAdapter {
     const entries = await this.listBoardEntries({ kind: "hot" });
     return entries.flatMap((entry) => entry.kind === "board" &&
       entry.board.name.toLowerCase().startsWith(prefix.toLowerCase()) ? [entry.board] : []);
+  }
+
+  async sendReplyDraft(input: GatewayReplyDraftInput, onProgress?: (progress: ReplyDelivery) => void): Promise<ReplyDelivery> {
+    input = { ...input, article: { ...input.article } };
+    return this.replyDrafts.run(input, async () => {
+      if (!this.currentUser) throw new Error("尚未登入");
+      if (!articleForKey(readStore(), input.article)) throw new Error("找不到文章");
+      // The simulator renders non-aligned accounts without IP fields.
+      return { author: this.currentUser, capacity: pushContentCapacity(encodedReplyBytes(this.currentUser)) };
+    }, async (content, index) => {
+      const result = await this.executeArticleCommand({ type: "reply-article", article: input.article,
+        content, pushType: input.floor !== undefined || index > 0 ? "neutral" : input.pushType });
+      return result.ok ? { ok: true, outcome: "sent" } : { ok: false,
+        code: "FAKE_REPLY_FAILED", message: result.reason ?? "回文未送出", outcome: "not-sent", retryable: true };
+    }, onProgress);
   }
 
   async executeArticleCommand(command: Exclude<PttCommand, { type: "create-article" }>): Promise<ActionResult> {
@@ -831,6 +853,7 @@ function fakeGatewayDriver(adapter: FakePttAdapter): BrowserGatewayDriver {
     disconnect: () => adapter.disconnect(),
     subscribeStatus: (listener) => adapter.subscribeStatus(listener),
     readArticleSource: (key, emit, signal) => adapter.readArticleSource(key, emit, signal),
+    sendReplyDraft: (input, onProgress) => adapter.sendReplyDraft(input, onProgress),
     listBoards: (source) => adapter.listBoardEntries(source),
     searchBoards: (prefix) => adapter.searchBoardsByPrefix(prefix),
     listArticles: async ({ board, beforeIndex, author, keyword }) => {
