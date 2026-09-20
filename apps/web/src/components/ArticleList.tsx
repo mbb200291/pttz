@@ -16,7 +16,7 @@ import type {
   WheelEvent,
 } from "react";
 import { useRef, useEffect, useMemo, useState } from "react";
-import { canUseShortcut, hasOpenNavigationDialog, navigateList, type NavigationKeyEvent } from "../lib/keyboardNavigation";
+import { canUseShortcut, leaveSearchInput, type NavigationKeyEvent } from "../lib/keyboardNavigation";
 import { useBodyNavigation } from "../hooks/useBodyNavigation";
 import { useBoard } from "../hooks/useBoard";
 import type { BoardFilter } from "../lib/ptt/viewState";
@@ -170,7 +170,7 @@ function ArticleRow({
   onClick: (index: number, element: HTMLButtonElement) => void;
 }) {
   const normalized = legacySummary(article);
-  const isDeleted = article.title.includes("(已被刪除)");
+  const isDeleted = /[（(](?:本文)?已被刪除[）)]/.test(article.title);
   const isFixed = Boolean(normalized.fixed);
   const { category, displayTitle, isRe } = parseTitle(article.title);
 
@@ -265,7 +265,7 @@ function ArticleRow({
         )}
       </div>
 
-      {/* Column 2: Date + index stacked */}
+      {/* Column 2: index + PTT's yearless month/day label */}
       <div
         style={{
           fontFamily: "var(--font-mono)",
@@ -274,8 +274,8 @@ function ArticleRow({
           lineHeight: 1.4,
         }}
       >
-        <div>{normalized.date}</div>
-        <div style={{ fontSize: 10, opacity: 0.7 }}>#{normalized.index}</div>
+        <div>#{normalized.index}</div>
+        <div style={{ fontSize: 10, opacity: 0.7 }}>{normalized.date}</div>
       </div>
 
       {/* Column 3: Title + meta */}
@@ -722,6 +722,7 @@ export function ArticleList({
   const [customPushFilterOpen, setCustomPushFilterOpen] = useState(false);
   const pushFilterRef = useRef<HTMLDivElement>(null);
   const navigationRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   useBodyNavigation(navigationRef, handleNavigation);
 
   const {
@@ -824,7 +825,6 @@ export function ArticleList({
             row.getBoundingClientRect().top -
             cachedAnchor.viewportTop;
           window.scrollTo({ top: Math.max(0, targetTop), behavior: "auto" });
-          if (document.activeElement === document.body && !row.matches(":disabled") && !hasOpenNavigationDialog()) row.focus({ preventScroll: true });
           return;
         }
       }
@@ -887,6 +887,8 @@ export function ArticleList({
   }
 
   function handleSearchKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.nativeEvent.isComposing) return;
+    leaveSearchInput(e, navigationRef.current);
     if (e.key === "Enter") handleSearchCommit();
   }
 
@@ -1050,6 +1052,11 @@ export function ArticleList({
     activePushThreshold !== null && !PUSH_FILTER_PRESETS.has(activePushThreshold);
 
   function handleNavigation(event: NavigationKeyEvent, scope?: HTMLElement) {
+    if ((event.key.toLowerCase() === "s" || event.key === "/") && canUseShortcut(event, false, scope)) {
+      event.preventDefault();
+      searchInputRef.current?.focus();
+      return;
+    }
     if (event.key.toLowerCase() === "z" && canUseShortcut(event, false, scope)) {
       event.preventDefault();
       setCustomPushFilterOpen(true);
@@ -1060,12 +1067,16 @@ export function ArticleList({
       onCompose(observedCategoryOptions);
       return;
     }
-    navigateList(event, onBack, scope);
+    if (event.key === "ArrowLeft" && canUseShortcut(event, false, scope)) {
+      event.preventDefault();
+      onBack();
+    }
   }
 
   return (
     <div
       ref={navigationRef}
+      tabIndex={-1}
       onTouchStart={handleTouchStart}
       onKeyDown={handleNavigation}
       onTouchMove={handleTouchMove}
@@ -1257,6 +1268,8 @@ export function ArticleList({
             <input
               type="text"
               value={searchInput}
+              ref={searchInputRef}
+              aria-keyshortcuts="s /"
               onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={handleSearchKeyDown}
               placeholder="搜尋標題  或  #AID"
@@ -1582,6 +1595,25 @@ export function ArticleList({
           <span style={{ color: "oklch(0.86 0.16 75)", fontSize: 13 }}>{error}</span>
         ) : articles.length === 0 ? (
           <span style={{ color: "var(--text-dim)", fontSize: 13 }}>正在連線至 PTT…</span>
+        ) : error ? (
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+            <span style={{ color: "var(--text-muted)", fontSize: 13 }}>暫時無法載入</span>
+            <button
+              type="button"
+              onClick={handleLoadMore}
+              style={{
+                background: "transparent",
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+                color: "var(--text)",
+                cursor: "pointer",
+                fontSize: 13,
+                padding: "6px 10px",
+              }}
+            >
+              再試一次
+            </button>
+          </div>
         ) : !hasMore ? (
           <span style={{ color: "var(--text-dim)", fontSize: 12 }}>已到最舊文章</span>
         ) : supportsObserver ? (

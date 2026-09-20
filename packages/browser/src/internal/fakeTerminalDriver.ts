@@ -21,6 +21,7 @@ import type {
 import {
   aggregatePushes,
   formatBoardReplyTitle,
+  formatEditPush,
   splitArticleBody,
   splitArticleEditableContent,
   type ArticleSummary,
@@ -739,7 +740,7 @@ export class FakePttAdapter {
       case "withdraw-floor":
         for (const range of command.ranges) {
           const result = await this.appendPush(article.board,
-            `撤回我在${range.start}${range.end === range.start ? "" : `~${range.end}`}樓發言`, "neutral");
+            formatEditPush("撤回", range.start, range.end === range.start ? null : range.end, ""), "neutral");
           if (!result.ok) return result;
         }
         return { ok: true };

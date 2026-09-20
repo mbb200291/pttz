@@ -66,7 +66,7 @@ describe("useArticle public event bridge", () => {
           type: "article.partial",
           articleKey: { board: "Test", index: 10 },
           revision: 2,
-          article: { key: { board: "Test", index: 10 }, completeness: "incomplete", revision: 2, body: "new partial", replies: [] },
+          article: { key: { board: "Test", index: 10 }, completeness: "incomplete", revision: 2, body: "new partial", replies: [], articleVotes: { pushCount: 12, booCount: 2, score: 10 } },
         });
         listener({
           type: "article.partial",
@@ -77,6 +77,7 @@ describe("useArticle public event bridge", () => {
       }
     });
     expect(result.current.partialArticle?.body).toBe("new partial");
+    expect(result.current.partialArticle?.articleVotes).toEqual({ pushCount: 12, booCount: 2, score: 10 });
 
     resolve({ ok: true, value: article("Test", 10, 3, "final") });
     await waitFor(() => expect(result.current.article?.body).toBe("final"));

@@ -131,6 +131,7 @@ export interface ArticleRef {
 export interface ArticleSummary extends ArticleRef {
   title: string;
   author: string;
+  /** Source-provided date text. A PTT board listing may contain only month/day. */
   publishedAt?: string;
   nativeScore?: number;
 }
@@ -188,6 +189,8 @@ export interface PartialArticle {
   replies: readonly Reply[];
 }
 ```
+
+`ArticleSummary.publishedAt` preserves the precision supplied by the source. PTT board-list rows expose month and day but no year, so consumers must not parse this field as a complete timestamp, invent a year, or sort pages by it. Keep the opaque pagination order, use the numeric article index as the stable order within an index-based PTT board, and use the complete timestamp from a loaded `Article` only when calendar chronology is required.
 
 `ArticleKey` 必須同時帶 board 與 `index`／`aid` 其中之一。一次 `getArticle()` operation 必須逐欄保留 input `ArticleKey` representation：index request 不轉成 aid，aid request 也不轉成 index；該 operation 的 partial/final DTO 與 Result 都使用同一 representation。即使兩個 key 指向同一篇 PTT 文章，以不同 representation 發起的 operations 在 0.1 仍有各自的 routing key，不做 alias mapping。
 

@@ -2,6 +2,10 @@ import Ptt from "ptt-client";
 import { articleTerminalLine, type TerminalLine } from "./terminalLine.js";
 import { formatEditorBody } from "./articleFormatting.js";
 import { ArticleSessionTracker } from "./articleSession.js";
+import {
+  verifyPushWriteDelta,
+  type PushWriteEvidence,
+} from "./writeReadback.js";
 import type { ArticleTextStyle } from "@pttzzz/core";
 import type PttConfig from "ptt-client/dist/config";
 import { Board as PttClientBoard } from "ptt-client/dist/sites/ptt/model/board.js";
@@ -27,6 +31,7 @@ import {
   type AggregatedPush,
   extractArticleThreadEvents,
   formatEditPushCommand,
+  formatEditPush,
   formatReplyVoteCommand,
   formatReplyVoteWithdrawalCommand,
   formatSectionEditCommand,
@@ -133,6 +138,16 @@ export interface ActionResult {
   retryable?: boolean;
 }
 
+const writeEvidenceByResult = new WeakMap<ActionResult, PushWriteEvidence>();
+
+function withWriteEvidence(
+  result: ActionResult,
+  evidence?: PushWriteEvidence,
+): ActionResult {
+  if (evidence) writeEvidenceByResult.set(result, evidence);
+  return result;
+}
+
 const actionSent = (): ActionResult => ({ ok: true, outcome: "sent" });
 const actionNotSent = (
   reason?: string,
@@ -194,7 +209,11 @@ export type ArticleTerminalDriver = TerminalDriver & {
 };
 
 type ArticleContextAcquisition =
-  | { ok: true; identity: { author: string; title: string } }
+  | {
+      ok: true;
+      identity: { author: string; title: string };
+      baselineRawText?: string;
+    }
   | { ok: false; result: ActionResult };
 
 export interface ArticleReplyTimeouts {
@@ -309,6 +328,15 @@ export interface TerminalDriver {
   getLastScreen: () => string;
   subscribeStatus: (listener: (status: ConnectionStatus) => void) => () => void;
   subscribeScreen: (listener: (screen: string) => void) => () => void;
+}
+
+export class ArticlePageStalledError extends Error {
+  readonly code = "ARTICLE_PAGE_STALLED";
+
+  constructor() {
+    super("文章列表尚未更新，請再試一次");
+    this.name = "ArticlePageStalledError";
+  }
 }
 
 type BotLike = {
@@ -696,6 +724,7 @@ class PttClientTerminalDriver implements TerminalDriver {
     author: string;
     title: string;
   };
+  private articleSessionRawText?: string;
   private articleSessionEpoch = 0;
   private status: ConnectionStatus = "connecting";
   private lastScreen = "";
@@ -770,6 +799,7 @@ class PttClientTerminalDriver implements TerminalDriver {
   private invalidateArticleSession(reason: string): void {
     this.articleSessionEpoch += 1;
     this.articleSessionIdentity = undefined;
+    this.articleSessionRawText = undefined;
     this.articleSession.invalidate(reason);
   }
 
@@ -796,12 +826,14 @@ class PttClientTerminalDriver implements TerminalDriver {
     key: ArticleKey,
     identity: { board: string; author: string; title: string },
     snapshot: string,
+    rawText?: string,
   ): void {
     this.articleSessionIdentity = {
       author: identity.author,
       title: identity.title,
     };
     this.articleSession.record({ key, ...identity, snapshot });
+    this.articleSessionRawText = rawText;
   }
 
   async send(data: string): Promise<boolean> {
@@ -1089,7 +1121,9 @@ class PttClientTerminalDriver implements TerminalDriver {
     signal?: AbortSignal,
   ): Promise<void> {
     let revision = 0;
+    let finalRawText: string | undefined;
     const emitRaw = (rawText: string, completeness: "incomplete" | "final") => {
+      if (completeness === "final") finalRawText = rawText;
       revision += 1;
       emit({ rawText, completeness, revision });
     };
@@ -1153,7 +1187,7 @@ class PttClientTerminalDriver implements TerminalDriver {
             board: article.board,
             author: article.author,
             title: article.title,
-          }, snapshot);
+          }, snapshot, finalRawText);
           verifiedArticleOpen = true;
         } else if (this.articleSessionEpoch === readEpoch) {
           this.invalidateArticleSession("read-unverified");
@@ -1392,7 +1426,7 @@ class PttClientTerminalDriver implements TerminalDriver {
           case "withdraw-floor": {
             const range = command.ranges[0];
             if (!range) return actionNotSent("撤回範圍不可為空");
-            content = `撤回我在${range.start === range.end ? range.start : `${range.start}~${range.end}`}樓發言`;
+            content = formatEditPush("撤回", range.start, range.end === range.start ? null : range.end, "");
             pushType = "neutral"; break;
           }
       }
@@ -1406,6 +1440,7 @@ class PttClientTerminalDriver implements TerminalDriver {
         () => this.articleSessionEpoch === writeEpoch,
       );
       let finalResult = result;
+      const writeEvidence = writeEvidenceByResult.get(result);
       if (result.ok && result.outcome === "sent") {
         const aidMatches = this.articleSessionEpoch === writeEpoch && (
           !key.aid || await verifyOpenedArticleAid(this.bot, {
@@ -1429,16 +1464,34 @@ class PttClientTerminalDriver implements TerminalDriver {
             title: expected.title,
           }, snapshot);
           retainArticle = true;
-        } else if (this.articleSessionEpoch === writeEpoch) {
-          this.invalidateArticleSession("push-postcondition-failed");
         }
         if (!retainArticle) {
           finalResult = actionUncertain(
             "推文可能已送出，但無法重新確認原文章，請重新整理文章檢查",
             "push-confirm-timeout",
           );
+          if (writeEvidence) writeEvidenceByResult.set(finalResult, writeEvidence);
         }
-      } else {
+      }
+
+      if (
+        !retainArticle &&
+        finalResult.outcome === "uncertain" &&
+        writeEvidence &&
+        acquisition.baselineRawText !== undefined &&
+        this.articleSessionEpoch === writeEpoch
+      ) {
+        retainArticle = await this.confirmPushByReadback(
+          key,
+          expected,
+          acquisition.baselineRawText,
+          writeEvidence,
+          writeEpoch,
+        );
+        if (retainArticle) finalResult = actionSent();
+      }
+
+      if (!retainArticle && finalResult.outcome !== "sent") {
         this.invalidateArticleSession("push-failed");
       }
       return finalResult;
@@ -1466,7 +1519,11 @@ class PttClientTerminalDriver implements TerminalDriver {
       title: visible.title,
       snapshot,
     }) && stored) {
-      return { ok: true, identity: { author: stored.author, title: stored.title } };
+      return {
+        ok: true,
+        identity: { author: stored.author, title: stored.title },
+        baselineRawText: this.articleSessionRawText,
+      };
     }
 
     this.articleSessionIdentity = undefined;
@@ -1522,6 +1579,68 @@ class PttClientTerminalDriver implements TerminalDriver {
       title: expected.title,
     }, openedSnapshot);
     return { ok: true, identity: expected };
+  }
+
+  private async confirmPushByReadback(
+    key: ArticleKey,
+    expected: { author: string; title: string },
+    baselineRawText: string,
+    writeEvidence: PushWriteEvidence,
+    expectedEpoch: number,
+  ): Promise<boolean> {
+    try {
+      let readbackKey = key;
+      if (key.index !== undefined && parsePartialScreen(readVisibleScreen(this.bot))) {
+        const aid = await readOpenedArticleAid(this.bot);
+        if (aid?.board.toLowerCase() === key.board.toLowerCase()) {
+          readbackKey = { board: key.board, aid: aid.aid };
+        }
+      }
+      const open = readbackKey.index !== undefined
+        ? () => this.bot.send?.(`${readbackKey.index}\r\r`) ?? Promise.resolve(false)
+        : () => this.bot.send?.(`#${readbackKey.aid ?? ""}\r`) ?? Promise.resolve(false);
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        let finalRawText: string | undefined;
+        const article = await fetchArticleFromBotManuallyWithOpen(
+          this.bot,
+          readbackKey.board,
+          readbackKey.index ?? 0,
+          open,
+          undefined,
+          (rawText, completeness) => {
+            if (completeness === "final") finalRawText = rawText;
+          },
+          { leaveOpen: true },
+        );
+        const matches =
+          this.articleSessionEpoch === expectedEpoch &&
+          article !== null &&
+          finalRawText !== undefined &&
+          article.board.toLowerCase() === key.board.toLowerCase() &&
+          normalizeArticleAuthor(article.author) === normalizeArticleAuthor(expected.author) &&
+          normalizeArticleIdentity(article.title) === normalizeArticleIdentity(expected.title) &&
+          verifyPushWriteDelta(baselineRawText, finalRawText, writeEvidence);
+        if (matches && finalRawText !== undefined && article) {
+          if (readbackKey.aid && !await verifyOpenedArticleAid(this.bot, {
+            board: readbackKey.board,
+            aid: readbackKey.aid,
+          })) return false;
+
+          const snapshot = readVisibleScreen(this.bot);
+          this.recordArticleSession(readbackKey, {
+            board: article.board,
+            author: article.author,
+            title: article.title,
+          }, snapshot, finalRawText);
+          return true;
+        }
+        if (this.articleSessionEpoch !== expectedEpoch) return false;
+        await sleep(80);
+      }
+      return false;
+    } catch {
+      return false;
+    }
   }
 
   private async locateArticleIdentity(
@@ -3199,14 +3318,19 @@ async function waitForPushConfirmation(
   bot: WriteBot,
   timeoutMs: number,
   pollMs: number,
-): Promise<boolean> {
+): Promise<string | null> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
     const screen = stripAnsi(readVisibleScreen(bot)).replace(/\r/g, "");
-    if (isPushConfirmationPrompt(screen)) return true;
+    if (isPushConfirmationPrompt(screen)) return screen;
     await sleep(pollMs);
   }
-  return false;
+  return null;
+}
+
+function parsePushPromptAuthor(screen: string): string | undefined {
+  return /^(?:推|噓|→)\s+([A-Za-z][A-Za-z0-9_]{0,11})\s*:/u
+    .exec(lastTerminalPrompt(screen))?.[1];
 }
 
 function isSameArticleScreen(beforeScreen: string, afterScreen: string): boolean {
@@ -3397,21 +3521,30 @@ export async function submitPushFromCurrentArticle(
     );
   }
 
+  const inputAuthor = parsePushPromptAuthor(
+    stripAnsi(readVisibleScreen(bot)).replace(/\r/g, ""),
+  );
   trace.outcome = "content-ready";
   await sendAction("submit-content", `${trimmed}\r`);
-  const confirmed = await waitForPushConfirmation(
+  const confirmationScreen = await waitForPushConfirmation(
     bot,
     timeouts.confirmMs,
     timeouts.pollMs,
   );
+  const writeAuthor = confirmationScreen
+    ? parsePushPromptAuthor(confirmationScreen) ?? inputAuthor
+    : inputAuthor;
+  const writeEvidence = writeAuthor
+    ? { author: writeAuthor, content: trimmed, pushType }
+    : undefined;
 
-  if (confirmed) {
+  if (confirmationScreen) {
     if (!articleSessionIsValid()) {
       trace.outcome = "article-session-invalidated-after-content";
-      return actionUncertain(
+      return withWriteEvidence(actionUncertain(
         "推文內容可能已輸入，但連線狀態已變更；未送出確認，請重新整理文章檢查",
         "push-confirm-timeout",
-      );
+      ), writeEvidence);
     }
     await sendAction("confirm", "y\r");
     const returnStartedAt = Date.now();
@@ -3421,10 +3554,10 @@ export async function submitPushFromCurrentArticle(
     while (waitingForReturn) {
       if (!articleSessionIsValid()) {
         trace.outcome = "article-session-invalidated-after-confirm";
-        return actionUncertain(
+        return withWriteEvidence(actionUncertain(
           "已送出確認，但連線狀態已變更，請重新整理文章檢查",
           "push-confirm-timeout",
-        );
+        ), writeEvidence);
       }
       const afterConfirm = stripAnsi(readVisibleScreen(bot)).replace(/\r/g, "");
       if (isSameArticleScreen(previousScreen, afterConfirm)) {
@@ -3446,23 +3579,23 @@ export async function submitPushFromCurrentArticle(
 
     if (!articleReturned) {
       trace.outcome = "push-confirm-return-timeout";
-      return actionUncertain(
+      return withWriteEvidence(actionUncertain(
         "已送出確認，但無法確認是否回到原文章，請重新整理文章檢查",
         "push-confirm-timeout",
-      );
+      ), writeEvidence);
     }
     if (returnBoardName) {
       await ensureNormalBoardView(bot, returnBoardName);
     }
     trace.outcome = "sent";
-    return actionSent();
+    return withWriteEvidence(actionSent(), writeEvidence);
   }
 
   trace.outcome = "push-confirm-timeout";
-  return actionUncertain(
+  return withWriteEvidence(actionUncertain(
     "無法確認回文是否送出，請重新整理文章檢查",
     "push-confirm-timeout",
-  );
+  ), writeEvidence);
 }
 
 function sanitizePostBody(body: string, formatting?: readonly ArticleTextStyle[]): string {
@@ -3816,22 +3949,41 @@ export async function fetchBoardArticlesFromBotManually(
     throw new Error(`無法進入看板 ${boardName}`);
   }
 
+  const previousScreen = readVisibleScreen(bot);
   if (beforeIndex > 0) {
     const offset = Math.max(beforeIndex - 9, 1);
     await bot.send(`${PTT_KEY_END}${PTT_KEY_END}${offset}\r`);
-    await sleep(120);
   } else {
     // A previous lookahead/page read leaves the terminal on an older window.
     // A cursorless read must always return the latest page, including pins.
     await bot.send(`${PTT_KEY_END}${PTT_KEY_END}`);
-    await sleep(120);
   }
 
-  return sortArticleSummaries(
-    parsePartialBoardScreen(readVisibleScreen(bot)).filter(
+  const startedAt = Date.now();
+  const timeoutMs = beforeIndex > 0 ? 800 : 240;
+  while (true) {
+    const screen = readVisibleScreen(bot);
+    const articles = sortArticleSummaries(
+      parsePartialBoardScreen(screen).filter(
       (article) => article.index > 0 && article.title.trim().length > 0,
-    ),
-  );
+      ),
+    );
+    const normalIndexes = articles
+      .filter((article) => !article.fixed)
+      .map((article) => article.index);
+
+    if (beforeIndex > 0) {
+      if (normalIndexes.some((index) => index < beforeIndex)) return articles;
+      if (normalIndexes.includes(1)) return articles;
+      if (Date.now() - startedAt >= timeoutMs) {
+        throw new ArticlePageStalledError();
+      }
+    } else if (screen !== previousScreen || Date.now() - startedAt >= timeoutMs) {
+      return articles;
+    }
+
+    await sleep(20);
+  }
 }
 
 function normalizeText(raw: string): string {
@@ -4058,10 +4210,31 @@ function buildPartialArticleFromRawLines(
   };
 }
 
-function appendUniqueArticleScreenLines(
+export function appendUniqueArticleScreenLines(
   lines: string[],
   screen: string[],
+  position?: { origin?: number; lastStart?: number },
 ): number {
+  const range = stripAnsi(screen[23] ?? "").match(/目前顯示[:：]\s*第\s*(\d+)\s*[~～]\s*(\d+)\s*行/u);
+  const start = range ? Number(range[1]) : 0;
+  const end = range ? Number(range[2]) : 0;
+  if (position && start > 0 && end >= start && end - start < 23 &&
+      (lines.length === 0 || position.origin !== undefined)) {
+    if (position.lastStart !== undefined && start > position.lastStart + 23) {
+      throw new Error("文章翻頁不連續，請重新載入文章");
+    }
+    position.origin ??= start;
+    const offset = start - position.origin;
+    if (offset < 0) throw new Error("文章翻頁位置改變，請重新載入文章");
+    const previousLength = lines.length;
+    // Preserve physical rows, including blank lines. The footer's end can lag
+    // behind newly appended pushes, so do not truncate the screen to that end.
+    while (lines.length < offset) lines.push("");
+    screen.slice(0, 23).forEach((line, index) => { lines[offset + index] = line; });
+    position.lastStart = start;
+    return Math.max(0, lines.length - previousLength);
+  }
+  if (position) { position.origin = undefined; position.lastStart = undefined; }
   let contentLines = screen.slice(0, 23);
   if (
     lines.length > 0 &&
@@ -4097,8 +4270,8 @@ function appendUniqueArticleScreenLines(
   let overlap = 0;
   for (let size = maxOverlap; size > 0; size -= 1) {
     if (
-      lines.slice(lines.length - size).join("\n") ===
-      contentLines.slice(0, size).join("\n")
+      lines.slice(lines.length - size).map((line) => stripAnsi(line).trimEnd()).join("\n") ===
+      contentLines.slice(0, size).map((line) => stripAnsi(line).trimEnd()).join("\n")
     ) {
       overlap = size;
       break;
@@ -4129,11 +4302,12 @@ async function readArticleLinesProgressively(
 
   const lines: string[] = [];
   let screen = initialScreen ?? readScreen();
+  const position: { origin?: number; lastStart?: number } = {};
   const maxPages = 300;
 
   for (let page = 0; page < maxPages; page += 1) {
     signal?.throwIfAborted();
-    const appended = appendUniqueArticleScreenLines(lines, screen);
+    const appended = appendUniqueArticleScreenLines(lines, screen, position);
     const partial = buildPartialArticleFromRawLines(lines, boardName);
     if (lines.length > 0) onRawSnapshot?.(lines.join("\n"), "incomplete");
     if (partial && !(page === 0 && initialPartialAlreadyEmitted)) {
@@ -4640,15 +4814,15 @@ async function fetchArticleFromBotManuallyWithOpen(
     throw new Error(`無法進入看板 ${boardName}`);
   }
   recordArticleOpenTraceEvent(trace, "ensure_board_done", traceStartedAt);
-  await openArticle();
+  if (!(await openArticle())) return null;
   recordArticleOpenTraceEvent(trace, "send_open_done", traceStartedAt);
 
   let firstScreen: ArticleFirstScreenSnapshot | null = null;
   let initialScreenForProgressiveRead: string[] | null = null;
   if ((onPartial || onRawSnapshot) && bot.getLine) {
     firstScreen = await waitForArticleFirstScreen(bot, boardName, {
-      // Avoid blocking progressive paging for too long when terminal snapshots lag.
-      timeoutMs: 350,
+      // Only start paging once an article header is observed.
+      timeoutMs: 1800,
       previousFingerprint: trace.previousFingerprint,
       trace,
       traceStartedAt,
@@ -4670,7 +4844,7 @@ async function fetchArticleFromBotManuallyWithOpen(
         "first_screen_timeout",
         traceStartedAt,
       );
-      initialScreenForProgressiveRead = readScreenLines(bot);
+      return null;
     }
   }
 
@@ -4695,13 +4869,17 @@ async function fetchArticleFromBotManuallyWithOpen(
     Array.isArray(rawLines) ? `${rawLines.length} lines` : "no lines",
   );
 
+  // A failed open can leave getLines() on the board list. Never publish that
+  // screen as article content or send an article-exit key from the board list.
+  if (!Array.isArray(rawLines) || rawLines.length === 0) return null;
+  const rawFull = rawLines.join("\n");
+  const header = parseArticleHeaderBlock(rawFull);
+  if (!header.author && !header.title) return null;
+
   // Exit article view so the bot is in board list when the next serial task starts.
   options.signal?.throwIfAborted();
   if (!options.leaveOpen) await bot.send?.("q");
 
-  if (!Array.isArray(rawLines) || rawLines.length === 0) return null;
-
-  const rawFull = rawLines.join("\n");
   onRawSnapshot?.(rawFull, "final");
   const { body, sourceBody, revisions } = splitArticleBody(rawFull);
   const parsed = parseArticleHeaderBlock(body);

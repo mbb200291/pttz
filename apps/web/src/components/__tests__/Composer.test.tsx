@@ -16,6 +16,13 @@ const defaultProps = {
 };
 
 describe("Composer", () => {
+  it("does not send unchanged edits, but can withdraw a long merged reply", async () => {
+    render(<Composer {...defaultProps} mode="edit-push" initial={{ body: "原文".repeat(50) }} />);
+    const submit = screen.getByRole("button", { name: "送出" }) as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    await userEvent.click(screen.getByRole("button", { name: "撤回" }));
+    expect(submit.disabled).toBe(false);
+  });
   it("renders 回文 title when mode=reply", () => {
     render(<Composer {...defaultProps} mode="reply" />);
     // getByText throws if not found — sufficient to prove it renders
@@ -117,8 +124,8 @@ describe("Composer", () => {
         initial={{ body: "original", editMode: "補充" }}
       />,
     );
-    expect(screen.getByRole("button", { name: "補充" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "更正" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "編輯" })).toBeTruthy();
+    expect(screen.queryByRole("spinbutton")).toBeNull();
     expect(screen.getByRole("button", { name: "撤回" })).toBeTruthy();
   });
 

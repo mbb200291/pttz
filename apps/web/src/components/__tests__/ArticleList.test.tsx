@@ -10,6 +10,86 @@ afterEach(() => {
 });
 
 describe("ArticleList", () => {
+  it.each(["s", "/"])("focuses search with %s and exits search without selecting articles", async (key) => {
+    const { ArticleList } = await import("../ArticleList");
+    const open = vi.fn();
+    const { container } = render(<ArticleList boardName="Test" onBack={() => {}} onSelectArticle={open} onSelectArticleByAid={open}
+      mockArticles={[{ index: 1, title: "第一篇", author: "a", date: "9/14", pushCount: "", mark: "" }]} />);
+    const row = container.querySelector<HTMLElement>('[data-article-index="1"]')!;
+    const input = screen.getByPlaceholderText(/搜尋標題.*#AID/) as HTMLInputElement;
+    row.focus();
+    fireEvent.keyDown(row, { key, ctrlKey: true });
+    expect(document.activeElement).toBe(row);
+    fireEvent.keyDown(row, { key });
+    expect(document.activeElement).toBe(input);
+    fireEvent.change(input, { target: { value: "保留搜尋" } });
+    fireEvent.keyDown(input, { key: "Escape", isComposing: true });
+    expect(document.activeElement).toBe(input);
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(document.activeElement?.hasAttribute("data-navigation-item")).toBe(false);
+    expect(input.value).toBe("保留搜尋");
+    expect(open).not.toHaveBeenCalled();
+    (document.activeElement as HTMLElement).blur();
+    fireEvent.keyDown(document.body, { key });
+    expect(document.activeElement).toBe(input);
+  });
+  it.each(["(本文已被刪除) [alice]", "(已被刪除) [alice]"])("disables deleted rows: %s", async (title) => {
+    const { ArticleList } = await import("../ArticleList");
+    const select = vi.fn();
+    const { container } = render(<ArticleList boardName="Test" onBack={() => {}} onSelectArticle={select} onSelectArticleByAid={() => {}}
+      mockArticles={[{ index: 286, mark: "", pushCount: "", date: "9/13", author: "-", title }]} />);
+    const row = container.querySelector('[data-article-index="286"]') as HTMLButtonElement;
+    expect(row.disabled).toBe(true);
+    fireEvent.click(row);
+    expect(select).not.toHaveBeenCalled();
+  });
+  it("presents the article index before PTT's yearless month/day label", async () => {
+    const { ArticleList } = await import("../ArticleList");
+    const { container } = render(
+      <ArticleList
+        boardName="Test"
+        onBack={() => {}}
+        onSelectArticle={() => {}}
+        onSelectArticleByAid={() => {}}
+        mockArticles={[{
+          index: 216,
+          mark: "",
+          pushCount: "",
+          date: "9/06",
+          author: "author",
+          title: "發文測試",
+        }]}
+      />,
+    );
+    const row = container.querySelector('[data-article-index="216"]');
+    expect(row).not.toBeNull();
+    expect(row!.textContent!.indexOf("#216")).toBeLessThan(row!.textContent!.indexOf("9/06"));
+  });
+  it("offers an inline retry when loading older articles temporarily fails", async () => {
+    const retry = vi.fn();
+    const { ArticleList } = await import("../ArticleList");
+    render(
+      <ArticleList
+        boardName="Test"
+        onBack={() => {}}
+        onSelectArticle={() => {}}
+        onSelectArticleByAid={() => {}}
+        mockArticles={[{
+          index: 216,
+          mark: "",
+          pushCount: "",
+          date: "9/06",
+          author: "author",
+          title: "發文測試",
+        }]}
+        mockError="文章列表尚未更新，請再試一次"
+        onMockLoadMore={retry}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "再試一次" }));
+    expect(retry).toHaveBeenCalledOnce();
+  });
   it("does not restore article focus behind an open sibling dialog", async () => {
     const { ArticleList } = await import("../ArticleList");
     const { writeBoardAnchorCache } = await import("../../lib/ptt/viewCache");
@@ -25,7 +105,7 @@ describe("ArticleList", () => {
       expect(document.activeElement).toBe(document.body);
     } finally { dialog.remove(); raf.mockRestore(); scroll.mockRestore(); }
   });
-  it.each(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"])("starts article selection from body with %s without reading or returning", async (key) => {
+  it.each(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"])("uses fixed arrow behavior from body: %s", async (key) => {
     const { ArticleList } = await import("../ArticleList");
     const open = vi.fn(), back = vi.fn();
     const { container, unmount } = render(<ArticleList boardName="Keyboard" onBack={back} onSelectArticle={open} onSelectArticleByAid={() => {}}
@@ -34,12 +114,12 @@ describe("ArticleList", () => {
         { index: 1, title: "Second", author: "b", date: "9/8", pushCount: "1", mark: " " },
       ]} />);
     (document.activeElement as HTMLElement).blur();
-    expect(fireEvent.keyDown(document.body, { key })).toBe(false);
+    expect(fireEvent.keyDown(document.body, { key })).toBe(key !== "ArrowLeft");
     const first = container.querySelector<HTMLElement>('[data-article-index="2"]')!;
-    expect(document.activeElement).toBe(first);
-    expect(open).not.toHaveBeenCalled(); expect(back).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(document.body);
+    expect(open).not.toHaveBeenCalled(); expect(back).toHaveBeenCalledTimes(key === "ArrowLeft" ? 1 : 0);
     fireEvent.keyDown(first, { key: "ArrowRight" });
-    expect(open).toHaveBeenCalledOnce();
+    expect(open).not.toHaveBeenCalled();
     unmount(); expect(fireEvent.keyDown(document.body, { key })).toBe(true);
   });
   it("opens threshold with z from body or a row, but not input/modifiers/dialog/selection", async () => {
@@ -81,7 +161,7 @@ describe("ArticleList", () => {
     fireEvent.keyDown(container.querySelector("input")!, { key: "p", ctrlKey: true });
     expect(compose).not.toHaveBeenCalled();
   });
-  it("navigates actual article rows with arrows and opens only on request", async () => {
+  it("keeps arrows from selecting or opening rows while Left always returns", async () => {
     const { ArticleList } = await import("../ArticleList");
     const open = vi.fn();
     const back = vi.fn();
@@ -94,10 +174,10 @@ describe("ArticleList", () => {
     const second = container.querySelector<HTMLButtonElement>('[data-article-index="1"]')!;
     first.focus();
     fireEvent.keyDown(first, { key: "ArrowDown" });
-    expect(document.activeElement).toBe(second);
+    expect(document.activeElement).toBe(first);
     expect(open).not.toHaveBeenCalled();
     fireEvent.keyDown(second, { key: "ArrowRight" });
-    expect(open).toHaveBeenCalledWith(expect.objectContaining({ index: 1 }));
+    expect(open).not.toHaveBeenCalled();
     fireEvent.keyDown(second, { key: "ArrowLeft" });
     expect(back).toHaveBeenCalledOnce();
   });

@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { hasOpenNavigationDialog, navigateBoardGrid } from "../lib/keyboardNavigation";
+import { canUseShortcut, leaveSearchInput, type NavigationKeyEvent } from "../lib/keyboardNavigation";
 import { useBodyNavigation } from "../hooks/useBodyNavigation";
 
 export interface PopularBoard {
@@ -81,14 +81,17 @@ export function BoardInput({
   const [favoriteOverrides, setFavoriteOverrides] = useState<Record<string, boolean>>({});
   const popularGridRef = useRef<HTMLDivElement>(null);
   const navigationRef = useRef<HTMLDivElement>(null);
-  useBodyNavigation(navigationRef, navigateBoardGrid);
+  const boardInputRef = useRef<HTMLInputElement>(null);
+  const handleNavigation = (event: NavigationKeyEvent, scope?: HTMLElement) => {
+    if (event.key.toLowerCase() === "s" && canUseShortcut(event, false, scope) && !boardInputRef.current?.disabled) {
+      event.preventDefault();
+      boardInputRef.current?.focus();
+      return;
+    }
+  };
+  useBodyNavigation(navigationRef, handleNavigation);
 
   const isConnected = pttState === "ready";
-  useEffect(() => {
-    if (isConnected && document.activeElement === document.body && !hasOpenNavigationDialog()) {
-      navigationRef.current?.querySelector<HTMLElement>('[data-navigation-item]:not(:disabled)')?.focus({ preventScroll: true });
-    }
-  });
   const hasLivePopularBoards = Boolean(popularBoards?.length);
   const boards = hasLivePopularBoards ? popularBoards! : DEFAULT_BOARD_SHORTCUTS;
   const searchTerm = input.trim().toLowerCase();
@@ -228,7 +231,8 @@ export function BoardInput({
   return (
     <div
       ref={navigationRef}
-      onKeyDown={navigateBoardGrid}
+      tabIndex={-1}
+      onKeyDown={handleNavigation}
       style={{
         minHeight: "100vh",
         background: "var(--bg)",
@@ -402,9 +406,12 @@ export function BoardInput({
             <SearchIcon />
           </span>
           <input
+            ref={boardInputRef}
+            aria-keyshortcuts="s"
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(event) => leaveSearchInput(event, navigationRef.current)}
             placeholder="輸入看板名稱  例如  Gossiping"
             disabled={!isConnected}
             style={{
@@ -440,67 +447,6 @@ export function BoardInput({
             進入看板
           </button>
         </form>
-
-        {favoriteCards.length > 0 && !isSearching && (
-          <section style={{ marginBottom: 40 }}>
-            <SectionHead
-              icon={<StarIcon filled />}
-              title="我的最愛"
-              hint={`${currentUser ?? "PTT"} · ${favoriteCards.length} 個關注看板`}
-              accent
-            />
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
-                gap: 12,
-              }}
-            >
-              {displayedFavoriteCards.map((board) => (
-                <FavoriteCard
-                  key={board.name}
-                  board={board}
-                  disabled={!isConnected}
-                  onOpen={() => submitBoard(board.name)}
-                  onUnstar={() => toggleFavorite(board.name)}
-                />
-              ))}
-            </div>
-            {favoriteCards.length > FAVORITE_INITIAL && (
-              <div style={{ display: "flex", justifyContent: "center", marginTop: 18 }}>
-                <button
-                  type="button"
-                  onClick={() => setFavoriteExpanded((expanded) => !expanded)}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "9px 16px",
-                    borderRadius: 10,
-                    background: "var(--surface)",
-                    border: "1px solid var(--border)",
-                    color: "var(--text-muted)",
-                    fontWeight: 600,
-                    fontSize: 13,
-                    cursor: "pointer",
-                    fontFamily: "var(--font)",
-                  }}
-                >
-                  {favoriteExpanded ? (
-                    <>
-                      <ChevronUpIcon /> 收起
-                    </>
-                  ) : (
-                    <>
-                      <ChevronDownIcon /> 展開全部 {favoriteCards.length} 個最愛（再 +
-                      {hiddenFavoriteCount}）
-                    </>
-                  )}
-                </button>
-              </div>
-            )}
-          </section>
-        )}
 
         {(recentBoards?.length ?? 0) > 0 && !isSearching && (
           <section style={{ marginBottom: 40 }}>
@@ -566,6 +512,67 @@ export function BoardInput({
                 );
               })}
             </div>
+          </section>
+        )}
+
+        {favoriteCards.length > 0 && !isSearching && (
+          <section style={{ marginBottom: 40 }}>
+            <SectionHead
+              icon={<StarIcon filled />}
+              title="我的最愛"
+              hint={`${currentUser ?? "PTT"} · ${favoriteCards.length} 個關注看板`}
+              accent
+            />
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+                gap: 12,
+              }}
+            >
+              {displayedFavoriteCards.map((board) => (
+                <FavoriteCard
+                  key={board.name}
+                  board={board}
+                  disabled={!isConnected}
+                  onOpen={() => submitBoard(board.name)}
+                  onUnstar={() => toggleFavorite(board.name)}
+                />
+              ))}
+            </div>
+            {favoriteCards.length > FAVORITE_INITIAL && (
+              <div style={{ display: "flex", justifyContent: "center", marginTop: 18 }}>
+                <button
+                  type="button"
+                  onClick={() => setFavoriteExpanded((expanded) => !expanded)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "9px 16px",
+                    borderRadius: 10,
+                    background: "var(--surface)",
+                    border: "1px solid var(--border)",
+                    color: "var(--text-muted)",
+                    fontWeight: 600,
+                    fontSize: 13,
+                    cursor: "pointer",
+                    fontFamily: "var(--font)",
+                  }}
+                >
+                  {favoriteExpanded ? (
+                    <>
+                      <ChevronUpIcon /> 收起
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDownIcon /> 展開全部 {favoriteCards.length} 個最愛（再 +
+                      {hiddenFavoriteCount}）
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
           </section>
         )}
 

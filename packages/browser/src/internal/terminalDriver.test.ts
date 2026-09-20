@@ -13,6 +13,24 @@ function readRealPttFixture(name: string): string {
   return readFileSync(existsSync(local) ? local : fromRepositoryRoot, "utf8");
 }
 
+it("does not publish a board screen when a deleted article fails to open", async () => {
+  const { fetchArticleFromBotManually } = await import("./terminalDriver.js");
+  const rows = ["【板主:hank2579】 看板《Test》", "[←]離開 [→]閱讀 [Ctrl-P]發表文章", "編號 日 期 作 者 文 章 標 題", buildBoardLine({ index: 286, date: "9/13", author: "-", title: "(本文已被刪除) [someone]" })];
+  const send = vi.fn(async () => true);
+  const partial = vi.fn();
+  const raw = vi.fn();
+  const result = await fetchArticleFromBotManually({
+    send, async enterBoardByName() { return true; },
+    getLine(index: number) { return { str: rows[index] ?? "" }; },
+    async getLines() { return rows; },
+  }, "Test", 286, partial, raw);
+  expect(result).toBeNull();
+  expect(partial).not.toHaveBeenCalled();
+  expect(raw).not.toHaveBeenCalled();
+  expect(send).not.toHaveBeenCalledWith("\x1b[6~");
+  expect(send).not.toHaveBeenCalledWith("q");
+});
+
 function fixtureSection(source: string, heading: string): string {
   const marker = `=== ${heading} ===`;
   const start = source.indexOf(marker);
@@ -1032,13 +1050,23 @@ describe("terminal driver module", () => {
     await expect(withdrawal).resolves.toEqual({ ok: true, outcome: "sent" });
     await concurrent;
 
-    expect(sent.indexOf("SECOND")).toBeGreaterThan(sent.indexOf("撤回我在4樓發言\r"));
+    const { normalizeThreadEvents } = await import("@pttzzz/core/internal");
+    const commands = sent.filter((value) => value.startsWith("撤回我在"));
+    const events = normalizeThreadEvents(["第一樓", "第二樓", "第三樓", "第四樓", ...commands.map((value) => value.trim())].map((content) => ({
+      type: "neutral" as const, author: "TEST_USER", content, time: "09/13 16:59",
+    })));
+    expect(events[1].withdrawn).toBe(true);
+    expect(events[3].withdrawn).toBe(true);
+    expect(events[0].withdrawn).toBe(false);
+    expect(events[2].withdrawn).toBe(false);
+
+    expect(sent.indexOf("SECOND")).toBeGreaterThan(sent.indexOf("撤回我在4樓的發言\r"));
     expect(sent.filter((value) => value === "X")).toHaveLength(2);
     expect(sent.filter((value) => value === "42\r\r")).toHaveLength(1);
     expect(sent).not.toContain("q");
-    expect(sent).toContain("撤回我在2樓發言\r");
-    expect(sent).toContain("撤回我在4樓發言\r");
-    expect(sent).not.toContain("撤回我在2~4樓發言\r");
+    expect(sent).toContain("撤回我在2樓的發言\r");
+    expect(sent).toContain("撤回我在4樓的發言\r");
+    expect(sent).not.toContain("撤回我在2~4樓的發言\r");
   });
 
   it("reports uncertain without retry when a later withdrawal content send is ambiguous", async () => {
@@ -1069,8 +1097,8 @@ describe("terminal driver module", () => {
         if (value === "42\r\r") screenRows = articleRows;
         else if (value === "q") screenRows = boardRows;
         else if (value === "X") screenRows = ["→ TEST_USER:"];
-        else if (value === "撤回我在2樓發言\r") screenRows = ["→ TEST_USER: 撤回我在2樓發言    確定[y/N]:"];
-        else if (value === "撤回我在4樓發言\r") return false;
+        else if (value === "撤回我在2樓的發言\r") screenRows = ["→ TEST_USER: 撤回我在2樓的發言    確定[y/N]:"];
+        else if (value === "撤回我在4樓的發言\r") return false;
         else if (value === "y\r") screenRows = articleRows;
         return true;
       },
@@ -1082,8 +1110,8 @@ describe("terminal driver module", () => {
       article: { board: "Test", index: 42 },
       ranges: [{ start: 2, end: 2 }, { start: 4, end: 4 }],
     })).resolves.toMatchObject({ ok: false, outcome: "uncertain", retryable: false });
-    expect(sent).toContain("撤回我在2樓發言\r");
-    expect(sent).toContain("撤回我在4樓發言\r");
+    expect(sent).toContain("撤回我在2樓的發言\r");
+    expect(sent).toContain("撤回我在4樓的發言\r");
   });
 
   it("aborts a slow article read and releases the serialized queue", async () => {
@@ -1301,7 +1329,7 @@ describe("terminal driver module", () => {
     }
   });
 
-  it("stops a multi-range withdrawal when post-send AID verification fails", async () => {
+  it("stops a multi-range withdrawal when read-back cannot prove the first write", async () => {
     const mod = await import("./terminalDriver.js");
     const { ArticleSessionTracker } = await import("./articleSession.js");
     const invalidate = vi.spyOn(ArticleSessionTracker.prototype, "invalidate");
@@ -1369,14 +1397,80 @@ describe("terminal driver module", () => {
       })).resolves.toMatchObject({ ok: false, outcome: "uncertain" });
 
       expect(sent[0]).toBe("X");
-      expect(sent.slice(-3)).toEqual(["y\r", "Q", "q"]);
+      expect(sent.indexOf("#expectedAid\r")).toBeGreaterThan(sent.indexOf("y\r"));
       expect(mode).toBe("article");
-      expect(invalidate).toHaveBeenCalledWith("push-postcondition-failed");
-      expect(sent).toContain("撤回我在2樓發言\r");
-      expect(sent).not.toContain("撤回我在4樓發言\r");
+      expect(invalidate).toHaveBeenCalledWith("push-failed");
+      expect(sent).toContain("撤回我在2樓的發言\r");
+      expect(sent).not.toContain("撤回我在4樓的發言\r");
     } finally {
       invalidate.mockRestore();
     }
+  });
+
+  it("confirms a push by re-reading the raw event delta when the return screen stays stale", async () => {
+    const mod = await import("./terminalDriver.js");
+    const sent: string[] = [];
+    const baseRows = [
+      "作者  alice 看板 Test",
+      "標題  AID 文章",
+      "時間  Sat Aug 22 10:00:00 2026",
+      "───────────────────────────────────────",
+      "文章內容",
+      ...Array.from({ length: 10 }, () => ""),
+      "瀏覽 第 1/1 頁 (100%)",
+    ];
+    const boardRows = ["看板《Test》"];
+    const infoRows = ["文章代碼(AID): #expectedAid (Test)"];
+    let submitted = false;
+    let mode: "board" | "article" | "stale" | "info" | "menu" | "input" | "confirm" = "board";
+    const rows = () => {
+      if (mode === "board") return boardRows;
+      if (mode === "info") return infoRows;
+      if (mode === "menu") return ["1.值得推薦 2.給它噓聲 3.只加註解"];
+      if (mode === "input") return ["→ TEST_USER:"];
+      if (mode === "confirm") return ["→ TEST_USER: 推1樓    確定[y/N]:"];
+      if (mode === "stale") return baseRows.slice(0, -1);
+      return submitted
+        ? [...baseRows.slice(0, -1), "→ TEST_USER: 推1樓                         09/12 22:00", baseRows.at(-1)!]
+        : baseRows;
+    };
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      getLine(index: number) { return { str: rows()[index] ?? "" }; },
+      async getLines() { return rows(); },
+      async send(command: string) {
+        sent.push(command);
+        if (command === "#expectedAid\r") mode = "article";
+        else if (command === "Q" && mode === "article") mode = "info";
+        else if (command === "q" && mode === "info") mode = "article";
+        else if (command === "q" && (mode === "article" || mode === "stale")) mode = "board";
+        else if (command === "X" && mode === "article") mode = "menu";
+        else if (command === "3" && mode === "menu") mode = "input";
+        else if (command === "推1樓\r" && mode === "input") mode = "confirm";
+        else if (command === "y\r" && mode === "confirm") {
+          submitted = true;
+          mode = "stale";
+        }
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+
+    await driver.readArticleSource({ board: "Test", aid: "expectedAid" }, () => undefined);
+    sent.length = 0;
+
+    const result = await driver.executeArticleCommand({
+      type: "vote-floor",
+      article: { board: "Test", aid: "expectedAid" },
+      floor: 1,
+      direction: "push",
+    });
+
+    expect(sent).toContain("y\r");
+    expect(sent.filter((command) => command === "#expectedAid\r")).toHaveLength(1);
+    expect(result).toEqual({ ok: true, outcome: "sent" });
   });
 
   it("does not resurrect an AID session when an error occurs during post-send verification", async () => {
@@ -3406,6 +3500,56 @@ describe("terminal driver module", () => {
     const articles = await mod.fetchBoardArticlesFromBotManually(bot, "Test");
     expect(articles.some((article) => article.index === 100)).toBe(true);
     expect(articles.some((article) => article.fixed)).toBe(true);
+  });
+
+  it("waits for an older board window instead of returning the stale current screen", async () => {
+    const mod = await import("./terminalDriver.js");
+    let navigationSent = false;
+    let screenReadsAfterNavigation = 0;
+    const rows = (older: boolean) => [
+      "  看板《Test》[測試] 人氣:1",
+      "",
+      "",
+      buildBoardLine({
+        index: older ? 9 : 20,
+        date: "9/06",
+        author: "author",
+        title: older ? "older" : "current",
+      }),
+    ];
+    const bot = {
+      async send() {
+        navigationSent = true;
+        return true;
+      },
+      getLine(index: number) {
+        if (navigationSent && index === 0) screenReadsAfterNavigation += 1;
+        const screen = rows(screenReadsAfterNavigation >= 3);
+        return { str: screen[index] ?? "" };
+      },
+    };
+
+    const articles = await mod.fetchBoardArticlesFromBotManually(bot, "Test", 20);
+
+    expect(articles.map((article) => article.index)).toEqual([9]);
+    expect(screenReadsAfterNavigation).toBeGreaterThanOrEqual(3);
+  });
+
+  it("reports stalled older-page navigation instead of treating a repeated screen as the end", async () => {
+    const mod = await import("./terminalDriver.js");
+    const rows = [
+      "  看板《Test》[測試] 人氣:1",
+      "",
+      "",
+      buildBoardLine({ index: 20, date: "9/06", author: "author", title: "current" }),
+    ];
+    const bot = {
+      async send() { return true; },
+      getLine(index: number) { return { str: rows[index] ?? "" }; },
+    };
+
+    await expect(mod.fetchBoardArticlesFromBotManually(bot, "Test", 20))
+      .rejects.toMatchObject({ code: "ARTICLE_PAGE_STALLED" });
   });
 
   it("refreshes an active title filter from its latest results after pagination", async () => {

@@ -69,3 +69,24 @@
 - [x] Mark every completed checklist item in both Goal 11 plans.
 - [x] Run `npm run verify` from the worktree root. Result: core 374, browser 278 and Web 302 tests passed; 11 helper tests, builds and package smoke passed; lint reported no errors and the three existing Fast Refresh warnings.
 - [x] Review `git diff --check`, the final diff and branch name. Commit design, plan, tests, implementation and notes together on `feature/goal-11-ui-polish`; do not merge or push.
+
+# Write read-back verification follow-up (2026-09-12)
+
+- [x] Add a raw push delta matcher that requires author, native category, exact content, and a count increase.
+- [x] Preserve the final raw article source as the verified session's write baseline.
+- [x] When terminal return detection is uncertain, perform bounded read-only article reloads and promote the result only after a positive delta.
+- [x] Keep uncertain writes locked against automatic resend and show only `尚未同步` with a manual refresh action in the UI.
+- [x] Add browser and web regression coverage, then run `npm run verify`: core 374, browser 282, Web 302, helper 11 and package smoke passed; lint retained only the 3 pre-existing Fast Refresh warnings.
+
+# Board pagination integrity follow-up (2026-09-13)
+
+**Goal:** Prevent delayed PTT terminal redraws from being mistaken for the oldest article and keep the rendered board list in authoritative article-index order across pagination and refresh.
+
+**Architecture:** Browser-private article batches explicitly distinguish more data from a confirmed boundary. Terminal navigation waits for observable progress and reports a retryable stalled state when progress cannot be established; it never represents that state as an empty or terminal page. The reference UI independently normalizes merged article order and presents PTT's yearless board-list date as secondary metadata.
+
+- [x] Add failing browser tests for delayed older-page redraw, stalled navigation, explicit non-terminal underfilled batches, and confirmed exhaustion.
+- [x] Replace the fixed board-navigation delay with condition-driven polling and preserve the legacy `TerminalDriver.listArticles()` return type.
+- [x] Add an internal browser gateway batch result with explicit `exhausted`; keep legacy array drivers compatible and prevent no-progress batches from becoming end-of-list.
+- [x] Add failing web tests for out-of-order load-more and refresh responses, then normalize pinned and numeric-index order after every merge.
+- [x] Make article number the primary board-row order cue and keep the raw PTT month/day label secondary without inventing an unavailable year.
+- [x] Document the newly identified partial-date contract limitation and pagination state boundary, run focused tests, then run `npm run verify` and `git diff --check`: core 374, browser 288, Web 308, helper 11, builds and package smoke passed; lint retained only 3 existing Fast Refresh warnings.

@@ -13,6 +13,18 @@ import type { ArticleEditRecord, OpEditedReplySegment, RawPush } from "./parser.
 
 const OP = "opUser";
 
+it("withdraws the original reply after vote withdrawal and repeated edits", () => {
+  const commands = [
+    "測試", "推1樓", "撤回我對1樓的推", "更正我在1樓發言：測~試",
+    "補充我在1樓發言：測試", "更正我在1樓發言：測試", "撤回我在1樓的發言",
+  ];
+  const events = normalizeThreadEvents(commands.map((content) => ({
+    type: "neutral" as const, author: "MBB200291", content, time: "09/13 16:59",
+  })));
+  expect(events[0].withdrawn).toBe(true);
+  expect(events.filter((event) => event.visible)).toHaveLength(0);
+});
+
 type AnchoredRawPush = RawPush & {
   anchorOffset?: number;
   rawFloor?: number;

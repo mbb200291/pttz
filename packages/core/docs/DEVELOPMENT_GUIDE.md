@@ -91,6 +91,8 @@ Article search and filtering require a non-empty query or filter. Do not turn a 
 
 Article identity is represented by an `ArticleKey` (`index` or canonical `aid`). Keep the key returned by the API with the article; do not replace it with a UI array position. Reply identity is always `replyId`, never a display floor or card index.
 
+Treat `ArticleSummary.publishedAt` as source-provided display text, not necessarily a complete timestamp. PTT board lists normally expose only month/day. Do not infer missing years or reorder paginated results by that field; preserve the gateway order and use numeric article indexes as the stable order cue for index-based PTT boards.
+
 `articleKeyId()` produces an opaque in-memory comparison key. Do not decode its string representation or treat it as a persistence format. Index and AID keys remain distinct representations; the UI must not assume that it can convert between them.
 
 Check `BoardListPage.kind` before rendering: `boards` contains boards, while `directory` may contain both boards and category entries. `searchBoards()` and `filterBoards()` return board pages only. Prefer `onlineUsers` when present; otherwise display `popularityLabel` without inventing a numeric value for `HOT` or `爆!`. Keep pagination cursors paired with the same source and filters. A successful login or disconnect invalidates previous session cursors.

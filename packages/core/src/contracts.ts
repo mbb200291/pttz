@@ -95,6 +95,7 @@ export interface ArticleRef {
 export interface ArticleSummary extends ArticleRef {
   title: string;
   author: string;
+  /** Source-provided date text. Board listings may contain only month/day. */
   publishedAt?: string;
   nativeScore?: number;
   nativeScoreLabel?: string;

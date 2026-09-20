@@ -117,6 +117,51 @@ describe("BrowserPttGateway", () => {
     });
   });
 
+  it("keeps a cursor for an explicitly non-terminal underfilled article batch", async () => {
+    const listArticles = vi.fn(async () => ({
+      items: [{ index: 10, title: "ten", author: "a", date: "9/06" }],
+      exhausted: false,
+    }));
+    const gateway = new BrowserPttGateway(driver({
+      listArticles: listArticles as unknown as BrowserGatewayDriver["listArticles"],
+    }));
+
+    const page = await gateway.listArticles({ board: "Test", limit: 20 });
+
+    expect(page.items.map((item) => item.key.index)).toEqual([10]);
+    expect(page.nextCursor).toEqual(expect.any(String));
+  });
+
+  it("omits the cursor only for an explicitly exhausted article batch", async () => {
+    const listArticles = vi.fn(async () => ({
+      items: [{ index: 1, title: "oldest", author: "a", date: "1/01" }],
+      exhausted: true,
+    }));
+    const gateway = new BrowserPttGateway(driver({
+      listArticles: listArticles as unknown as BrowserGatewayDriver["listArticles"],
+    }));
+
+    const page = await gateway.listArticles({ board: "Test", limit: 20 });
+
+    expect(page.items.map((item) => item.key.index)).toEqual([1]);
+    expect(page.nextCursor).toBeUndefined();
+  });
+
+  it("preserves a retryable terminal-stall explanation under the stable gateway error code", async () => {
+    const stalled = Object.assign(new Error("文章列表尚未更新，請再試一次"), {
+      code: "ARTICLE_PAGE_STALLED",
+    });
+    const gateway = new BrowserPttGateway(driver({
+      listArticles: vi.fn(async () => { throw stalled; }),
+    }));
+
+    await expect(gateway.listArticles({ board: "Test" })).rejects.toMatchObject({
+      code: "GATEWAY_FAILURE",
+      message: "文章列表尚未更新，請再試一次",
+      retryable: true,
+    });
+  });
+
   it("rejects an oversized final wire push before invoking the driver", async () => {
     const execute = vi.fn<BrowserGatewayDriver["execute"]>(async () => ({ ok: true }));
     const gateway = new BrowserPttGateway(driver({ execute }));

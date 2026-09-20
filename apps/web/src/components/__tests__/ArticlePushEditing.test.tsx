@@ -80,10 +80,7 @@ describe("Article push editing", () => {
     render(<Article boardName="Test" articleIndex={99} onBack={() => {}} currentUser="alice" mockArticle={article} />);
 
     await userEvent.click(screen.getByRole("button", { name: "編輯" }));
-    await userEvent.click(screen.getByRole("button", { name: "區段" }));
-    fireEvent.change(screen.getByRole("spinbutton", { name: "區段起點" }), { target: { value: "1" } });
-    fireEvent.change(screen.getByRole("spinbutton", { name: "區段終點" }), { target: { value: "2" } });
-    await userEvent.type(screen.getByRole("textbox"), "新");
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "原新文" } });
     await userEvent.click(screen.getByRole("button", { name: "送出" }));
 
     expect(mocks.editReply).toHaveBeenCalledWith({
@@ -146,8 +143,8 @@ describe("Article push editing", () => {
     expect(mocks.editReply).toHaveBeenCalledWith({
       article: { board: "Test", index: 99 },
       replyId: "push-1",
-      mode: "append",
-      content: "修正內容",
+      mode: "section",
+      changes: [{ start: 0, end: 3, replacement: "修正內容" }],
     });
     await userEvent.click(screen.getByRole("button", { name: "送出" }));
     expect(mocks.editReply).toHaveBeenCalledTimes(1);
@@ -215,6 +212,7 @@ describe("Article push editing", () => {
     );
 
     await userEvent.click(screen.getByRole("button", { name: "編輯" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "原新文" } });
     const submit = screen.getByRole("button", { name: "送出" });
     fireEvent.click(submit);
     fireEvent.click(submit);

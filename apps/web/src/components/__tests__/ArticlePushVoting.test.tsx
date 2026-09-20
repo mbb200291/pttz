@@ -141,7 +141,7 @@ describe("Article push voting", () => {
 
     expect((screen.getAllByRole("button", { name: "推" })[0] as HTMLButtonElement).disabled).toBe(false);
     expect((screen.getAllByRole("button", { name: "噓" })[0] as HTMLButtonElement).disabled).toBe(false);
-    expect(screen.queryByText("作者本人, 使用 → 加註方式")).toBeNull();
+    expect(screen.getByText("作者本人, 使用 → 加註方式").style.visibility).toBe("hidden");
   });
 
   it("renders authoritative article and reply vote totals from the core model", () => {
@@ -255,9 +255,7 @@ describe("Article push voting", () => {
     });
     act(() => screen.getByRole("button", { name: "送出" }).click());
 
-    expect((await screen.findByRole("alert")).textContent).toContain(
-      "可能已送出，請重新載入確認",
-    );
+    expect((await screen.findByRole("alert")).textContent).toContain("尚未同步");
     act(() => screen.getByRole("button", { name: "送出" }).click());
     expect(mocks.replyToArticle).toHaveBeenCalledTimes(1);
     act(() => screen.getByRole("button", { name: "關閉" }).click());
@@ -513,7 +511,8 @@ describe("Article push voting", () => {
     expect(mocks.voteReply).toHaveBeenCalledTimes(1);
 
     act(() => pushButtons[2].click());
-    expect((await screen.findByRole("alert")).textContent).toContain("可能已送出，請重新載入確認");
+    expect((await screen.findByRole("status")).textContent).toContain("尚未同步");
+    expect(screen.getByRole("button", { name: "重新整理" })).toBeTruthy();
     expect(mocks.voteReply).toHaveBeenCalledTimes(2);
     act(() => pushButtons[2].click());
     expect(mocks.voteReply).toHaveBeenCalledTimes(2);

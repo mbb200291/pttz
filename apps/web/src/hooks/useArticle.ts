@@ -37,6 +37,7 @@ export interface ArticleData {
 }
 
 export interface PartialArticleData {
+  articleVotes?: VoteSummary;
   title: string;
   author: string;
   date: string;
@@ -126,7 +127,8 @@ function partialView(article: PartialArticle | Article): PartialArticleData {
       rawBlock: "",
       markerOffset: revision.sequence,
     })),
-    score: article.completeness === "final" ? article.articleVotes?.score ?? 0 : 0,
+    articleVotes: article.articleVotes,
+    score: article.articleVotes?.score,
   };
 }
 

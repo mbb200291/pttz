@@ -6,6 +6,49 @@ import { RichContent } from "../RichContent";
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("original body layout", () => {
+  it("structures a trailing article footer and keeps its link clickable in original layout", () => {
+    const url = "https://www.ptt.cc/bbs/Stock/M.1789390859.A.205.html";
+    const text = `正文\n--\n\x1b[32m※ 發信站: 批踢踢實業坊(ptt.cc), 來自: 61.228.237.120 (臺灣)\n※ 文章網址: ${url}\x1b[0m`;
+    render(<RichContent text={text} variant="body" />);
+    const body = screen.getByRole("region", { name: "原始正文" });
+    expect(body).not.toHaveTextContent("發信站");
+    expect(screen.getByRole("region", { name: "文章資訊" })).toHaveTextContent("61.228.237.120 (臺灣)");
+    expect(screen.getByRole("link", { name: url })).toHaveAttribute("href", url);
+    fireEvent.click(screen.getByRole("button", { name: "原始排版" }));
+    expect(screen.queryByRole("region", { name: "文章資訊" })).toBeNull();
+    expect(body).toHaveTextContent("※ 發信站:");
+    expect(body).toContainElement(screen.getByRole("link", { name: url }));
+  });
+  it.each([false, true])("renders YouTube at its source position, or below original layout (ANSI: %s)", (ansi) => {
+    const url = "https://www.youtube.com/watch?v=WasUAA9rWSI";
+    const displayedUrl = ansi ? "https://www.youtube.com/\x1b[33mwatch?v=WasUAA9rWSI\x1b[0m" : url;
+    render(<RichContent text={`肥肥我在你水管看到\n\n${displayedUrl}\n\n好像當初華映員工上街遊行一樣`} variant="body" />);
+    const source = screen.getByRole("region", { name: "原始正文" });
+    expect(source).toHaveTextContent(url);
+    const preview = screen.getByRole("button", { name: "播放 YouTube 影片" });
+    expect(preview.querySelector("img")).toHaveAttribute("src", "https://img.youtube.com/vi/WasUAA9rWSI/hqdefault.jpg");
+    expect(source).toContainElement(preview);
+    const following = source.querySelector("pre:last-child")!;
+    expect(following).toHaveTextContent("好像當初華映員工上街遊行一樣");
+    expect(preview.compareDocumentPosition(following) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "原始排版" }));
+    expect(source.querySelector("pre")?.textContent).toContain(url);
+    const originalPreview = screen.getByRole("button", { name: "播放 YouTube 影片" });
+    expect(source).not.toContainElement(originalPreview);
+    fireEvent.click(screen.getByRole("button", { name: "原始排版" }));
+    expect(screen.getAllByRole("button", { name: "播放 YouTube 影片" })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "播放 YouTube 影片" }));
+    expect(screen.getByTitle("YouTube video")).toHaveAttribute("src", "https://www.youtube-nocookie.com/embed/WasUAA9rWSI?autoplay=1");
+  });
+  it("keeps colored text and source offsets around normalized images and multiple media", () => {
+    render(<RichContent text={'\x1b[31m前 https://imgur.com/abc 後\nhttps://youtu.be/WasUAA9rWSI\n末\x1b[0m'} variant="body" />);
+    const source = screen.getByRole("region", { name: "原始正文" });
+    const blocks = source.querySelectorAll("pre");
+    expect([...blocks].map(block => block.textContent)).toEqual(["前 ", " 後\n", "\n末"]);
+    for (const block of blocks) expect(block.querySelector("span")).toHaveStyle({ color: "#f28b82" });
+    expect(source.querySelector("img")).toHaveAttribute("src", "https://i.imgur.com/abc.jpg");
+    expect(source.querySelectorAll("img")).toHaveLength(2);
+  });
   it("preserves terminal-width box drawing and seamless block cells in original layout", () => {
     const text = "┌──────┐\n│█2   █2   │\n│██  ██  │\n└──────┘";
     render(<RichContent text={text} variant="body" />);
@@ -19,20 +62,21 @@ describe("original body layout", () => {
     expect(source.querySelector('[data-terminal-glyph="─"] svg path')).not.toBeNull();
     expect(source.parentElement).toHaveStyle({ lineHeight: "1.2" });
   });
-  it("uses compact layout labels and keeps the toggle at the toolbar end", () => {
+  it("shows only the right-aligned layout toggle without a status label", () => {
     render(<RichContent text="https://i.example.test/a.jpg" variant="body" />);
     const button = screen.getByRole("button", { name: "原始排版" });
     const toolbar = button.parentElement!;
-    expect(toolbar.firstElementChild).toHaveTextContent(/^自動$/);
+    expect(toolbar.children).toHaveLength(1);
     expect(toolbar.lastElementChild).toBe(button);
     expect(button).toHaveClass("ml-auto");
     expect(screen.queryByText("媒體預覽（網址保留於正文）")).not.toBeInTheDocument();
     expect(screen.getByRole("link").querySelector("img")).toHaveAttribute("src", "https://i.example.test/a.jpg");
     fireEvent.click(button);
-    expect(toolbar.firstElementChild).toHaveTextContent(/^原始排版$/);
+    expect(toolbar.children).toHaveLength(1);
     expect(button).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(button);
-    expect(toolbar.firstElementChild).toHaveTextContent(/^自動$/);
+    expect(toolbar.children).toHaveLength(1);
+    expect(button).toHaveAttribute("aria-pressed", "false");
   });
   it("uses website defaults for unstyled prose even when the original line fits", () => {
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function(this: HTMLElement) {

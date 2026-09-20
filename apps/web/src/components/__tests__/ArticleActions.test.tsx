@@ -46,6 +46,23 @@ const article = {
 afterEach(cleanup);
 
 describe("Article actions", () => {
+  it("uses fixed commands without focusing the article or selecting elements", () => {
+    const back = vi.fn(), reply = vi.fn();
+    render(<Article boardName="Test" articleIndex={99} onBack={back} currentUser="bob" mockArticle={article} onReplyToBoard={reply} />);
+    expect(document.activeElement).toBe(document.body);
+    for (const key of ["ArrowUp", "ArrowDown", "ArrowRight"]) {
+      expect(fireEvent.keyDown(document.body, { key })).toBe(true);
+      expect(document.activeElement).toBe(document.body);
+    }
+    fireEvent.keyDown(document.body, { key: "r" });
+    expect(reply).toHaveBeenCalledOnce();
+    fireEvent.keyDown(document.body, { key: "ArrowLeft" });
+    expect(back).toHaveBeenCalledOnce();
+    fireEvent.keyDown(document.body, { key: "x" });
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    fireEvent.keyDown(document.body, { key: "ArrowLeft" });
+    expect(back).toHaveBeenCalledOnce();
+  });
   it("opens board reply with R and push composer with X, guarding active composers", () => {
     const reply = vi.fn();
     render(<Article boardName="Test" articleIndex={99} onBack={() => {}} currentUser="bob"
