@@ -134,11 +134,11 @@ function authorFieldColumns(rawLine: string, author: string): number {
 }
 
 /** Stored author-field width includes alignment padding, but not the colon. */
-export function pushContentCapacity(authorColumns: number, hasIpAddress = false): number {
+export function pushContentCapacity(authorColumns: number, hasIpAddress = false, separator: "" | " " = " "): number {
   const inputBufferColumns =
     RECOMMEND_LAYOUT_COLUMNS -
     RECOMMEND_LEAD_COLUMNS -
-    RECOMMEND_CONTENT_SEPARATOR_COLUMNS -
+    (separator === "" ? 0 : RECOMMEND_CONTENT_SEPARATOR_COLUMNS) -
     RECOMMEND_DATE_COLUMNS -
     RECOMMEND_DATE_TIME_SPACE_COLUMNS -
     RECOMMEND_TIME_COLUMNS -
@@ -156,7 +156,9 @@ function remainingPushContentColumns(
   content: string,
   hasIpAddress: boolean,
 ): number {
-  const contentCapacity = pushContentCapacity(authorFieldColumns(rawLine, author), hasIpAddress);
+  const prefix = rawLine.match(new RegExp(`^${PUSH_MARKER_PATTERN}`, "u"));
+  const separator = prefix && rawLine[prefix[0].length] !== " " ? "" : " ";
+  const contentCapacity = pushContentCapacity(authorFieldColumns(rawLine, author), hasIpAddress, separator);
   return Math.max(0, contentCapacity - terminalColumns(content));
 }
 

@@ -54,7 +54,7 @@ describe("public PttzzzClient socket bridge", () => {
     const { unmount } = renderHook(() => usePttSocket());
     await waitFor(() => expect(connect).toHaveBeenCalled());
     expect(clientOptions).toHaveBeenCalled();
-    expect(clientOptions.mock.calls.every((args) => args[0] === undefined)).toBe(true);
+    expect(clientOptions.mock.calls.every((args) => args[0]?.aggregation === undefined)).toBe(true);
     unmount();
   });
   it("logs out only this client and clears local credentials without logging in again", async () => {

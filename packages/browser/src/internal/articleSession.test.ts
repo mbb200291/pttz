@@ -25,14 +25,14 @@ describe("ArticleSessionTracker", () => {
     expect(tracker.diagnostic).toEqual({ state: "article", reason: "matched" });
   });
 
-  it("matches AIDs without regard to an optional hash or letter case", () => {
+  it("ignores an optional hash but preserves case-sensitive AID identity", () => {
     const tracker = new ArticleSessionTracker();
     tracker.record({ ...article, key: { board: "Test", aid: "#1AbCdEfG" } });
 
     expect(tracker.match({
       ...article,
       key: { board: "test", aid: "1aBcDeFg" },
-    })).toBe(true);
+    })).toBe(false);
   });
 
   it("normalizes ASCII I/i independently of the runtime locale", () => {
@@ -52,7 +52,7 @@ describe("ArticleSessionTracker", () => {
 
       expect(tracker.match({
         ...article,
-        key: { board: "index", aid: "iabc" },
+        key: { board: "index", aid: "IABC" },
         board: "index",
         author: "ivan",
       })).toBe(true);

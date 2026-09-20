@@ -92,6 +92,17 @@ describe("splitArticleEditableContent", () => {
 });
 
 describe("parsePushBuffer", () => {
+  it("measures local pushes without a space after the colon", () => {
+    const pushes = parsePushBuffer(
+      `→ pttzzz2:${"a".repeat(54)} 09/20 10:43\n→ pttzzz2:x 09/20 10:44`,
+    );
+
+    expect(pushes.map((push) => ({ content: push.content, remaining: push.remainingContentColumns }))).toEqual([
+      { content: "a".repeat(54), remaining: 0 },
+      { content: "x", remaining: 53 },
+    ]);
+  });
+
   it("removes IPv4 addresses from push content and keeps them as metadata", () => {
     const pushes = parsePushBuffer(
       "推 user1: 第一則推文                         111.22.33.44 04/09 10:01",

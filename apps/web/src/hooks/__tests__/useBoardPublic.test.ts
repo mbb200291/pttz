@@ -66,6 +66,50 @@ describe("useBoard public client reads", () => {
     expect(result.current.articles.map((item) => item.key.index)).toEqual([11, 10, 9]);
   });
 
+  it("discards older cached pages when deletion reassigns an overlapping index", async () => {
+    listArticles
+      .mockResolvedValueOnce({ ok: true, value: { items: [summary(10), summary(9), summary(8)], nextCursor: "old" } })
+      .mockResolvedValueOnce({ ok: true, value: { items: [{ ...summary(9), title: "article-10" }], nextCursor: "fresh" } })
+      .mockResolvedValueOnce({ ok: true, value: { items: [{ ...summary(8), title: "article-9" }] } });
+    const { result } = renderHook(() => useBoard("Test"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => result.current.refresh());
+    await waitFor(() => expect(result.current.refreshing).toBe(false));
+    expect(result.current.articles.map(item => item.title)).toEqual(["article-10"]);
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(result.current.articles).toHaveLength(2));
+    expect(listArticles).toHaveBeenLastCalledWith({ board: "Test", cursor: "fresh" });
+    expect(result.current.articles.map(item => item.title)).toEqual(["article-10", "article-9"]);
+  });
+
+  it("reloads the latest page when load-more detects an index reassignment", async () => {
+    listArticles
+      .mockResolvedValueOnce({ ok: true, value: { items: [summary(10), summary(9)], nextCursor: "old" } })
+      .mockResolvedValueOnce({ ok: true, value: { items: [{ ...summary(9), title: "moved" }], nextCursor: "stale" } })
+      .mockResolvedValueOnce({ ok: true, value: { items: [{ ...summary(9), title: "moved" }, summary(8)], nextCursor: "fresh" } });
+    const { result } = renderHook(() => useBoard("Test"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(listArticles).toHaveBeenCalledTimes(3);
+    expect(listArticles).toHaveBeenLastCalledWith({ board: "Test", cursor: undefined });
+    expect(result.current.articles.map(item => item.title)).toEqual(["moved", "article-8"]);
+  });
+
+  it("reloads the latest page when the gateway rejects a moved cursor anchor", async () => {
+    listArticles
+      .mockResolvedValueOnce({ ok: true, value: { items: [summary(10), summary(9)], nextCursor: "old" } })
+      .mockResolvedValueOnce({ ok: false, error: { code: "STALE_CURSOR", message: "文章列表已變更", retryable: true } })
+      .mockResolvedValueOnce({ ok: true, value: { items: [{ ...summary(9), title: "moved" }], nextCursor: "fresh" } });
+    const { result } = renderHook(() => useBoard("Test"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(listArticles).toHaveBeenCalledTimes(3);
+    expect(result.current.articles.map(item => item.title)).toEqual(["moved"]);
+    expect(result.current.error).toBeNull();
+  });
+
   it("keeps pagination retryable and clears a transient load-more error after recovery", async () => {
     listArticles
       .mockResolvedValueOnce({ ok: true, value: { items: [summary(10)], nextCursor: "next" } })

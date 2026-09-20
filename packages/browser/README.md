@@ -41,16 +41,25 @@ scripted terminal sends. See the [UI formatting contract](../core/docs/DEVELOPME
 This implementation wraps `ptt-client`, serializes terminal operations, and
 translates PTT screens and prompts into the public core gateway contract.
 The browser host must supply `Buffer` and a same-origin `/ptt-ws` WebSocket
-proxy to `wss://ws.ptt.cc/bbs` with `Origin: https://term.ptt.cc`.
-The repository development server supplies this proxy; other hosts must
-configure it themselves.
+proxy. For the official site, that proxy connects to `wss://ws.ptt.cc/bbs`
+with `Origin: https://term.ptt.cc`; the repository development server can
+instead connect to local `imageptt` over Telnet.
 
 UI authors should start with the core [Building a UI with @pttzzz/core](../core/docs/DEVELOPMENT_GUIDE.md).
 Use `createBrowserClient()` from the package root and send operations through
 the resulting `PttzzzClient`; terminal driver helpers are internal.
+When connecting to local `imageptt`, use
+`createBrowserClient({ pushFormat: "local", terminalProtocol: "local" })`.
+Push confirmations use `ID:content`; the terminal profile also selects local AID
+navigation and validates pagination anchors when deletion renumbers articles.
+Both options default to `ptt`, whose push format is `ID: content`.
 
 Run `npm test -w @pttzzz/browser` from the repository root to check the gateway
 and terminal workflows. Core rule conformance is documented in the
 [core README](../core/docs/README.md#fixture-符合性驗證).
 
 Use `@pttzzz/browser/testing` for the fake browser gateway used by tests and previews.
+
+Terminal workflow developers can consult the
+[local/official PTT format comparison](../../dev-notes/goal-14-local-ptt-conformance.md)
+for observed screen differences and verification coverage.

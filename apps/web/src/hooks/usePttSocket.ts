@@ -92,7 +92,10 @@ function getClient(fakeMode: boolean): PttzzzClient {
   if (existing) return existing;
   const client = fakeMode
     ? new PttzzzClient(createFakeBrowserGateway())
-    : createBrowserClient();
+    : createBrowserClient({
+        pushFormat: import.meta.env.VITE_PTT_PUSH_FORMAT === "local" ? "local" : "ptt",
+        terminalProtocol: import.meta.env.VITE_PTT_PUSH_FORMAT === "local" ? "local" : "ptt",
+      });
   clients[mode] = client;
   return client;
 }

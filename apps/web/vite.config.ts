@@ -37,7 +37,10 @@ export default defineConfig(({ command, mode, isPreview }) => {
   const label = target.kind === 'local' ? `本機 PTT（${target.host}:${target.port}）` : '正式 PTT（ws.ptt.cc）'
   return {
     envDir,
-    define: { 'import.meta.env.VITE_PTT_CONNECTION_LABEL': JSON.stringify(label) },
+    define: {
+      'import.meta.env.VITE_PTT_CONNECTION_LABEL': JSON.stringify(label),
+      'import.meta.env.VITE_PTT_PUSH_FORMAT': JSON.stringify(target.kind),
+    },
     resolve: {
       alias: [
         { find: /^@pttzzz\/browser\/testing$/, replacement: fileURLToPath(new URL('../../packages/browser/src/testing.ts', import.meta.url)) },

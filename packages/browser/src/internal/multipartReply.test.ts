@@ -112,6 +112,7 @@ describe("multipart reply", () => {
     const queue = new ReplyDraftQueue();
     const send = vi.fn().mockRejectedValue(new Error("closed"));
     expect(await queue.run(input, prepare, send)).toMatchObject({ confirmed: 0, status: "uncertain" });
+    expect(queue.diagnostic).toMatchObject({ operationId: "one", index: 0, stage: "send", message: "closed" });
     await queue.run(input, prepare, send);
     expect(send).toHaveBeenCalledTimes(1);
   });
@@ -133,6 +134,31 @@ describe("multipart reply", () => {
       .toEqual({ author: "MBB200291", content: "x", capacity: 51 });
     expect(readPushConfirmation(`→ MBB200291:${" 短句  測試。".padEnd(46)} 確定[y/N]:`))
       .toMatchObject({ author: "MBB200291", content: "短句  測試。" });
+  });
+  it("plans local no-separator replies using the measured 54-column field", () => {
+    const confirmation = readPushConfirmation(`→ pttzzz2:${"x".padEnd(55)} 確定[y/N]:`);
+    expect(confirmation).toEqual({ author: "pttzzz2", content: "x", capacity: 54 });
+    const pieces = planReplyDraft("中".repeat(40), confirmation!.capacity, undefined, confirmation!.author, "");
+    expect(pieces.every((piece) => encodedReplyBytes(piece) <= 54)).toBe(true);
+    const projected = aggregatePushes(parsePushBuffer(pieces.map((piece) =>
+      `→ pttzzz2:${piece} 09/20 10:43`).join("\n")), "op");
+    expect(projected.pushes.map((push) => push.content)).toEqual(["中".repeat(40)]);
+  });
+  it("delivers a local multipart reply and reads it back as one discussion", async () => {
+    const send = vi.fn().mockResolvedValue({ ok: true, outcome: "sent" });
+    const draft = "甲乙".repeat(36);
+    const receipt = await new ReplyDraftQueue("").run(
+      { ...input, operationId: "local", content: draft },
+      async () => ({ author: "pttzzz2", capacity: 54 }),
+      send,
+    );
+    expect(receipt).toMatchObject({ status: "complete", confirmed: 3 });
+    const raw = send.mock.calls.map(([piece]) => `→ pttzzz2:${piece} 09/20 10:43`).join("\n");
+    expect(aggregatePushes(parsePushBuffer(raw), "op").pushes.map((push) => push.content)).toEqual([draft]);
+  });
+  it("rejects the opposite target's confirmation format before sending", () => {
+    expect(readPushConfirmation(`→ pttzzz2:${"x".padEnd(55)} 確定[y/N]:`, " ")).toBeNull();
+    expect(readPushConfirmation(`→ pttzzz2: ${"x".padEnd(54)} 確定[y/N]:`, "")).toBeNull();
   });
   it("does not plan a full-width character beyond the live field boundary", () => {
     const layout = readPushConfirmation("→ MBB200291: x                                                    確定[y/N]:  ")!;

@@ -1,4 +1,7 @@
-import Ptt from "ptt-client";
+import Ptt from "./streamingPtt.js";
+import { setTerminalProtocol, terminalProtocol, type TerminalProtocol } from "./terminalProtocol.js";
+import { editorSaveKey } from "./editorPrompt.js";
+import { replaceEditorBody } from "./articleEditor.js";
 import { readPushConfirmation, ReplyDraftQueue } from "./multipartReply.js";
 import type { GatewayReplyDraftInput, ReplyDelivery } from "@pttzzz/core";
 import { articleTerminalLine, type TerminalLine } from "./terminalLine.js";
@@ -129,6 +132,7 @@ export interface ArticleOpenTrace {
 export type ActionFailureCode =
   | "push-entry-timeout"
   | "push-content-prompt-timeout"
+  | "push-input-echo-timeout"
   | "push-confirm-timeout"
   | "push-preflight-cancelled"
   | "push-cancel-timeout"
@@ -233,6 +237,8 @@ const DEFAULT_ARTICLE_REPLY_TIMEOUTS: ArticleReplyTimeouts = {
 };
 
 export interface TerminalDriver {
+  readonly usesMutableArticleIndexes?: boolean;
+  readArticleAidAtIndex?(board: string, index: number): Promise<string | undefined>;
   sendReplyDraft?(input: GatewayReplyDraftInput, onProgress?: (progress: ReplyDelivery) => void): Promise<ReplyDelivery>;
   send: (data: string) => Promise<boolean>;
   login: (
@@ -390,6 +396,7 @@ type BotLike = {
   }>;
   getFavorite?: (offsets?: number | number[]) => Promise<PttBoardRow[]>;
   getLine?: (n: number) => TerminalLine;
+  getCursor?: () => { x: number; y: number };
 };
 
 type ArticleFetchBot = Partial<
@@ -411,7 +418,7 @@ type BoardFetchBot = Partial<
   >
 >;
 
-type WriteBot = BoardFetchBot & Pick<ArticleFetchBot, "getLines">;
+type WriteBot = BoardFetchBot & Pick<ArticleFetchBot, "getLines"> & Pick<BotLike, "getCursor">;
 
 type LoginTerminalBot = Pick<BotLike, "send">;
 
@@ -499,6 +506,7 @@ const MAX_ARTICLE_EDIT_LINES = 2000;
 const MAX_BOARD_SCREEN_INDEX_GAP = 50000;
 
 type AdapterDebugGlobal = typeof globalThis & {
+  __pttzzzLastReplyDeliveryTrace?: ReplyDraftQueue["diagnostic"];
   __pttzzzLastArticleOpenTrace?: ArticleOpenTrace | null;
   __pttzzzLastPushTrace?: {
     startedAt: number;
@@ -738,7 +746,7 @@ class PttClientTerminalDriver implements TerminalDriver {
   >();
   private readonly screenListeners = new Set<(screen: string) => void>();
   private readonly runSerial = createSerialTaskRunner();
-  private readonly replyDrafts = new ReplyDraftQueue();
+  private readonly replyDrafts: ReplyDraftQueue;
   private readonly replyDraftTargets = new Map<string, { key: ArticleKey; author: string; title: string }>();
   private readonly articleAidByRelativeIndex = new Map<string, string>();
   private readonly unresolvedRelativeArticleIndexes = new Set<string>();
@@ -748,7 +756,8 @@ class PttClientTerminalDriver implements TerminalDriver {
     criteria: string;
   }> | null = null;
 
-  constructor(bot?: BotLike) {
+  constructor(bot?: BotLike, private readonly pushFormat: "local" | "ptt" = "ptt", protocol: TerminalProtocol = "ptt") {
+    this.replyDrafts = new ReplyDraftQueue(pushFormat === "local" ? "" : " ");
     if (bot) {
       this.bot = bot;
       this.status = bot.state.connect ? "connected" : "connecting";
@@ -756,6 +765,7 @@ class PttClientTerminalDriver implements TerminalDriver {
     } else {
       this.bot = this.createBot();
     }
+    setTerminalProtocol(this.bot, protocol);
   }
 
   private createBot(): BotLike {
@@ -809,16 +819,6 @@ class PttClientTerminalDriver implements TerminalDriver {
     this.articleSessionIdentity = undefined;
     this.articleSessionRawText = undefined;
     this.articleSession.invalidate(reason);
-  }
-
-  private clearRelativeArticleReferences(boardName: string): void {
-    const prefix = `${boardName.toLowerCase()}:`;
-    for (const key of this.articleAidByRelativeIndex.keys()) {
-      if (key.startsWith(prefix)) this.articleAidByRelativeIndex.delete(key);
-    }
-    for (const key of this.unresolvedRelativeArticleIndexes) {
-      if (key.startsWith(prefix)) this.unresolvedRelativeArticleIndexes.delete(key);
-    }
   }
 
   private rolloverRelativeArticleReferences(boardName: string): void {
@@ -883,7 +883,7 @@ class PttClientTerminalDriver implements TerminalDriver {
       const wasFiltered = this.lastFilterBoardName !== null;
       this.lastFilterBoardName = null;
       this.lastFilterConditions = null;
-      this.clearRelativeArticleReferences(boardName);
+      this.rolloverRelativeArticleReferences(boardName);
       this.invalidateArticleSession("navigation");
       return fetchBoardArticlesFromBotManually(
         this.bot,
@@ -893,6 +893,28 @@ class PttClientTerminalDriver implements TerminalDriver {
       );
     });
   }
+
+  async readArticleAidAtIndex(board: string, index: number): Promise<string | undefined> {
+    if (terminalProtocol(this.bot) !== "local") return undefined;
+    return this.runSerial(async () => {
+      this.invalidateArticleSession("cursor-anchor");
+      try {
+        if (!await ensureBoardView(this.bot, board, true)) throw new Error("無法確認看板位置");
+        await this.bot.send(`${index}\r\r`);
+        const until = Date.now() + 1500;
+        while (Date.now() < until && !parsePartialScreen(readVisibleScreen(this.bot))) await sleep(20);
+        const article = parsePartialScreen(readVisibleScreen(this.bot));
+        if (!article || article.board.toLowerCase() !== board.toLowerCase()) throw new Error("文章列表已變更");
+        const evidence = await readOpenedArticleAid(this.bot);
+        if (!evidence || evidence.board.toLowerCase() !== board.toLowerCase()) throw new Error("無法確認文章代碼");
+        return evidence.aid;
+      } finally {
+        await leaveArticleReaderIfNeeded(this.bot);
+      }
+    });
+  }
+
+  get usesMutableArticleIndexes(): boolean { return terminalProtocol(this.bot) === "local"; }
 
   async getArticle(
     boardName: string,
@@ -1149,7 +1171,7 @@ class PttClientTerminalDriver implements TerminalDriver {
         }
         const open = "index" in key
           ? () => this.bot.send?.(`${key.index}\r\r`) ?? Promise.resolve(false)
-          : () => this.bot.send?.(`#${key.aid}\r`) ?? Promise.resolve(false);
+          : () => openArticleByAid(this.bot, key.aid);
         const article = await fetchArticleFromBotManuallyWithOpen(
           this.bot,
           key.board,
@@ -1162,7 +1184,7 @@ class PttClientTerminalDriver implements TerminalDriver {
         if (!article) throw new Error("找不到文章");
         let aidMatches = true;
         let sessionKey = key;
-        if (relativeSearchResult) {
+        if (relativeSearchResult || ("index" in key && terminalProtocol(this.bot) === "local")) {
           const relativeKey = `${key.board.toLowerCase()}:${key.index}`;
           this.articleAidByRelativeIndex.delete(relativeKey);
           this.unresolvedRelativeArticleIndexes.add(relativeKey);
@@ -1321,7 +1343,7 @@ class PttClientTerminalDriver implements TerminalDriver {
       let key = this.replyDraftTargets.get(input.operationId)?.key ?? input.article;
       let epoch = this.articleSessionEpoch;
       let sender = "";
-      return this.replyDrafts.run(input, async () => {
+      const delivery = await this.replyDrafts.run(input, async () => {
         await this.waitUntilLoggedIn();
         if (key.index !== undefined && !this.replyDraftTargets.has(input.operationId)) {
           const relative = `${key.board.toLowerCase()}:${key.index}`;
@@ -1332,19 +1354,24 @@ class PttClientTerminalDriver implements TerminalDriver {
         epoch = this.articleSessionEpoch;
         const acquired = await this.acquireArticleContext(key, epoch);
         if (!acquired.ok) throw new Error("無法開啟文章");
+        if (key.index !== undefined && terminalProtocol(this.bot) === "local") {
+          const evidence = await readOpenedArticleAid(this.bot);
+          if (!evidence || evidence.board.toLowerCase() !== key.board.toLowerCase()) throw new Error("無法確認文章代碼");
+          key = { board: key.board, aid: evidence.aid };
+        }
         const previous = this.replyDraftTargets.get(input.operationId);
         if (previous && (previous.author !== acquired.identity.author || previous.title !== acquired.identity.title)) {
           throw new Error("文章已變更，請先確認已送出的內容");
         }
         this.replyDraftTargets.set(input.operationId, { key, ...acquired.identity });
-        const layout = await measurePushCapacity(this.bot, () => this.articleSessionEpoch === epoch);
+        const layout = await measurePushCapacity(this.bot, () => this.articleSessionEpoch === epoch, this.pushFormat === "local" ? "" : " ");
         sender = layout.author;
         return layout;
       }, async (content, index, capacity) => {
         if (this.articleSessionEpoch !== epoch) return { ok: false, code: "SESSION_CHANGED", message: "連線已變更", outcome: "not-sent", retryable: true };
         const result = await this.executeSingleArticlePush({ type: "reply-article", article: key, content,
           pushType: input.floor !== undefined || index > 0 ? "neutral" : input.pushType }, (screen) => {
-            const confirmed = readPushConfirmation(screen);
+            const confirmed = readPushConfirmation(screen, this.pushFormat === "local" ? "" : " ");
             return confirmed !== null && confirmed.author.toLowerCase() === sender.toLowerCase() && confirmed.capacity === capacity && confirmed.content === content;
           });
         return result.ok ? { ok: true, outcome: "sent" } : {
@@ -1352,6 +1379,8 @@ class PttClientTerminalDriver implements TerminalDriver {
           outcome: result.outcome ?? "uncertain", retryable: false,
         };
       }, onProgress);
+      if (IS_DEV) (globalThis as AdapterDebugGlobal).__pttzzzLastReplyDeliveryTrace = this.replyDrafts.diagnostic;
+      return delivery;
     });
   }
 
@@ -1415,19 +1444,24 @@ class PttClientTerminalDriver implements TerminalDriver {
           expectedAuthor: identity.author,
           expectedTitle: identity.title,
         };
-        return command.type === "edit-article"
-          ? submitArticleEditFromBot(this.bot, {
+        const result = command.type === "edit-article"
+          ? await submitArticleEditFromBot(this.bot, {
               ...request,
               body: command.content,
               formatting: command.formatting,
             })
           : command.type === "delete-article"
-            ? submitArticleDeleteFromBot(this.bot, request)
-            : submitArticleReplyToBoardFromBot(this.bot, {
+            ? await submitArticleDeleteFromBot(this.bot, request)
+            : await submitArticleReplyToBoardFromBot(this.bot, {
                 ...request,
                 body: command.content,
                 formatting: command.formatting,
               });
+        if (command.type === "delete-article" && result.outcome !== "not-sent") {
+          this.rolloverRelativeArticleReferences(key.board);
+          this.invalidateArticleSession("article-deleted");
+        }
+        return result;
       }
       return this.executeSingleArticlePush(command);
     });
@@ -1488,6 +1522,7 @@ class PttClientTerminalDriver implements TerminalDriver {
         undefined,
         () => this.articleSessionEpoch === writeEpoch,
         confirmationGuard,
+        confirmationGuard !== undefined,
       );
       let finalResult = result;
       const writeEvidence = writeEvidenceByResult.get(result);
@@ -1586,7 +1621,7 @@ class PttClientTerminalDriver implements TerminalDriver {
     const articleIndex = key.index;
     const open = articleIndex !== undefined
       ? () => this.bot.send?.(`${articleIndex}\r\r`) ?? Promise.resolve(false)
-      : () => this.bot.send?.(`#${key.aid ?? ""}\r`) ?? Promise.resolve(false);
+      : () => openArticleByAid(this.bot, key.aid ?? "");
     let baselineRawText: string | undefined;
     const article = await fetchArticleFromBotManuallyWithOpen(
       this.bot, key.board, articleIndex ?? 0, open,
@@ -1651,7 +1686,7 @@ class PttClientTerminalDriver implements TerminalDriver {
       }
       const open = readbackKey.index !== undefined
         ? () => this.bot.send?.(`${readbackKey.index}\r\r`) ?? Promise.resolve(false)
-        : () => this.bot.send?.(`#${readbackKey.aid ?? ""}\r`) ?? Promise.resolve(false);
+        : () => openArticleByAid(this.bot, readbackKey.aid ?? "");
       for (let attempt = 0; attempt < 2; attempt += 1) {
         let finalRawText: string | undefined;
         const article = await fetchArticleFromBotManuallyWithOpen(
@@ -1716,7 +1751,7 @@ class PttClientTerminalDriver implements TerminalDriver {
         this.bot,
         key.board,
         0,
-        () => this.bot.send?.(`#${aid}\r`) ?? Promise.resolve(false),
+        () => openArticleByAid(this.bot, aid),
         undefined,
         undefined,
         { leaveOpen: true },
@@ -1873,7 +1908,7 @@ class PttClientTerminalDriver implements TerminalDriver {
   }
 }
 
-let singletonDriver: TerminalDriver | null = null;
+const terminalDrivers = new Map<string, TerminalDriver>();
 
 export const pttClientModuleLoaded = typeof Ptt === "function";
 
@@ -2743,14 +2778,11 @@ function getPushTypeKey(pushType: PushType): string {
 export function isArticleEditorScreen(screen: string): boolean {
   const plain = stripAnsi(screen).replace(/\r/g, "");
   if (isPostGuidelineScreen(plain)) return false;
-  return /文章編輯/u.test(plain) && /Ctrl-X|插入模式|取代模式/u.test(plain);
+  return /文章編輯|編輯文章/u.test(plain) && /Ctrl-X|\^X|插入模式|取代模式/u.test(plain);
 }
 
 export function isArticleEditSavePrompt(screen: string): boolean {
-  const plain = stripAnsi(screen).replace(/\r/g, "");
-  return /(?:確定|是否).*(?:儲存|存檔)|(?:儲存|存檔).*(?:\[Y\/n\]|確定|是否)/iu.test(
-    plain,
-  );
+  return editorSaveKey(screen) !== null;
 }
 
 export function isArticleEditSuccessScreen(
@@ -2801,9 +2833,19 @@ function isMissingArticleScreen(screen: string): boolean {
 }
 
 export function parseArticleInfoAid(screen: string): { aid: string; board: string } | null {
-  const match = stripAnsi(screen).replace(/\r/g, "").match(
-    /文章代碼\s*\(AID\)\s*:\s*#([^\s()]+)\s*\(([^)]+)\)/iu,
-  );
+  const plain = stripAnsi(screen).replace(/\r/g, "");
+  const nonblank = plain.split("\n").filter(line => line.trim());
+  if (/瀏覽 第|目前顯示/u.test(nonblank[nonblank.length - 1] ?? "")) return null;
+  const lines = plain.split("\n");
+  const boxed = lines.some(line => /^\s*┌─+┐\s*$/u.test(line));
+  if (!boxed && lines.some(line => line.trim() &&
+    !/^\s*(?:文章代碼|文章網址|這一篇文章|請按任意鍵)/u.test(line))) return null;
+  const candidates = lines.filter(line => boxed
+    ? /^\s*│\s*文章代碼/u.test(line)
+    : /^\s*文章代碼/u.test(line));
+  if (boxed && !lines.some(line => /^\s*└─+┘\s*$/u.test(line))) return null;
+  if (candidates.length !== 1) return null;
+  const match = candidates[0].match(/文章代碼\s*\(AID\)\s*:\s*#([A-Za-z0-9_-]+)\s*\(([^)]+)\)/iu);
   return match?.[1] && match[2]
     ? { aid: match[1], board: match[2].trim() }
     : null;
@@ -2815,27 +2857,66 @@ async function verifyOpenedArticleAid(
 ): Promise<boolean> {
   const evidence = await readOpenedArticleAid(bot);
   return evidence !== null &&
-    evidence.aid.toLowerCase() === key.aid.replace(/^#/u, "").toLowerCase() &&
+    evidence.aid === key.aid.trim().replace(/^#/u, "") &&
     evidence.board.toLowerCase() === key.board.toLowerCase();
 }
 
-async function readOpenedArticleAid(
+export async function readOpenedArticleAid(
   bot: WriteBot,
 ): Promise<{ aid: string; board: string } | null> {
   if (!bot.send || !bot.getLine) return null;
+  const before = parsePartialScreen(readVisibleScreen(bot));
+  let evidence: { aid: string; board: string } | null = null;
   try {
     await bot.send("Q");
     const startedAt = Date.now();
     while (Date.now() - startedAt < 800) {
-      const evidence = parseArticleInfoAid(readVisibleScreen(bot));
-      if (evidence) return evidence;
+      evidence = parseArticleInfoAid(readVisibleScreen(bot));
+      if (evidence) break;
       await sleep(20);
     }
-    return null;
   } finally {
     await bot.send("q");
+  }
+  const restoredAt = Date.now();
+  while (Date.now() - restoredAt < 1500) {
+    const screen = readVisibleScreen(bot);
+    const article = parsePartialScreen(screen);
+    if (article && !parseArticleInfoAid(screen)) {
+      return !before || (normalizeArticleAuthor(article.author) === normalizeArticleAuthor(before.author) &&
+        normalizeArticleIdentity(article.title) === normalizeArticleIdentity(before.title) &&
+        article.board.toLowerCase() === before.board.toLowerCase()) ? evidence : null;
+    }
+    if (isBoardListScreen(screen)) {
+      // Re-resolve the immutable AID, never the mutable selected row.
+      if (terminalProtocol(bot) !== "local" || !evidence ||
+        !await openArticleByAid(bot, evidence.aid)) return null;
+      const restored = parsePartialScreen(readVisibleScreen(bot));
+      return restored && before && restored.board.toLowerCase() === evidence.board.toLowerCase() &&
+        normalizeArticleAuthor(restored.author) === normalizeArticleAuthor(before.author) &&
+        normalizeArticleIdentity(restored.title) === normalizeArticleIdentity(before.title) &&
+        restored.date === before.date ? evidence : null;
+    }
     await sleep(20);
   }
+  return null;
+}
+
+async function openArticleByAid(bot: WriteBot, aid: string): Promise<boolean> {
+  const normalized = aid.trim().replace(/^#/u, "");
+  if (!/^[A-Za-z0-9_-]+$/u.test(normalized)) return false;
+  const enter = terminalProtocol(bot) === "local" ? "\r\r" : "\r";
+  if (!bot.send || !await bot.send(`#${normalized}${enter}`)) return false;
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 1500) {
+    const screen = readVisibleScreen(bot);
+    if (parsePartialScreen(screen)) return true;
+    if (isMissingArticleScreen(screen)) return false;
+    // A partial response can still display the old board. Never infer that an
+    // additional Enter is required from that intermediate screen.
+    await sleep(20);
+  }
+  return false;
 }
 
 export async function submitArticleDeleteFromBot(
@@ -2859,7 +2940,7 @@ export async function submitArticleDeleteFromBot(
           bot,
           request.boardName,
           0,
-          () => bot.send?.(`#${aid}\r`) ?? Promise.resolve(false),
+          () => openArticleByAid(bot, aid),
           undefined,
           undefined,
           { leaveOpen: true },
@@ -2956,7 +3037,7 @@ export async function submitArticleDeleteFromBot(
         return actionUncertain("無法確認文章是否刪除成功，請重新整理看板檢查");
       }
 
-      await bot.send(`#${aid}\r`);
+      await openArticleByAid(bot, aid);
       const aidCheckStartedAt = Date.now();
       while (Date.now() - aidCheckStartedAt < 1500) {
         const aidScreen = readVisibleScreen(bot);
@@ -2987,12 +3068,15 @@ async function cancelArticleEdit(bot: WriteBot): Promise<void> {
   const screen = readVisibleScreen(bot);
   if (isArticleEditorScreen(screen)) {
     await bot.send?.(PTT_KEY_CTRL_X);
-    await sleep(80);
   }
-  if (isArticleEditSavePrompt(readVisibleScreen(bot))) {
-    await bot.send?.("n\r");
-  } else {
-    await bot.send?.(PTT_KEY_CTRL_C);
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 1500) {
+    const saveKey = editorSaveKey(readVisibleScreen(bot));
+    if (saveKey) {
+      await bot.send?.(saveKey === "s\r" ? "a\r" : "n\r");
+      return;
+    }
+    await sleep(50);
   }
 }
 
@@ -3034,24 +3118,8 @@ export async function submitArticleEditFromBot(
     return actionNotSent("文章身分已變更，請重新載入");
   }
 
-  const revisionSourceBody = article.revisionSourceBody ?? [
-    article.body,
-    ...(article.revisions ?? []).map((revision) => revision.rawBlock),
-  ].filter(Boolean).join("\n");
-  const { preservedFooter } = splitArticleEditableContent(revisionSourceBody);
-  const replacement = [
-    cleanBody,
-    preservedFooter,
-  ]
-    .filter(Boolean)
-    .join("\n");
-  const originalEditable = revisionSourceBody;
-  const originalLineCount = Math.max(1, originalEditable.split("\n").length);
-  const replacementLineCount = replacement.split("\n").length;
-  if (
-    originalLineCount > MAX_ARTICLE_EDIT_LINES ||
-    replacementLineCount > MAX_ARTICLE_EDIT_LINES
-  ) {
+  if (cleanBody.split("\n").length > MAX_ARTICLE_EDIT_LINES ||
+      (article.revisionSourceBody ?? article.body).split("\n").length > MAX_ARTICLE_EDIT_LINES) {
     return actionNotSent("文章行數超過安全編輯上限");
   }
 
@@ -3060,9 +3128,8 @@ export async function submitArticleEditFromBot(
     return actionNotSent(`無法進入看板 ${request.boardName}`);
   }
 
-  await bot.send(request.articleIndex > 0
-    ? `${request.articleIndex}\r\r`
-    : `#${aid}\r`);
+  if (request.articleIndex > 0) await bot.send(`${request.articleIndex}\r\r`);
+  else await openArticleByAid(bot, aid);
   const openedAt = Date.now();
   let openedExpectedArticle = false;
   while (Date.now() - openedAt < 1500) {
@@ -3091,7 +3158,7 @@ export async function submitArticleEditFromBot(
   await bot.send("E");
   const editorReady = await waitForPattern(
     bot,
-    /文章編輯[\s\S]*(?:Ctrl-X|插入模式|取代模式)/u,
+    /(?:文章編輯|編輯文章)[\s\S]*(?:Ctrl-X|\^X|插入模式|取代模式)/u,
     1500,
     50,
   );
@@ -3100,35 +3167,40 @@ export async function submitArticleEditFromBot(
     return actionNotSent("無法進入文章編輯器（可能沒有編輯權限）");
   }
 
-  await bot.send(PTT_KEY_EDITOR_TOP);
-  await bot.send(PTT_KEY_CTRL_Y.repeat(originalLineCount));
-  for (const line of replacement.split("\n")) {
-    await bot.send(`${line}\r`);
-    await sleep(20);
+  try {
+    if (!bot.getCursor) throw new Error("無法確認編輯器位置");
+    await replaceEditorBody({ send: bot.send.bind(bot), getLine: index => ({ str: bot.getLine!(index).str ?? "" }), getCursor: bot.getCursor.bind(bot) },
+      cleanBody, request.expectedAuthor, request.expectedTitle);
+  } catch (error) {
+    await cancelArticleEdit(bot);
+    return actionNotSent(error instanceof Error ? error.message : "無法安全編輯此文章");
   }
 
   await bot.send(PTT_KEY_CTRL_X);
-  const savePrompt = await waitForPattern(
-    bot,
-    /(?:確定|是否).*(?:儲存|存檔)|(?:儲存|存檔).*\[Y\/n\]/iu,
-    2000,
-    50,
-  );
-  if (!savePrompt || !isArticleEditSavePrompt(readVisibleScreen(bot))) {
+  const saveStartedAt = Date.now();
+  let saveKey = editorSaveKey(readVisibleScreen(bot));
+  while (!saveKey && Date.now() - saveStartedAt < 2000) {
+    await sleep(50);
+    saveKey = editorSaveKey(readVisibleScreen(bot));
+  }
+  if (!saveKey) {
     await cancelArticleEdit(bot);
     return actionNotSent("PTT 未顯示文章儲存確認");
   }
 
-  await bot.send("y\r");
+  await bot.send(saveKey);
   const savedAt = Date.now();
   while (Date.now() - savedAt < 2500) {
-    if (isArticleEditSuccessScreen(
-      readVisibleScreen(bot),
-      request.boardName,
-      request.expectedAuthor,
-      request.expectedTitle,
-    )) {
-      return actionSent();
+    const savedScreen = readVisibleScreen(bot);
+    if (parsePartialScreen(savedScreen) || isBoardListScreen(savedScreen)) {
+      const readback = aid
+        ? await fetchArticleByAidFromBotManually(bot, request.boardName, aid)
+        : await fetchArticleFromBotManually(bot, request.boardName, request.articleIndex);
+      if (readback && normalizeArticleAuthor(readback.author) === normalizeArticleAuthor(request.expectedAuthor) &&
+        normalizeArticleIdentity(readback.title) === normalizeArticleIdentity(request.expectedTitle) &&
+        stripAnsi(splitArticleEditableContent(readback.revisionSourceBody ?? readback.body).editableBody).trim() ===
+          stripAnsi(cleanBody.replace(/\x15\[/gu, "\x1b[")).trim()) return actionSent();
+      return actionUncertain("無法確認文章是否儲存成功，請重新載入檢查");
     }
     await sleep(50);
   }
@@ -3184,9 +3256,8 @@ export async function submitArticleReplyToBoardFromBot(
     return actionNotSent(`無法進入看板 ${request.boardName}`);
   }
 
-  await bot.send(request.articleIndex > 0
-    ? `${request.articleIndex}\r\r`
-    : `#${aid}\r`);
+  if (request.articleIndex > 0) await bot.send(`${request.articleIndex}\r\r`);
+  else await openArticleByAid(bot, aid);
   const openedAt = Date.now();
   let opened = false;
   while (Date.now() - openedAt < 1500) {
@@ -3303,9 +3374,9 @@ export async function submitArticleReplyToBoardFromBot(
     }
     if (
       !answeredSave &&
-      /(?:確定|是否|要).*(?:儲存|存檔)|(?:儲存|存檔).*\[Y\/n\]/iu.test(plain)
+      editorSaveKey(plain) !== null
     ) {
-      await bot.send("y\r");
+      await bot.send(editorSaveKey(plain)!);
       answeredSave = true;
       await sleep(timeouts.afterPromptMs);
       continue;
@@ -3436,10 +3507,10 @@ async function waitForPushEntry(
   return null;
 }
 
-export async function measurePushCapacity(bot: WriteBot, valid: () => boolean = () => true): Promise<{ capacity: number; author: string }> {
+export async function measurePushCapacity(bot: WriteBot, valid: () => boolean = () => true, separator: "" | " " = " "): Promise<{ capacity: number; author: string }> {
   let measured: ReturnType<typeof readPushConfirmation> = null;
   const result = await submitPushFromCurrentArticle(bot, "x", "neutral", undefined, {}, valid, (screen) => {
-    measured = readPushConfirmation(screen);
+    measured = readPushConfirmation(screen, separator);
     return false;
   });
   if (!measured || result.ok || result.code !== "push-preflight-cancelled" || !valid()) {
@@ -3457,6 +3528,7 @@ export async function submitPushFromCurrentArticle(
   timeoutOverrides: Partial<SubmitPushTimeouts> = {},
   articleSessionIsValid: () => boolean = () => true,
   confirmationGuard?: (screen: string) => boolean,
+  waitForInputEcho = false,
 ): Promise<ActionResult> {
   const trimmed = content.trim();
   if (!trimmed) return actionNotSent();
@@ -3592,7 +3664,30 @@ export async function submitPushFromCurrentArticle(
     stripAnsi(readVisibleScreen(bot)).replace(/\r/g, ""),
   );
   trace.outcome = "content-ready";
-  await sendAction("submit-content", `${trimmed}\r`);
+  if (waitForInputEcho) {
+    await sendAction("submit-content", trimmed);
+    const echoStartedAt = Date.now();
+    let echoed = false;
+    while (Date.now() - echoStartedAt < timeouts.confirmMs && articleSessionIsValid()) {
+      const prompt = lastTerminalPrompt(stripAnsi(readVisibleScreen(bot)));
+      const match = prompt.match(/^(?:推|噓|→)\s+([A-Za-z][A-Za-z0-9_]{0,11})\s*:(.*)$/u);
+      if (match && match[1].toLowerCase() === inputAuthor?.toLowerCase() &&
+        (match[2].trimEnd() === trimmed || match[2].trimEnd() === ` ${trimmed}`)) {
+        echoed = true;
+        break;
+      }
+      await sleep(timeouts.pollMs);
+    }
+    if (!echoed) {
+      // No Enter or publish confirmation has been sent. Do not navigate through
+      // an input field to attempt readback, which would append navigation keys.
+      if (articleSessionIsValid()) await sendAction("cancel", PTT_KEY_CTRL_C);
+      return actionNotSent("推文輸入未完成，請重新載入後再試", "push-input-echo-timeout", true);
+    }
+    await sendAction("submit-content", "\r");
+  } else {
+    await sendAction("submit-content", `${trimmed}\r`);
+  }
   const confirmationScreen = await waitForPushConfirmation(
     bot,
     timeouts.confirmMs,
@@ -3735,12 +3830,21 @@ export async function waitForPostTitlePrompt(
   readScreen: () => string,
   timeoutMs: number,
   pollMs = 80,
+  selectedCategory?: number,
 ): Promise<boolean> {
   const start = Date.now();
+  let confirmedCategory = false;
   while (Date.now() - start < timeoutMs) {
     const screen = readScreen();
     const plain = stripAnsi(screen).replace(/\r/g, "");
     if (/標題[:：]/u.test(plain)) return true;
+    if (!confirmedCategory && selectedCategory !== undefined &&
+      plain.split("\n").some(line => /種類|分類|類別/u.test(line) &&
+        new RegExp(`\\)\\s*${selectedCategory}\\s*$`, "u").test(line))) {
+      confirmedCategory = true;
+      await bot.send?.("\r");
+      continue;
+    }
     if (isPostGuidelineScreen(plain)) {
       await bot.send?.("\r");
       await sleep(pollMs);
@@ -3892,6 +3996,8 @@ async function submitPostFromBot(
     bot,
     () => readVisibleScreen(bot),
     2000,
+    80,
+    selectedIndex >= 0 ? selectedIndex + 1 : undefined,
   );
   if (!titlePromptShown) {
     const probe = stripAnsi(readVisibleScreen(bot)).replace(/\r/g, "");
@@ -3985,11 +4091,11 @@ async function submitPostFromBot(
     // 儲存確認（[Y/n]）— 要排除已被分類規定 / 簽名檔覆蓋的情況
     if (
       !answeredSave &&
-      /要儲存|是否儲存|存檔|\[Y\/n\]/iu.test(plain) &&
+      editorSaveKey(plain) !== null &&
       !/簽名檔|分類規定/u.test(plain)
     ) {
       log(`Save prompt detected, sending 'y'`);
-      await bot.send("y\r");
+      await bot.send(editorSaveKey(plain)!);
       answeredSave = true;
       await sleep(150);
       continue;
@@ -4660,16 +4766,19 @@ export function parseArticleHeaderBlock(body: string): {
   };
 }
 
-export function createTerminalDriver(): TerminalDriver {
-  if (!singletonDriver) {
-    singletonDriver = new PttClientTerminalDriver();
+export function createTerminalDriver(pushFormat: "local" | "ptt" = "ptt", protocol: TerminalProtocol = "ptt"): TerminalDriver {
+  const profileKey = `${pushFormat}:${protocol}`;
+  let driver = terminalDrivers.get(profileKey);
+  if (!driver) {
+    driver = new PttClientTerminalDriver(undefined, pushFormat, protocol);
+    terminalDrivers.set(profileKey, driver);
   }
-  return singletonDriver;
+  return driver;
 }
 
 /** @internal Transcript-test seam; not exported by @pttzzz/browser. */
-export function createTerminalDriverForTesting(bot: BotLike): ArticleTerminalDriver {
-  return new PttClientTerminalDriver(bot);
+export function createTerminalDriverForTesting(bot: BotLike, pushFormat: "local" | "ptt" = "ptt", protocol: TerminalProtocol = "ptt"): ArticleTerminalDriver & Pick<PttClientTerminalDriver, "readArticleSource" | "listBoardEntries" | "searchBoardsByPrefix"> {
+  return new PttClientTerminalDriver(bot, pushFormat, protocol);
 }
 
 export async function fetchArticleFromBot(
@@ -4857,7 +4966,7 @@ export async function fetchArticleByAidFromBotManually(
     bot,
     boardName,
     0,
-    () => bot.send?.(`#${aid}\r`) ?? Promise.resolve(false),
+    () => openArticleByAid(bot, aid),
     onPartial,
   );
 }

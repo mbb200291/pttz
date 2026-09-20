@@ -32,6 +32,28 @@ function driver(overrides: Partial<BrowserGatewayDriver> = {}): BrowserGatewayDr
 }
 
 describe("BrowserPttGateway", () => {
+  it("keeps a cursor for unread rows even when the terminal window reaches the bottom", async () => {
+    const gateway = new BrowserPttGateway(driver({ listArticles: async () => ({ items: [
+      { index: 2, author: "alice", title: "two", date: "9/21" },
+      { index: 1, author: "alice", title: "one", date: "9/21" },
+    ], exhausted: true }) }));
+    expect((await gateway.listArticles({ board: "Test", limit: 1 })).nextCursor).toBeDefined();
+  });
+  it("rejects a cursor whose terminal AID anchor moved even when titles match", async () => {
+    let moved = false;
+    const terminal = {
+      listArticles: async () => [
+        { index: 5, author: "alice", title: "same", date: "9/21", pushCount: "", mark: "" },
+        { index: 4, author: "alice", title: "same", date: "9/21", pushCount: "", mark: "" },
+        { index: 3, author: "alice", title: "same", date: "9/21", pushCount: "", mark: "" },
+      ],
+      readArticleAidAtIndex: async () => moved ? "nextArticle" : "originalArticle",
+    } as unknown as GatewayTerminalDriver;
+    const gateway = new BrowserPttGateway(createTerminalGatewayDriverForTesting(terminal));
+    const first = await gateway.listArticles({ board: "Test", limit: 1 });
+    moved = true;
+    await expect(gateway.listArticles({ board: "Test", limit: 1, cursor: first.nextCursor })).rejects.toMatchObject({ code: "STALE_CURSOR" });
+  });
   it.each(["create-article", "edit-article", "reply-article-to-board"] as const)("rejects malformed %s formatting before terminal dispatch", async (type) => {
     const transport = driver();
     const gateway = new BrowserPttGateway(transport);

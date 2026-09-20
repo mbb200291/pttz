@@ -11,13 +11,16 @@ export function encodedReplyBytes(value: string): number {
 }
 
 /** PTT bbs.c pads msg to maxlength before ' 確定[y/N]:'. getdata reserves NUL. */
-export function readPushConfirmation(screen: string): { author: string; content: string; capacity: number } | null {
+export function readPushConfirmation(screen: string, separator?: "" | " "): { author: string; content: string; capacity: number } | null {
   for (const line of stripAnsi(screen).replace(/\r/g, "").split("\n").reverse()) {
     const match = line.match(/^(?:推|噓|→) ([^:]+):(.*) 確定\[y\/N\]:\s*$/u);
     if (!match) continue;
-    // Live PTT includes a separator blank after the colon; it is not part of
-    // the padded input field. Draft pieces cannot start with whitespace.
-    const field = match[2].startsWith(" ") ? match[2].slice(1) : match[2];
+    // Live PTT includes a separator blank after the colon; local imageptt
+    // does not. Draft pieces cannot start with whitespace, so the distinction
+    // is unambiguous for outgoing confirmation screens.
+    const actualSeparator = match[2].startsWith(" ") ? " " : "";
+    if (separator !== undefined && actualSeparator !== separator) return null;
+    const field = actualSeparator ? match[2].slice(1) : match[2];
     const capacity = encodedReplyBytes(field) - 1;
     if (capacity < 8 || capacity > 78) return null;
     return { author: match[1].trim(), content: field.trimEnd(), capacity };
@@ -25,13 +28,13 @@ export function readPushConfirmation(screen: string): { author: string; content:
   return null;
 }
 
-function resolveReadbackLayout(author: string, capacity: number): { authorField: string; ip: string } {
+function resolveReadbackLayout(author: string, capacity: number, separator: "" | " "): { authorField: string; ip: string } {
   if (!/^[A-Za-z0-9_]{2,12}$/u.test(author)) throw new Error("無法確認推文帳號欄位");
   // These are the PTT storage formats, not arbitrary capacity estimates.
   // A measurement must match one before any fragment may be published.
   for (const authorField of [author, author.padEnd(12)]) {
     for (const hasIp of [false, true]) {
-      if (pushContentCapacity(encodedReplyBytes(authorField), hasIp) === capacity) {
+      if (pushContentCapacity(encodedReplyBytes(authorField), hasIp, separator) === capacity) {
         return { authorField, ip: hasIp ? "192.0.2.1 " : "" };
       }
     }
@@ -39,9 +42,9 @@ function resolveReadbackLayout(author: string, capacity: number): { authorField:
   throw new Error("推文容量與讀回格式不一致，請重新載入文章後再試");
 }
 
-export function planReplyDraft(draft: string, capacity: number, floor?: number, author?: string): string[] {
+export function planReplyDraft(draft: string, capacity: number, floor?: number, author?: string, separator: "" | " " = " "): string[] {
   if (!Number.isInteger(capacity) || capacity < 8 || capacity > 78) throw new Error("無法確認推文容量");
-  const layout = author === undefined ? undefined : resolveReadbackLayout(author, capacity);
+  const layout = author === undefined ? undefined : resolveReadbackLayout(author, capacity, separator);
   if (floor !== undefined && (!Number.isInteger(floor) || floor < 1)) throw new Error("回覆樓號無效");
   const content = draft.replace(/\r\n/g, "\n").trim();
   // UAO encodes half-width characters in one byte and full-width in two.
@@ -99,7 +102,7 @@ export function planReplyDraft(draft: string, capacity: number, floor?: number, 
   const target = floor === undefined ? [] : [{ author: author === "target" ? "other" : "target", content: "target.", type: "neutral" as const,
     time: "01/01 12:00", rawFloor: floor }];
   const parsed = layout
-    ? parsePushBuffer(pieces.map(piece => `→ ${layout.authorField}: ${piece} ${layout.ip}01/01 12:00`).join("\n"))
+    ? parsePushBuffer(pieces.map(piece => `→ ${layout.authorField}:${separator}${piece} ${layout.ip}01/01 12:00`).join("\n"))
       .map((push, index) => ({ ...push, rawFloor: (floor ?? 0) + index + 1 }))
     : pieces.map((content, index) => ({
     author: "sender", content, type: "neutral" as const, time: "01/01 12:00",
@@ -114,9 +117,12 @@ export function planReplyDraft(draft: string, capacity: number, floor?: number, 
 
 type State = { generation: number; signature: string; author: string; capacity: number; pieces: string[]; confirmed: number; status: ReplyDelivery["status"] };
 export class ReplyDraftQueue {
+  diagnostic?: Readonly<{ operationId: string; index: number; stage: "send"; message: string }>;
   private readonly states = new Map<string, State>();
   private serial: Promise<unknown> = Promise.resolve();
   private generation = 0;
+
+  constructor(private readonly separator: "" | " " = " ") {}
 
   invalidate(): void { this.generation++; }
 
@@ -140,7 +146,7 @@ export class ReplyDraftQueue {
       if (state && state.author.toLowerCase() !== layout.author.toLowerCase()) throw new Error("登入帳號已變更");
       if (state && state.capacity !== layout.capacity) throw new Error("推文容量已變更，請先確認已送出的內容");
       if (!state) {
-        state = { generation, signature, author: layout.author, capacity: layout.capacity, pieces: planReplyDraft(input.content, layout.capacity, input.floor, layout.author), confirmed: 0, status: "paused" };
+        state = { generation, signature, author: layout.author, capacity: layout.capacity, pieces: planReplyDraft(input.content, layout.capacity, input.floor, layout.author, this.separator), confirmed: 0, status: "paused" };
         this.states.set(input.operationId, state);
       }
       try { onProgress?.(result()); } catch { /* Observer isolation. */ }
@@ -148,8 +154,14 @@ export class ReplyDraftQueue {
         if (generation !== this.generation) return result();
         let receipt: ActionReceipt;
         try { receipt = await send(state.pieces[i], i, layout.capacity); }
-        catch { state.status = "uncertain"; return result(); }
+        catch (cause) {
+          this.diagnostic = { operationId: input.operationId, index: i, stage: "send",
+            message: cause instanceof Error ? cause.message : "Unknown delivery failure" };
+          state.status = "uncertain";
+          return result();
+        }
         if (!receipt.ok) {
+          this.diagnostic = { operationId: input.operationId, index: i, stage: "send", message: receipt.message ?? receipt.code };
           state.status = receipt.outcome === "not-sent" ? "paused" : "uncertain";
           return result();
         }
