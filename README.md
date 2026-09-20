@@ -107,10 +107,11 @@ flowchart TD
 
 ```bash
 npm install
-npm run dev
+npm run build:packages
+npm run dev:ptt
 ```
 
-開發伺服器會同時提供網頁與 `/ptt-ws` WebSocket 代理。瀏覽器仍是直接連線到 PTT；代理只負責加入 PTT WebSocket 所需的 `Origin` 標頭。
+開發伺服器會同時提供網頁與 `/ptt-ws` 代理。`dev:ptt` 連接正式 PTT；`dev:local` 連接本機 Telnet 測試環境。`npm run dev` 依設定選擇，預設本機。設定方式與測試帳號管理請見[本機 PTT 開發環境](apps/web/docs/local-ptt.md)。
 
 ## 開發指引
 
@@ -131,7 +132,9 @@ npm run dev
 常用指令：
 
 ```bash
-npm run dev       # 啟動網頁與 PTT WebSocket 代理
+npm run dev       # 啟動網頁與 PTT 代理，預設本機
+npm run dev:local # 明確選擇本機 Telnet 測試環境
+npm run dev:ptt   # 明確選擇正式 PTT WebSocket
 npm run build     # TypeScript 檢查與正式環境建置
 npm run test      # 執行所有測試
 npm run lint      # 執行 ESLint

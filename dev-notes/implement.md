@@ -1,5 +1,7 @@
 # pttzzz 實作概況
 
+Goal 14 本機環境：Vite `/ptt-ws` 代理支援 loopback Telnet 與正式 PTT WebSocket，以 `dev:local`／`dev:ptt` 切換；`dev` 依設定選擇、預設本機，失敗不轉正式站。帳密僅保存於忽略提交的根目錄 `.env.local`。不更改 core 規則與 browser 公開 API；代理整合測試納入 `npm test`，本機第 2 組帳號已完成登入／登出驗證。詳見[使用設定](../apps/web/docs/local-ptt.md)與[實作紀錄](goal-14-implementation-notes.md)。
+
 Goal 11 長回文：規則 0.3.0 使用 `|`／`_`、非連續兩分鐘，保留舊 `||`／`|!` 讀取相容。browser 從取消的確認畫面量測容量，以 UAO 編碼規劃並由真正核心預驗證，再逐段核對確認畫面與送達證據；續送只從未送片段開始，unknown 不重送。Web 輸入整份草稿並保留目前文章窗格的進度。編輯內容與原始尾標解析分離，避免字面符號被移除。詳見 [長文設計](goal-11-multipart-reply-design.md)、[規則對齊計畫](goal-11-multipart-rules-update-plan.md) 與 [實作紀錄](goal-11-multipart-reply-implementation-notes.md)。
 
 Goal 11 可驗證文章工作階段：browser 完整讀文後可私下保留經 key、作者、標題與終端 snapshot 核對的文章畫面；推文型命令驗證成功便直接重用，否則沿用既有定位／重開／AID 與身分檢查。搜尋結果的相對編號必須先取得 canonical AID 才可寫入；連線版本在正文與確認前後持續核對，送出後無法證明回到同篇文章時回傳 `uncertain`。session 狀態不進入 `@pttzzz/core` 公開契約。

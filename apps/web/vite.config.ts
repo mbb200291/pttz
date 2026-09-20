@@ -1,81 +1,59 @@
 import { defineConfig } from 'vitest/config'
+import { loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-import type { Plugin } from 'vite'
-import { WebSocket as WsNode, WebSocketServer } from 'ws'
-import type { Duplex } from 'stream'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import { fileURLToPath, URL } from 'node:url'
+import { resolvePttTarget, type PttTarget } from './dev/pttTarget'
+import { attachPttProxy } from './dev/pttProxy'
 
-/**
- * 在 Vite dev server 上攔截 /ptt-ws 的 WebSocket upgrade，
- * 建立一條到 wss://ws.ptt.cc/bbs 的連線並注入 Origin: https://term.ptt.cc。
- *
- * 為什麼不用 server.proxy：
- *   http-proxy 的 WS pass 建立 upgrade request 時不 merge options.headers，
- *   所以 Origin 無法被覆蓋，PTT server 會拒絕。
- */
-function pttWsPlugin(): Plugin {
+function pttWsPlugin(target: PttTarget): Plugin {
+  let dispose: (() => void) | undefined
   return {
     name: 'ptt-ws-proxy',
     configureServer(server) {
-      const wss = new WebSocketServer({ noServer: true })
-
-      server.httpServer?.on('upgrade', (req, socket: Duplex, head: Buffer) => {
-        // 只處理 /ptt-ws，其餘留給 Vite HMR 自己處理
-        if (!req.url?.startsWith('/ptt-ws')) return
-
-        wss.handleUpgrade(req, socket, head, (browserWs) => {
-          const pttWs = new WsNode('wss://ws.ptt.cc/bbs', {
-            headers: { Origin: 'https://term.ptt.cc' },
-          })
-
-          pttWs.once('open', () => {
-            // browser → PTT
-            browserWs.on('message', (msg) => {
-              if (pttWs.readyState === WsNode.OPEN) pttWs.send(msg)
-            })
-            // PTT → browser（保留 binary 旗標，PTT 送的是 Big5 binary frame）
-            pttWs.on('message', (msg, isBinary) => {
-              if (browserWs.readyState === WsNode.OPEN)
-                browserWs.send(msg, { binary: isBinary })
-            })
-          })
-
-          pttWs.on('close', () => { if (browserWs.readyState < 2) browserWs.close() })
-          browserWs.on('close', () => { if (pttWs.readyState < 2) pttWs.close() })
-          pttWs.on('error', (e) => { console.error('[ptt-ws-proxy] PTT error:', e.message); browserWs.close() })
-          browserWs.on('error', () => { pttWs.close() })
-        })
-      })
+      // Vitest uses Vite in middleware mode without a listening server.
+      if (!server.httpServer) return
+      dispose = attachPttProxy(server.httpServer, target)
+      server.config.logger.info(target.kind === 'local'
+        ? `[PTT] local tcp://${target.host}:${target.port}`
+        : '[PTT] LIVE wss://ws.ptt.cc/bbs')
     },
+    closeBundle() { dispose?.() },
   }
 }
 
-// https://vite.dev/config/
-export default defineConfig({
-  resolve: {
-    alias: [
-      { find: /^@pttzzz\/browser\/testing$/, replacement: fileURLToPath(new URL('../../packages/browser/src/testing.ts', import.meta.url)) },
-      { find: /^@pttzzz\/browser$/, replacement: fileURLToPath(new URL('../../packages/browser/src/index.ts', import.meta.url)) },
-      { find: /^@pttzzz\/core$/, replacement: fileURLToPath(new URL('../../packages/core/src/index.ts', import.meta.url)) },
+export default defineConfig(({ command, mode, isPreview }) => {
+  const envDir = fileURLToPath(new URL('../..', import.meta.url))
+  if ((command === 'build' || isPreview) && mode === 'ptt-local') {
+    throw new Error('local PTT is development-only; use npm run dev:local')
+  }
+  if (command === 'serve' && !isPreview && process.env.NODE_ENV === 'production') {
+    throw new Error('PTT development server requires development NODE_ENV')
+  }
+  const target = command === 'serve' && !isPreview
+    ? resolvePttTarget(mode, loadEnv(mode, envDir, 'PTT_'))
+    : resolvePttTarget('ptt-live', {})
+  const label = target.kind === 'local' ? `本機 PTT（${target.host}:${target.port}）` : '正式 PTT（ws.ptt.cc）'
+  return {
+    envDir,
+    define: { 'import.meta.env.VITE_PTT_CONNECTION_LABEL': JSON.stringify(label) },
+    resolve: {
+      alias: [
+        { find: /^@pttzzz\/browser\/testing$/, replacement: fileURLToPath(new URL('../../packages/browser/src/testing.ts', import.meta.url)) },
+        { find: /^@pttzzz\/browser$/, replacement: fileURLToPath(new URL('../../packages/browser/src/index.ts', import.meta.url)) },
+        { find: /^@pttzzz\/core$/, replacement: fileURLToPath(new URL('../../packages/core/src/index.ts', import.meta.url)) },
+      ],
+    },
+    plugins: [
+      nodePolyfills({ globals: { Buffer: true, global: true, process: true }, protocolImports: true }),
+      react(),
+      tailwindcss(),
+      pttWsPlugin(target),
     ],
-  },
-  plugins: [
-    nodePolyfills({
-      globals: {
-        Buffer: true,
-        global: true,
-        process: true,
-      },
-      protocolImports: true,
-    }),
-    react(),
-    tailwindcss(),
-    pttWsPlugin(),
-  ],
-  test: {
-    environment: 'node',
-    setupFiles: [fileURLToPath(new URL('./src/test/setup.ts', import.meta.url))],
-  },
+    test: {
+      environment: 'node',
+      setupFiles: [fileURLToPath(new URL('./src/test/setup.ts', import.meta.url))],
+    },
+  }
 })

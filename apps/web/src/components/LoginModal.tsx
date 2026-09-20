@@ -150,7 +150,7 @@ export function LoginModal({ pttState, wsStatus }: Props) {
             登入 PTT
           </h2>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>
-            帳號密碼會直接傳到 ws.ptt.cc
+            帳號密碼會傳到 {import.meta.env.VITE_PTT_CONNECTION_LABEL ?? '正式 PTT（ws.ptt.cc）'}
           </p>
         </div>
         <p
@@ -347,7 +347,7 @@ export function LoginModal({ pttState, wsStatus }: Props) {
         )}
 
         <p className="mt-4 text-xs text-center" style={{ color: "var(--text-dim)" }}>
-          密碼僅存於記憶體，不會上傳任何伺服器
+          不在此瀏覽器儲存密碼
         </p>
       </div>
     </div>
