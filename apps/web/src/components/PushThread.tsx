@@ -799,10 +799,10 @@ export function PushThread({
             {scoreLabel}
           </span>
           <span style={{ fontSize: 12, color: "var(--text-dim)" }}>
-            ({topLevel.length} 則第一層回覆)
+            ({topLevel.length} 則討論)
           </span>
           <span style={{ fontSize: 12, color: "var(--text-dim)" }}>
-            已顯示 {visibleTopLevel.length} / {sortedTopLevel.length} 則第一層回覆
+            已顯示 {visibleTopLevel.length} / {sortedTopLevel.length} 則
           </span>
         </div>
 

@@ -3,6 +3,8 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { hasOpenNavigationDialog, navigateBoardGrid } from "../lib/keyboardNavigation";
+import { useBodyNavigation } from "../hooks/useBodyNavigation";
 
 export interface PopularBoard {
   name: string;
@@ -53,10 +55,12 @@ interface BoardInputProps {
   favoriteBoardsLoading?: boolean;
   recentBoards?: string[];
   currentUser?: string;
+  onLogout?: () => void;
 }
 
 export function BoardInput({
   onEnter,
+  onLogout,
   pttState,
   wsStatus,
   popularBoards,
@@ -76,8 +80,15 @@ export function BoardInput({
   const [favoriteExpanded, setFavoriteExpanded] = useState(false);
   const [favoriteOverrides, setFavoriteOverrides] = useState<Record<string, boolean>>({});
   const popularGridRef = useRef<HTMLDivElement>(null);
+  const navigationRef = useRef<HTMLDivElement>(null);
+  useBodyNavigation(navigationRef, navigateBoardGrid);
 
   const isConnected = pttState === "ready";
+  useEffect(() => {
+    if (isConnected && document.activeElement === document.body && !hasOpenNavigationDialog()) {
+      navigationRef.current?.querySelector<HTMLElement>('[data-navigation-item]:not(:disabled)')?.focus({ preventScroll: true });
+    }
+  });
   const hasLivePopularBoards = Boolean(popularBoards?.length);
   const boards = hasLivePopularBoards ? popularBoards! : DEFAULT_BOARD_SHORTCUTS;
   const searchTerm = input.trim().toLowerCase();
@@ -216,6 +227,8 @@ export function BoardInput({
 
   return (
     <div
+      ref={navigationRef}
+      onKeyDown={navigateBoardGrid}
       style={{
         minHeight: "100vh",
         background: "var(--bg)",
@@ -300,6 +313,7 @@ export function BoardInput({
                 : wsStatus === "connecting"
                   ? "連線中..."
                   : `狀態:${pttState}`}
+            {isConnected && onLogout && <button type="button" onClick={onLogout} title="只登出本次 Pttzzz 連線" style={{ color: "var(--text)", border: "1px solid var(--border)", borderRadius: 8, padding: "5px 10px", cursor: "pointer" }}>登出</button>}
           </div>
         </div>
       </div>
@@ -510,6 +524,9 @@ export function BoardInput({
                     }}
                   >
                     <button
+                      type="button"
+                      data-navigation-item
+                      className="focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sky-400"
                       onClick={() => submitBoard(name)}
                       disabled={!isConnected}
                       style={{
@@ -607,9 +624,12 @@ export function BoardInput({
                       marginBottom: 4,
                     }}
                   >
-                    <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700 }}>
+                    <button type="button" data-navigation-item disabled={!isConnected}
+                      onClick={(event) => { event.stopPropagation(); submitBoard(board.name); }}
+                      className="focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sky-400"
+                      style={{ fontFamily: "var(--font-mono)", fontWeight: 700, background: "transparent", color: "inherit", border: 0, padding: 0, textAlign: "left", cursor: "pointer" }}>
                       {board.name}
-                    </span>
+                    </button>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                       {hasLivePopularBoards && !isSearching && (
                         <span
@@ -815,9 +835,12 @@ function FavoriteCard({
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
         <Monogram name={board.name} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 14 }}>
+          <button type="button" data-navigation-item disabled={disabled}
+            onClick={(event) => { event.stopPropagation(); onOpen(); }}
+            className="focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sky-400"
+            style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 14, background: "transparent", color: "inherit", border: 0, padding: 0, textAlign: "left", cursor: "pointer" }}>
             {board.name}
-          </div>
+          </button>
           <div style={{ color: "var(--text-muted)", fontSize: 12, marginTop: 1 }}>
             {board.zh || "我的最愛看板"}
           </div>

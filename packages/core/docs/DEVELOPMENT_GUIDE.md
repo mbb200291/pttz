@@ -4,6 +4,30 @@ This guide is for developers and AI assistants building a user interface on top 
 
 For an independent rules implementation, start with the [whitepaper](../../../docs/whitepaper/pttzzz-core.md) and its implementation-neutral [fixture guide](../../../docs/fixtures/thread-events/README.md). For this package's architecture and tests, see the [core README](./README.md).
 
+## Article text formatting (core/browser 0.3+)
+
+`createArticle`, `editArticle`, and `replyArticleToBoard` accept optional `formatting: readonly ArticleTextStyle[]`. Keep `content` as plain text, not Markdown, HTML, ANSI, or editor keystrokes. This is a presentation contract, separate from the reply-edit rule syntax.
+
+```ts
+import { articleTextRuns, type CreateArticleInput } from "@pttzzz/core";
+const draft: CreateArticleInput = {
+  board: "Test", title: "Example", content: "Normal red text",
+  formatting: [{ start: 7, end: 10, bold: true, color: 31 }],
+};
+const previewRuns = articleTextRuns(draft.content, draft.formatting);
+// Render each run as escaped text; map bold/color to your own CSS.
+// Only on explicit user submission: await client.createArticle(draft).
+```
+
+- Offsets are JavaScript UTF-16 positions: start inclusive, end exclusive. Do not split a surrogate pair. Unlike reply section-edit indices, these offsets follow textarea selection APIs.
+- Ranges must be ordered, nonoverlapping, nonempty, and within content. `bold` is optional boolean (PTT high intensity, not a guaranteed font weight); `color` is one of 30–37 (black, red, green, yellow, blue, magenta, cyan, white).
+- Nonempty formatting requires nonblank content, at most 50,000 UTF-16 units, and no C0/C1 controls except tab and LF. Normalize CRLF before recording offsets. Invalid formatting is rejected before gateway writes with `INVALID_INPUT`/`not-sent`.
+- The helper may throw on an invalid draft: catch it in preview, show a validation error and disable submission. Never let preview errors unmount the editor.
+- Do not silently reuse offsets after editing. The reference UI removes intersected styles and shifts later ranges using a minimal text diff; repeated identical characters can make the inferred edit boundary ambiguous.
+- Include formatting in uncertain-write fingerprints. A failed or uncertain write must not automatically retry.
+- Use matching 0.3+ core and gateway implementations; older gateways may ignore unknown fields. No formatting is supported for one-line pushes, reply votes, or reply edits.
+- `Article.body` can contain source ANSI. The Web reader safely projects allowlisted SGR colors and intensity into styled text and adapts wrapping to its container. The reference editor still strips existing ANSI and warns that old colors are not retained. This release is not a full ANSI round-trip editor.
+
 ## Layer model
 
 - **Rules layer** — the whitepaper defines the meaning of aggregation, nested replies, article/reply votes, edits, and withdrawals.

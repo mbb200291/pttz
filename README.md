@@ -93,9 +93,9 @@ flowchart TD
 | 層級 | 目前版本 | 位置 | 用途 |
 | --- | --- | --- | --- |
 | 規則層 | 規則 `0.2.0` | [`docs/whitepaper/`](docs/whitepaper/) | 白皮書與完整畫面案例 |
-| 核心實作層 | `@pttzzz/core` `0.2.0` | [`packages/core/`](packages/core/) | 平台無關的資料契約、解析規則與 `PttzzzClient` |
-| 核心實作層的瀏覽器接入 | `@pttzzz/browser` `0.2.0` | [`packages/browser/`](packages/browser/) | 透過 `ptt-client` 與 PTT WebSocket 連線，實作瀏覽器閘道器 |
-| 介面層範例 | `@pttzzz/web-example` `0.2.0` | [`apps/web/`](apps/web/) | React 網頁介面，示範如何使用核心實作 |
+| 核心實作層 | `@pttzzz/core` `0.3.0` | [`packages/core/`](packages/core/) | 平台無關的資料契約、解析規則與 `PttzzzClient` |
+| 核心實作層的瀏覽器接入 | `@pttzzz/browser` `0.3.0` | [`packages/browser/`](packages/browser/) | 透過 `ptt-client` 與 PTT WebSocket 連線，實作瀏覽器閘道器 |
+| 介面層範例 | `@pttzzz/web-example` `0.3.0` | [`apps/web/`](apps/web/) | React 網頁介面，示範如何使用核心實作 |
 
 `@pttzzz/core` 不依賴 React、瀏覽器或 `ptt-client`；其他介面可以直接依照公開契約建立自己的呈現方式。更完整的套件邊界請見[核心架構](packages/core/docs/README.md)與 [UI 開發指南](packages/core/docs/DEVELOPMENT_GUIDE.md)。
 

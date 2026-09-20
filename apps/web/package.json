@@ -1,10 +1,10 @@
 {
   "name": "@pttzzz/web-example",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "pttzzz": {
-    "browser": "^0.2.0",
-    "core": "^0.2.0",
+    "browser": "^0.3.0",
+    "core": "^0.3.0",
     "rules": "0.2.x"
   },
   "type": "module",
@@ -15,8 +15,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@pttzzz/browser": "0.2.0",
-    "@pttzzz/core": "0.2.0",
+    "@pttzzz/browser": "0.3.0",
+    "@pttzzz/core": "0.3.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "zustand": "^5.0.0"

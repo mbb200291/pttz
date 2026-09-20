@@ -155,12 +155,17 @@ describe("Article push voting", () => {
       }],
     });
 
-    expect(screen.getByText("PTT 原生推").previousElementSibling?.textContent).toBe("8");
-    expect(screen.getByText("PTT 原生噓").previousElementSibling?.textContent).toBe("3");
+    expect(screen.queryByText("PTT 原生推")).toBeNull();
+    expect(screen.queryByText("PTT 原生噓")).toBeNull();
+    const toolbar=screen.getByRole("group", {name:"文章推噓與回覆"});
+    expect(toolbar.contains(screen.getByLabelText("聚合後回覆 1"))).toBe(true);
+    expect(toolbar.contains(screen.getByRole("button",{name:"回覆此文"}))).toBe(true);
     const pushButtons = screen.getAllByRole("button", { name: "推" });
     const booButtons = screen.getAllByRole("button", { name: "噓" });
     expect(pushButtons[0].textContent).toContain("5");
     expect(booButtons[0].textContent).toContain("2");
+    expect(toolbar.contains(pushButtons[0])).toBe(true);
+    expect(toolbar.contains(booButtons[0])).toBe(true);
     expect(pushButtons[1].textContent).toContain("6");
     expect(booButtons[1].textContent).toContain("4");
   });

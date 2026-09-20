@@ -8,6 +8,7 @@ import type {
   RawArticleSource,
 } from "@pttzzz/core";
 import type { BrowserGatewayDriver } from "../gateway.js";
+import { formatEditorBody } from "./articleFormatting.js";
 import type {
   ActionResult,
   ConnectionStatus,
@@ -838,6 +839,13 @@ function fakeGatewayDriver(adapter: FakePttAdapter): BrowserGatewayDriver {
         (!keyword || row.title.toLowerCase().includes(keyword.toLowerCase())));
     },
     execute: async (command) => {
+      if ((command.type === "create-article" || command.type === "edit-article" || command.type === "reply-article-to-board") && command.formatting?.length) {
+        if (command.type !== "create-article" && !command.content.trim()) {
+          return { ok: false, code: "INVALID_INPUT", reason: "正文不可為空", outcome: "not-sent", retryable: false };
+        }
+        // Simulate the editor's Ctrl+U conversion; validation rejects caller-supplied controls.
+        command = { ...command, content: formatEditorBody(command.content, command.formatting).replace(/\x15/g, "\x1b") };
+      }
       const result: ActionResult = command.type === "create-article"
         ? await adapter.postArticle(command.board, command.category ?? "", command.title, command.content)
         : await adapter.executeArticleCommand(command);

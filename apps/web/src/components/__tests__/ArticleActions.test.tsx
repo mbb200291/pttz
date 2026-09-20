@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Article } from "../Article";
@@ -46,6 +46,24 @@ const article = {
 afterEach(cleanup);
 
 describe("Article actions", () => {
+  it("opens board reply with R and push composer with X, guarding active composers", () => {
+    const reply = vi.fn();
+    render(<Article boardName="Test" articleIndex={99} onBack={() => {}} currentUser="bob"
+      mockArticle={article} onReplyToBoard={reply} />);
+    const reader = screen.getByLabelText("文章閱讀區，左方向鍵返回");
+    fireEvent.keyDown(reader, { key: "r" });
+    expect(reply).toHaveBeenCalledWith(article);
+    reply.mockClear();
+    for (const extra of [{ repeat: true }, { isComposing: true }, { altKey: true }, { ctrlKey: true }, { metaKey: true }]) {
+      fireEvent.keyDown(reader, { key: "r", ...extra });
+    }
+    expect(reply).not.toHaveBeenCalled();
+    fireEvent.keyDown(reader, { key: "x" });
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    fireEvent.keyDown(reader, { key: "r" });
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "r" });
+    expect(reply).not.toHaveBeenCalled();
+  });
   it("shows the three header actions and invokes edit and board reply for the author", async () => {
     const onEditArticle = vi.fn();
     const onReplyToBoard = vi.fn();

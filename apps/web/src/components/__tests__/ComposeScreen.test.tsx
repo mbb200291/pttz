@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ComposeScreen } from "../ComposeScreen";
 
@@ -28,6 +28,32 @@ const defaultReplyProps = {
 };
 
 describe("ComposeScreen", () => {
+  it("loads existing ANSI body as plain editable text without leaking color code text", () => {
+    render(<ComposeScreen {...defaultEditProps} initial={{ body: "\x1b[1;31m原文\x1b[0m" }} />);
+    expect((screen.getByPlaceholderText("在這裡輸入文章內容…") as HTMLTextAreaElement).value).toBe("原文");
+  });
+  it("shows a validation error instead of crashing preview on unsafe formatted text", async () => {
+    render(<ComposeScreen {...defaultPostProps} initial={{ board: "Test", title: "title", body: "abc" }} />);
+    const input = screen.getByPlaceholderText("在這裡輸入文章內容…") as HTMLTextAreaElement;
+    input.focus(); input.setSelectionRange(0, 1);
+    await userEvent.click(screen.getByRole("button", { name: "高亮／粗體" }));
+    fireEvent.change(input, { target: { value: "abc\x1b" } });
+    expect((screen.getByRole("button", { name: "發文" }) as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.click(screen.getByRole("button", { name: "預覽" }));
+    expect(screen.getByRole("alert").textContent).toContain("控制字元");
+  });
+  it("previews and submits selected PTT formatting without adding Markdown", async () => {
+    const onSubmit = vi.fn();
+    render(<ComposeScreen {...defaultPostProps} initial={{ board: "Test", title: "title", body: "前紅字後" }} onSubmit={onSubmit} />);
+    const input = screen.getByPlaceholderText("在這裡輸入文章內容…") as HTMLTextAreaElement;
+    input.focus(); input.setSelectionRange(1, 3);
+    await userEvent.click(screen.getByRole("button", { name: "高亮／粗體" }));
+    expect(input.value).toBe("前紅字後");
+    await userEvent.click(screen.getByRole("button", { name: "預覽" }));
+    expect(screen.getByText("紅字").style.fontWeight).toBe("700");
+    await userEvent.click(screen.getByRole("button", { name: "發文" }));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ body: "前紅字後", formatting: [{ start: 1, end: 3, bold: true }] }));
+  });
   it("renders 發文 submit button in post mode", () => {
     render(<ComposeScreen {...defaultPostProps} />);
     expect(screen.getByRole("button", { name: "發文" })).toBeTruthy();

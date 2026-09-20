@@ -1,3 +1,4 @@
+import { articleTextRuns } from "./articleFormatting.js";
 import {
   GatewayError,
   articleKeyId,
@@ -278,9 +279,9 @@ function withdrawalRanges(floors: readonly number[]): readonly { start: number; 
 }
 
 function separatorBody(body: string): string {
-  const plain = stripAnsi(body).replace(/\r\n?/gu, "\n");
-  const lines = plain.split("\n");
-  const separator = lines.findIndex((line) => /^─{10,}/u.test(line.trim()));
+  const lines = body.replace(/\r\n?/gu, "\n").split("\n");
+  // Strip styling only to recognize the header boundary; preserve the original body runs.
+  const separator = lines.findIndex((line) => /^─{10,}/u.test(stripAnsi(line).trim()));
   return (separator < 0 ? body : lines.slice(separator + 1).join("\n")).trim();
 }
 
@@ -545,6 +546,12 @@ export class PttzzzClient {
   }
 
   private async write(command: PttCommand): Promise<Result<void>> {
+    if (command.type === "create-article" || command.type === "edit-article" || command.type === "reply-article-to-board") {
+      try { articleTextRuns(command.content, command.formatting); }
+      catch (error) {
+        return fail({ code: "INVALID_INPUT", message: error instanceof Error ? error.message : "文章格式無效", retryable: false, outcome: "not-sent" });
+      }
+    }
     let receipt: ActionReceipt;
     try {
       receipt = await this.gateway.execute(command);

@@ -40,6 +40,7 @@ vi.mock("@pttzzz/core", async (importOriginal) => ({
 import {
   submitDuplicateLoginDecision,
   submitLogin,
+  submitLogout,
   useFavoriteBoards,
   usePttSocket,
   usePttSocketStore,
@@ -47,6 +48,21 @@ import {
 } from "../usePttSocket";
 
 describe("public PttzzzClient socket bridge", () => {
+  it("logs out only this client and clears local credentials without logging in again", async () => {
+    usePttSocketStore.setState({ client, pttState: "ready", wsStatus: "connected", credentials: { username: "user", password: "secret" }, loginError: "old" });
+    await submitLogout();
+    expect(client.disconnect).toHaveBeenCalledTimes(1);
+    expect(login).not.toHaveBeenCalled();
+    expect(usePttSocketStore.getState()).toMatchObject({ pttState: "logged_out", wsStatus: "closed", credentials: null, loginError: null });
+  });
+  it("clears credentials but does not claim logout succeeded if cleanup rejects", async () => {
+    vi.mocked(client.disconnect).mockRejectedValueOnce(new Error("disconnect failed"));
+    usePttSocketStore.setState({ client, pttState: "ready", wsStatus: "connected", credentials: { username: "user", password: "secret" } });
+    await submitLogout();
+    expect(usePttSocketStore.getState()).toMatchObject({ pttState: "closed", credentials: null });
+    expect(usePttSocketStore.getState().loginError).toContain("清理未完成");
+    expect(login).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     listeners.clear();
     vi.clearAllMocks();
@@ -191,6 +207,19 @@ describe("public PttzzzClient socket bridge", () => {
       pttState: "ready",
       credentials: { username: "user", password: "password" },
     });
+  });
+
+  it.each([true, false])("does not let a late duplicate-login result overwrite a closed connection (%s)", async (ok) => {
+    usePttSocketStore.setState({ client, wsStatus: "connected", pttState: "duplicate_login", credentials: { username: "user", password: "password" } });
+    login.mockImplementationOnce(async () => {
+      usePttSocketStore.setState({ wsStatus: "closed", pttState: "closed" });
+      return ok ? { ok: true, value: { userId: "user" } } : { ok: false, error: { code: "LOGIN_FAILED", message: "unknown", retryable: false } };
+    });
+    await submitDuplicateLoginDecision(false);
+    expect(usePttSocketStore.getState()).toMatchObject({ pttState: "closed", credentials: null });
+    expect(usePttSocketStore.getState().loginError).toContain("保留其他連線");
+    expect(usePttSocketStore.getState().loginError).toContain("無法確認");
+    expect(login).toHaveBeenCalledTimes(1);
   });
 
   it("keeps credentials and asks for a decision when PTT reports a duplicate login", async () => {

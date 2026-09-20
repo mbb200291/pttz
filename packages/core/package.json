@@ -1,6 +1,6 @@
 {
   "name": "@pttzzz/core",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "pttzzz": {
     "rules": "0.2.x"
   },

@@ -1,5 +1,11 @@
 # pttzzz 實作概況
 
+Goal 11 終端圖形：預格式化／原始本文使用 DBCS 欄寬，常用框線與色塊按格繪製以維持表格對齊；總回覆包含巢狀可見回文，第一層討論數另列。
+
+Goal 11 漸進閱讀：載入中的本文與完整本文共用格式化呈現，保留色碼、排版選擇與媒體節點，避免純文字預覽切換到完整版時的格式閃動。
+
+Goal 11 色碼讀取：browser 從 terminal.js 屬性還原文章 SGR，core 去除標頭時保留本文色碼，讓既有原始排版／閱讀配色能收到作者上色資訊；不改動預設字體與頁面主題。
+
 這份文件記錄目前 high-level 架構與能力；產品需求仍以 `spec.md` 為準，Goal 9 的詳細決策見 [goal-9-implementation-notes.md](goal-9-implementation-notes.md)。
 
 ## 產品定位
@@ -36,6 +42,7 @@ Core 不依賴 React、Zustand、DOM、WebSocket、storage 或 `ptt-client`。�
 
 ## 資料與操作模型
 
+- Goal 11 第一階段：Web 列表增加焦點限定的箭頭導覽與回程焦點，正文可切換保留原始排版；PTT 格式編輯仍待後續實作。詳見 [Goal 11 紀錄](goal-11-implementation-notes.md)。
 - Goal 10：`推樓上`、`噓樓上` 與 `回樓上：內容` 固定指前一原始樓號，無效目標保留文字且不向上猜測；已聚合來源映射到完整卡片。詳見 [Goal 10 紀錄](goal-10-implementation-notes.md)。
 
 - 白皮書與 fixtures 固定推文聚合、巢狀回覆、投票、撤回、編輯與 partial semantics。
@@ -92,6 +99,16 @@ npm run verify    # tests + helper tests + build + lint + pack/example smoke
 2026-08-29：684 tests 通過（core 321、browser 155、web 197、pack helper 11）；build、lint（0 errors、3 個既有 Fast Refresh warnings）、package pack、isolated install、ESM/types、deep-import boundary 與 minimal UI execution smoke 通過。
 
 ## 細節文件
+
+Goal 11 首頁與看板支援任意方向鍵啟用選取、Z 自訂推文門檻，body 與區域鍵盤事件分工避免雙觸發；首頁登出呼叫目前 client.disconnect，清除登入記憶體並使用明確已登出畫面。
+
+Goal 11 閱讀樣式預設繼承網站，僅投影作者明確 ANSI 樣式為可讀色盤；表格／ASCII 才預設等寬，手動原始排版恢復終端色彩。登入中斷保留 closed 並提示可能的重複連線上限，不自動踢除其他連線。
+
+Goal 11 閱讀呈現：完整文章以安全 ANSI SGR 分段保留色彩，量測原文自然行寬後依容器自動採原始行寬或換行；可手動鎖定原始排版並局部橫捲。媒體固定另列，不改核心解析規則。
+
+Goal 11 格式階段：core/browser/Web 0.3.0 新增獨立 ArticleTextStyle 範圍，支援文章高亮與 8 種前景色；browser 驗證後以編輯器控制序列傳送，Web 選字預覽且格式納入防重複寫入指紋。規則層維持 0.2.x，既有 ANSI 樣式的閱讀／重編輯 round-trip 尚未提供。
+
+Goal 11 後續：Web 文章統計合併為核心校正票數操作列；首頁加入空間方向鍵導覽，文章 X／R 與看板 Ctrl+P 僅開啟既有編輯器。browser 最新頁讀取重新定位終端，舊頁排除重疊／置底並推進游標；useBoard 同步請求鎖與 generation 保護刷新、載入更多及快取重驗證。詳見 [Goal 11 實作紀錄](goal-11-implementation-notes.md)。
 
 - [Goal 9 architecture design](goal-9-core-architecture-design.md)
 - [Goal 9 implementation plan](goal-9-implementation-plan.md)

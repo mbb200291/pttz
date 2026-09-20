@@ -5,6 +5,7 @@ import {
   useRecentBoards,
   usePttSocket,
   usePttSocketStore,
+  submitLogout,
 } from "./hooks/usePttSocket";
 import { BoardInput } from "./components/BoardInput";
 import { ArticleList } from "./components/ArticleList";
@@ -272,6 +273,7 @@ export default function App() {
           favoriteBoardsLoading={!isPreview && favoriteBoardsLoading}
           recentBoards={isPreview ? undefined : recentBoards}
           currentUser={currentUser}
+          onLogout={isPreview ? undefined : () => { void submitLogout(); }}
           onEnter={(board) => {
             addRecent(board);
             setView({ type: "board", name: board });
@@ -374,6 +376,7 @@ export default function App() {
             category: payload.category,
             title: payload.title,
             content: payload.body,
+            ...(payload.formatting?.length ? { formatting: payload.formatting } : {}),
           }))}
           submitError={postSubmitError}
           onCancel={() => setView({ type: "board", name: view.board })}
@@ -383,6 +386,7 @@ export default function App() {
               category: payload.category,
               title: payload.title,
               content: payload.body,
+              ...(payload.formatting?.length ? { formatting: payload.formatting } : {}),
             });
             if (postSubmittingRef.current || lockedPostFingerprints.has(fingerprint)) return;
             postSubmittingRef.current = true;
@@ -394,6 +398,7 @@ export default function App() {
                 category: payload.category,
                 title: payload.title,
                 content: payload.body,
+                ...(payload.formatting?.length ? { formatting: payload.formatting } : {}),
               })
               .then((result) => {
                 if (result.ok) {
@@ -431,6 +436,7 @@ export default function App() {
           isSubmitLocked={(payload) => lockedEditFingerprints.has(writeFingerprint("editArticle", {
             article: articleKey(view.board, view.articleIndex),
             content: payload.body,
+            ...(payload.formatting?.length ? { formatting: payload.formatting } : {}),
           }))}
           submitError={editSubmitError}
           onCancel={() =>
@@ -446,6 +452,7 @@ export default function App() {
             const fingerprint = writeFingerprint("editArticle", {
               article: articleKey(view.board, view.articleIndex),
               content: payload.body,
+              ...(payload.formatting?.length ? { formatting: payload.formatting } : {}),
             });
             if (editSubmittingRef.current || lockedEditFingerprints.has(fingerprint)) return;
             editSubmittingRef.current = true;
@@ -455,6 +462,7 @@ export default function App() {
               .editArticle({
                 article: articleKey(view.board, view.articleIndex),
                 content: payload.body,
+                ...(payload.formatting?.length ? { formatting: payload.formatting } : {}),
               })
               .then((result) => {
                 if (!result.ok) {
@@ -499,6 +507,7 @@ export default function App() {
           isSubmitLocked={(payload) => lockedReplyFingerprints.has(writeFingerprint("replyArticleToBoard", {
             article: articleKey(view.board, view.articleIndex, view.articleAid),
             content: payload.body,
+            ...(payload.formatting?.length ? { formatting: payload.formatting } : {}),
           }))}
           submitError={replySubmitError}
           onCancel={() => {
@@ -522,6 +531,7 @@ export default function App() {
             const fingerprint = writeFingerprint("replyArticleToBoard", {
               article: articleKey(view.board, view.articleIndex, view.articleAid),
               content: payload.body,
+              ...(payload.formatting?.length ? { formatting: payload.formatting } : {}),
             });
             if (replySubmittingRef.current || lockedReplyFingerprints.has(fingerprint)) return;
             replySubmittingRef.current = true;
@@ -530,6 +540,7 @@ export default function App() {
             void actions.replyArticleToBoard({
               article: articleKey(view.board, view.articleIndex, view.articleAid),
               content: payload.body,
+              ...(payload.formatting?.length ? { formatting: payload.formatting } : {}),
             }).then((result) => {
               if (!result.ok) {
                 setReplySubmitError(formatWriteError(result.error, "文章回應失敗"));

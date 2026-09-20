@@ -1,4 +1,7 @@
 import Ptt from "ptt-client";
+import { articleTerminalLine, type TerminalLine } from "./terminalLine.js";
+import { formatEditorBody } from "./articleFormatting.js";
+import type { ArticleTextStyle } from "@pttzzz/core";
 import type PttConfig from "ptt-client/dist/config";
 import { Board as PttClientBoard } from "ptt-client/dist/sites/ptt/model/board.js";
 import type {
@@ -157,6 +160,7 @@ const actionRejectedAfterSend = (reason: string): ActionResult => ({
 });
 
 export interface EditArticleRequest {
+  formatting?: readonly ArticleTextStyle[];
   boardName: string;
   articleIndex: number;
   articleAid?: string;
@@ -174,6 +178,7 @@ export interface DeleteArticleRequest {
 }
 
 export interface ReplyArticleToBoardRequest {
+  formatting?: readonly ArticleTextStyle[];
   boardName: string;
   articleIndex: number;
   articleAid?: string;
@@ -286,6 +291,7 @@ export interface TerminalDriver {
     category: string,
     title: string,
     body: string,
+    formatting?: readonly ArticleTextStyle[],
   ) => Promise<ActionResult>;
   editArticle: (request: EditArticleRequest) => Promise<ActionResult>;
   deleteArticle: (request: DeleteArticleRequest) => Promise<ActionResult>;
@@ -345,7 +351,7 @@ type BotLike = {
     lines?: string[];
   }>;
   getFavorite?: (offsets?: number | number[]) => Promise<PttBoardRow[]>;
-  getLine?: (n: number) => { str?: string };
+  getLine?: (n: number) => TerminalLine;
 };
 
 type ArticleFetchBot = Partial<
@@ -845,6 +851,10 @@ class PttClientTerminalDriver implements TerminalDriver {
       const offset = Math.max(beforeIndex - 9, 1);
       await this.bot.send(`${PTT_KEY_END}${PTT_KEY_END}${offset}\r`);
       await sleep(150);
+    } else if (sameFilterActive) {
+      // Refresh the existing result set without reapplying its conditions.
+      await this.bot.send(`${PTT_KEY_END}${PTT_KEY_END}`);
+      await sleep(150);
     }
 
     const screen = readVisibleScreen(this.bot);
@@ -1164,12 +1174,14 @@ class PttClientTerminalDriver implements TerminalDriver {
           ? submitArticleEditFromBot(this.bot, {
               ...request,
               body: command.content,
+              formatting: command.formatting,
             })
           : command.type === "delete-article"
             ? submitArticleDeleteFromBot(this.bot, request)
             : submitArticleReplyToBoardFromBot(this.bot, {
                 ...request,
                 body: command.content,
+                formatting: command.formatting,
               });
       }
       return this.executeSingleArticlePush(command);
@@ -1277,10 +1289,11 @@ class PttClientTerminalDriver implements TerminalDriver {
     category: string,
     title: string,
     body: string,
+    formatting?: readonly ArticleTextStyle[],
   ): Promise<ActionResult> {
     return this.runSerial(async () => {
       await this.waitUntilLoggedIn();
-      return submitPostFromBot(this.bot, board, category, title, body);
+      return submitPostFromBot(this.bot, board, category, title, body, formatting);
     });
   }
 
@@ -2542,7 +2555,8 @@ export async function submitArticleEditFromBot(
     return actionNotSent("PTT client 不支援文章編輯");
   }
 
-  const cleanBody = sanitizePostBody(request.body).trimEnd();
+  if (request.formatting?.length && !request.body.trim()) return actionNotSent("文章正文不可為空");
+  const cleanBody = sanitizePostBody(request.body, request.formatting).trimEnd();
   if (!cleanBody) return actionNotSent("文章正文不可為空");
 
   const aid = request.articleAid?.trim().replace(/^#/u, "") ?? "";
@@ -2682,7 +2696,8 @@ export async function submitArticleReplyToBoardFromBot(
     return actionNotSent("PTT client 不支援回應文章");
   }
 
-  const body = sanitizePostBody(request.body).trimEnd();
+  if (request.formatting?.length && !request.body.trim()) return actionNotSent("回應正文不可為空");
+  const body = sanitizePostBody(request.body, request.formatting).trimEnd();
   if (!body.trim()) return actionNotSent("回應正文不可為空");
   const timeouts = {
     ...DEFAULT_ARTICLE_REPLY_TIMEOUTS,
@@ -2980,7 +2995,8 @@ export async function submitPushFromCurrentArticle(
   );
 }
 
-function sanitizePostBody(body: string): string {
+function sanitizePostBody(body: string, formatting?: readonly ArticleTextStyle[]): string {
+  if (formatting?.length) return formatEditorBody(body, formatting);
   return body
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n")
@@ -3048,10 +3064,12 @@ async function submitPostFromBot(
   category: string,
   title: string,
   body: string,
+  formatting?: readonly ArticleTextStyle[],
 ): Promise<ActionResult> {
   if (!bot.send || !bot.getLine) {
     return actionNotSent("Bot does not expose article write methods");
   }
+  if (formatting?.length && !body.trim()) return actionNotSent("文章正文不可為空");
 
   const debug = IS_DEV;
   const log = (msg: string) => {
@@ -3210,12 +3228,15 @@ async function submitPostFromBot(
     /離開|Ctrl-X|插入|文章編輯|請按.+鍵/u,
     2500,
   );
+  if (formatting?.length && (!editorReady || !isPostEditorScreen(readVisibleScreen(bot)))) {
+    return actionNotSent("無法確認 PTT 編輯器，未輸入格式化正文");
+  }
   if (!editorReady) {
     log(`Warning: editor screen not detected within timeout, proceeding anyway`);
   }
 
   // Phase 6: 逐行送內文（避免長文截斷）
-  const cleanBody = sanitizePostBody(body);
+  const cleanBody = sanitizePostBody(body, formatting);
   const lines = cleanBody.split("\n");
   log(`Entering body: ${lines.length} lines, ${cleanBody.length} chars total`);
   for (const line of lines) {
@@ -3328,6 +3349,11 @@ export async function fetchBoardArticlesFromBotManually(
   if (beforeIndex > 0) {
     const offset = Math.max(beforeIndex - 9, 1);
     await bot.send(`${PTT_KEY_END}${PTT_KEY_END}${offset}\r`);
+    await sleep(120);
+  } else {
+    // A previous lookahead/page read leaves the terminal on an older window.
+    // A cursorless read must always return the latest page, including pins.
+    await bot.send(`${PTT_KEY_END}${PTT_KEY_END}`);
     await sleep(120);
   }
 
@@ -3569,9 +3595,9 @@ function appendUniqueArticleScreenLines(
   let contentLines = screen.slice(0, 23);
   if (
     lines.length > 0 &&
-    contentLines[0]?.trimStart().startsWith("作者") &&
-    contentLines[1]?.trimStart().startsWith("標題") &&
-    contentLines[2]?.trimStart().startsWith("時間")
+    stripAnsi(contentLines[0] ?? "").trimStart().startsWith("作者") &&
+    stripAnsi(contentLines[1] ?? "").trimStart().startsWith("標題") &&
+    stripAnsi(contentLines[2] ?? "").trimStart().startsWith("時間")
   ) {
     const separatorIndex = contentLines.findIndex(
       (line, index) => index >= 3 && /^─{5,}/u.test(stripAnsi(line).trim()),
@@ -3584,7 +3610,7 @@ function appendUniqueArticleScreenLines(
   // Trim trailing blank lines from the screen content so that blank fill-lines
   // at the bottom of a PTT terminal page don't count as "new" content and
   // prevent the end-of-article early break.
-  while (contentLines.length > 0 && contentLines[contentLines.length - 1].trim() === "") {
+  while (contentLines.length > 0 && stripAnsi(contentLines[contentLines.length - 1]).trim() === "") {
     contentLines.pop();
   }
 
@@ -3593,7 +3619,7 @@ function appendUniqueArticleScreenLines(
     return contentLines.length;
   }
 
-  while (lines.length > 0 && lines[lines.length - 1].trim() === "") {
+  while (lines.length > 0 && stripAnsi(lines[lines.length - 1]).trim() === "") {
     lines.pop();
   }
 
@@ -3629,13 +3655,7 @@ async function readArticleLinesProgressively(
     throw new Error("Progressive article reading requires send/getLine");
   }
 
-  const readScreen = () => {
-    const screenLines: string[] = [];
-    for (let index = 0; index < 24; index += 1) {
-      screenLines.push(bot.getLine?.(index)?.str ?? "");
-    }
-    return screenLines;
-  };
+  const readScreen = () => readScreenLines(bot);
 
   const lines: string[] = [];
   let screen = initialScreen ?? readScreen();
@@ -3693,7 +3713,7 @@ async function readArticleLinesProgressively(
 function readScreenLines(bot: Pick<ArticleFetchBot, "getLine">): string[] {
   const screenLines: string[] = [];
   for (let index = 0; index < 24; index += 1) {
-    screenLines.push(bot.getLine?.(index)?.str ?? "");
+    screenLines.push(articleTerminalLine(bot.getLine?.(index)));
   }
   return screenLines;
 }

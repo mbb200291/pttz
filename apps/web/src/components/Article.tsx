@@ -9,6 +9,7 @@ import { useArticle } from "../hooks/useArticle";
 import { PushThread } from "./PushThread";
 import { ArticleRevisions } from "./ArticleRevisions";
 import { RichContent } from "./RichContent";
+import { canUseShortcut, navigateList } from "../lib/keyboardNavigation";
 import type { ArticleData, PartialArticleData } from "../hooks/useArticle";
 import type { ArticleEditRecord, ArticleSummary } from "../lib/ptt/uiArticle";
 import {
@@ -162,20 +163,7 @@ function ArticleHeader({
 }
 
 function ArticleBody({ body }: { body: string }) {
-  const clean = body.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "").trim();
-  return <RichContent text={clean} variant="body" />;
-}
-
-function LightweightArticleBody({ body }: { body: string }) {
-  const clean = body.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "").trim();
-  if (!clean) {
-    return <div className="mb-8 py-4 text-sm text-gray-500">文章內容載入中…</div>;
-  }
-  return (
-    <pre className="mb-8 whitespace-pre-wrap break-words font-mono text-sm leading-relaxed text-gray-200">
-      {clean}
-    </pre>
-  );
+  return <RichContent text={body} variant="body" />;
 }
 
 function LightweightPushList({
@@ -247,19 +235,12 @@ function transitionVoteState(
   };
 }
 
-function PartialArticleView({ partial }: { partial: PartialArticleData }) {
+function PartialDiscussion({ partial }: { partial: PartialArticleData }) {
   const pushes = partial.pushes ?? [];
   const articleNotes = partial.articleNotes ?? [];
 
   return (
     <>
-      <ArticleHeader
-        title={partial.title}
-        author={partial.author}
-        board={partial.board}
-        date={partial.date}
-      />
-      <LightweightArticleBody body={partial.body} />
       <ArticleEditRecords records={articleNotes} />
       <LightweightPushList pushes={pushes} />
       <div className="py-6 text-center text-gray-500 text-sm border-t border-gray-800">
@@ -309,6 +290,12 @@ export function Article({
   onEditArticle,
   onReplyToBoard,
 }: ArticleProps) {
+  const navigationRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (document.activeElement === document.body && !document.querySelector('[role="dialog"], dialog[open]')) {
+      navigationRef.current?.focus({ preventScroll: true });
+    }
+  }, [boardName, articleIndex, articleAid]);
   const {
     article: liveArticle,
     partialArticle,
@@ -705,6 +692,9 @@ export function Article({
         }
       : null;
 
+  const loadingArticle = loading ? partialArticle ?? cachedArticle ?? initialArticle : null;
+  const displayedArticle = article ?? loadingArticle;
+
   useEffect(() => {
     if (!import.meta.env.DEV || typeof window === "undefined") return;
 
@@ -726,17 +716,28 @@ export function Article({
     };
   }, [article, articleIndex, boardName]);
 
-  // Compute native article votes and visible aggregated replies for the stats bar.
-  const fallbackPushTypes = article?.pushes.map((push) => push.type) ?? [];
-  const pushCount = article?.nativeVotes?.pushCount ?? article?.nativePushCount ?? fallbackPushTypes.filter((type) => type === "push").length;
-  const booCount = article?.nativeVotes?.booCount ?? article?.nativeBooCount ?? fallbackPushTypes.filter((type) => type === "boo").length;
+  // Count all visible aggregated replies, including nested replies.
   const replyCount = (article?.pushes ?? []).filter((push) =>
     push.type !== "edit" &&
     push.visible !== false
   ).length;
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--text)" }}>
+    <div ref={navigationRef} tabIndex={0} data-navigation-item aria-label="文章閱讀區，左方向鍵返回"
+      onKeyDown={(event) => {
+        if (article && !composer && canUseShortcut(event)) {
+          const key = event.key.toLowerCase();
+          if (key === "x" && isLoggedIn) {
+            event.preventDefault();
+            openReply();
+          } else if (key === "r" && canReplyToBoard) {
+            event.preventDefault();
+            onReplyToBoard?.(article);
+          }
+        }
+        if (event.key === "ArrowLeft" && event.target === event.currentTarget) navigateList(event, onBack);
+      }}
+      style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--text)" }}>
       {/* 頂部導覽 */}
       <div style={{
         position: "sticky",
@@ -829,6 +830,8 @@ export function Article({
               <button
                 type="button"
                 aria-label="回應至看板"
+                aria-keyshortcuts="r"
+                title="回應至看板（R）"
                 onClick={() => canReplyToBoard && onReplyToBoard?.(article)}
                 disabled={!canReplyToBoard}
                 style={{
@@ -871,13 +874,26 @@ export function Article({
           </div>
         )}
 
-        {/* 初次 loading，但有 partialArticle 可先顯示 */}
-        {loading && partialArticle && (
-          <PartialArticleView partial={partialArticle} />
+        {/* Keep the same formatted body mounted across partial, cached and final data. */}
+        {displayedArticle && (
+          <>
+            <ArticleHeader
+              title={displayedArticle.title}
+              author={displayedArticle.author}
+              board={displayedArticle.board}
+              date={displayedArticle.date}
+              score={article?.score}
+            />
+            {displayedArticle.body || article ? (
+              <ArticleBody key={`${boardName}:${articleAid ?? articleIndex}`} body={displayedArticle.body} />
+            ) : (
+              <div className="mb-8 py-4 text-sm text-gray-500">文章內容載入中…</div>
+            )}
+          </>
         )}
 
-        {loading && !partialArticle && (cachedArticle || initialArticle) && (
-          <PartialArticleView partial={(cachedArticle ?? initialArticle)!} />
+        {!article && loadingArticle && (
+          <PartialDiscussion partial={loadingArticle} />
         )}
 
         {/* 初次 loading，尚無任何內容 */}
@@ -895,19 +911,11 @@ export function Article({
         {/* 完整文章 */}
         {article && (
           <>
-            <ArticleHeader
-              title={article.title}
-              author={article.author}
-              board={article.board}
-              date={article.date}
-              score={article.score}
-            />
-            <ArticleBody body={article.body} />
             <ArticleRevisions revisions={article.revisions ?? []} />
             <ArticleEditRecords records={article.articleNotes} />
 
-            {/* Stats bar */}
-            <div style={{
+            {/* One action row uses the core's corrected article vote totals. */}
+            <div role="group" aria-label="文章推噓與回覆" style={{
               display: "flex",
               alignItems: "center",
               gap: 16,
@@ -917,31 +925,6 @@ export function Article({
               marginBottom: 24,
               flexWrap: "wrap",
             }}>
-              {/* push count */}
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <PushTypeBadge type="push" />
-                <span style={{ fontWeight: 700, fontSize: 14, color: "var(--push-fg)", fontFamily: "var(--font-mono)" }}>{pushCount}</span>
-                <span style={{ fontSize: 12, color: "var(--text-dim)" }}>PTT 原生推</span>
-              </div>
-              {/* boo count */}
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <PushTypeBadge type="boo" />
-                <span style={{ fontWeight: 700, fontSize: 14, color: "var(--boo-fg)", fontFamily: "var(--font-mono)" }}>{booCount}</span>
-                <span style={{ fontSize: 12, color: "var(--text-dim)" }}>PTT 原生噓</span>
-              </div>
-              {/* aggregated reply count */}
-              <div
-                aria-label={`聚合後回覆 ${replyCount}`}
-                style={{ display: "flex", alignItems: "center", gap: 6 }}
-              >
-                <PushTypeBadge type="neutral" />
-                <span style={{ fontWeight: 700, fontSize: 14, color: "var(--neutral-fg)", fontFamily: "var(--font-mono)" }}>{replyCount}</span>
-                <span style={{ fontSize: 12, color: "var(--text-dim)" }}>回覆</span>
-              </div>
-            </div>
-
-            {/* Article-level VotePair */}
-            <div style={{ margin: "0 0 24px", display: "flex", alignItems: "center", gap: 12 }}>
               <VotePair
                 value={articleVote.value}
                 count={articleVote.count}
@@ -955,13 +938,21 @@ export function Article({
                 disabled={!isLoggedIn || isArticleAuthor || articleVotePending || articleVoteLocked}
                 size="lg"
               />
+              <div
+                aria-label={`聚合後回覆 ${replyCount}`}
+                style={{ display: "flex", alignItems: "center", gap: 6 }}
+              >
+                <PushTypeBadge type="neutral" />
+                <span style={{ fontWeight: 700, fontSize: 14, color: "var(--neutral-fg)", fontFamily: "var(--font-mono)" }}>{replyCount}</span>
+                <span style={{ fontSize: 12, color: "var(--text-dim)" }}>回覆</span>
+              </div>
               {isArticleAuthor && (
                 <span style={{ color: "var(--text-dim)", fontSize: 12 }}>
                   作者本人, 使用 → 加註方式
                 </span>
               )}
               {isLoggedIn && (
-                <button type="button" onClick={openReply}
+                <button type="button" onClick={openReply} aria-keyshortcuts="x" title="回覆此文（X）"
                   className="px-4 py-2 rounded-xl border border-gray-700 text-sm text-gray-300 hover:text-white hover:border-gray-500 transition-colors">
                   回覆此文
                 </button>

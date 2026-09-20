@@ -1,3 +1,4 @@
+import { articleTextRuns } from "@pttzzz/core";
 import {
   GatewayError,
   type ActionReceipt,
@@ -327,6 +328,12 @@ export class BrowserPttGateway implements PttGateway {
   }
 
   async execute(command: PttCommand): Promise<ActionReceipt> {
+    if (command.type === "create-article" || command.type === "edit-article" || command.type === "reply-article-to-board") {
+      try { articleTextRuns(command.content, command.formatting); }
+      catch (error) {
+        return { ok: false, code: "INVALID_INPUT", message: error instanceof Error ? error.message : "文章格式無效", outcome: "not-sent", retryable: false };
+      }
+    }
     if (command.type === "edit-floor" && (!Number.isInteger(command.floor) || command.floor <= 0)) {
       return {
         ok: false,
@@ -604,14 +611,17 @@ function terminalGatewayDriver(driver: GatewayTerminalDriver): BrowserGatewayDri
               ? await driver.searchArticles(input.board, input.keyword, beforeIndex)
               : await driver.listArticles(input.board, beforeIndex);
         const fresh = batch.filter((row) =>
+          (beforeIndex === undefined || (!row.fixed && row.index < beforeIndex)) &&
           (!input.author || normalizedPttId(row.author) === normalizedPttId(input.author)) &&
           !rows.some((seen) => seen.index === row.index)
         );
         rows.push(...fresh);
-        const last = batch[batch.length - 1];
-        if (!last) break;
-        if (beforeIndex !== undefined && last.index >= beforeIndex) break;
-        beforeIndex = last.index;
+        // Terminal windows overlap and pins are not chronological cursors.
+        const normalIndexes = batch.filter((row) => !row.fixed).map((row) => row.index);
+        if (!normalIndexes.length) break;
+        const oldestIndex = Math.min(...normalIndexes);
+        if (beforeIndex !== undefined && oldestIndex >= beforeIndex) break;
+        beforeIndex = oldestIndex;
       }
       return rows;
     },
@@ -624,6 +634,7 @@ function terminalGatewayDriver(driver: GatewayTerminalDriver): BrowserGatewayDri
             command.category ?? "",
             command.title,
             command.content,
+            command.formatting,
           ));
         case "withdraw-floor": {
           if (!command.ranges.length || command.ranges.some(({ start, end }) =>

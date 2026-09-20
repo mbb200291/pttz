@@ -16,6 +16,8 @@ import type {
   WheelEvent,
 } from "react";
 import { useRef, useEffect, useMemo, useState } from "react";
+import { canUseShortcut, hasOpenNavigationDialog, navigateList, type NavigationKeyEvent } from "../lib/keyboardNavigation";
+import { useBodyNavigation } from "../hooks/useBodyNavigation";
 import { useBoard } from "../hooks/useBoard";
 import type { BoardFilter } from "../lib/ptt/viewState";
 import type { ArticleSummary } from "../lib/ptt/uiArticle";
@@ -186,6 +188,8 @@ function ArticleRow({
     <button
       type="button"
       data-article-index={normalized.index}
+      data-navigation-item
+      className="focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-400"
       data-fixed-article={isFixed ? "true" : undefined}
       onClick={handleClick}
       disabled={isDeleted}
@@ -717,6 +721,8 @@ export function ArticleList({
   );
   const [customPushFilterOpen, setCustomPushFilterOpen] = useState(false);
   const pushFilterRef = useRef<HTMLDivElement>(null);
+  const navigationRef = useRef<HTMLDivElement>(null);
+  useBodyNavigation(navigationRef, handleNavigation);
 
   const {
     articles: liveArticles,
@@ -818,6 +824,7 @@ export function ArticleList({
             row.getBoundingClientRect().top -
             cachedAnchor.viewportTop;
           window.scrollTo({ top: Math.max(0, targetTop), behavior: "auto" });
+          if (document.activeElement === document.body && !row.matches(":disabled") && !hasOpenNavigationDialog()) row.focus({ preventScroll: true });
           return;
         }
       }
@@ -1042,9 +1049,25 @@ export function ArticleList({
   const isCustomPushFilter =
     activePushThreshold !== null && !PUSH_FILTER_PRESETS.has(activePushThreshold);
 
+  function handleNavigation(event: NavigationKeyEvent, scope?: HTMLElement) {
+    if (event.key.toLowerCase() === "z" && canUseShortcut(event, false, scope)) {
+      event.preventDefault();
+      setCustomPushFilterOpen(true);
+      return;
+    }
+    if (event.key.toLowerCase() === "p" && onCompose && canUseShortcut(event, true, scope)) {
+      event.preventDefault();
+      onCompose(observedCategoryOptions);
+      return;
+    }
+    navigateList(event, onBack, scope);
+  }
+
   return (
     <div
+      ref={navigationRef}
       onTouchStart={handleTouchStart}
+      onKeyDown={handleNavigation}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
@@ -1177,6 +1200,8 @@ export function ArticleList({
             <button
               type="button"
               onClick={() => onCompose(observedCategoryOptions)}
+              aria-keyshortcuts="Control+p"
+              title="發文（Ctrl+P）"
               style={{
                 display: "inline-flex",
                 alignItems: "center",

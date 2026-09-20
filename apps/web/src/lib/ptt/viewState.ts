@@ -43,6 +43,7 @@ export function getSafeViewForPttState(view: AppView, pttState: PttState): AppVi
     pttState === "duplicate_login" ||
     pttState === "guest_overload" ||
     pttState === "closed" ||
+    pttState === "logged_out" ||
     pttState === "error"
   ) {
     return { type: "home" };

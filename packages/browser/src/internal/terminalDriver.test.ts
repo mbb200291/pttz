@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
 
 function readRealPttFixture(name: string): string {
@@ -46,6 +47,47 @@ function buildBoardLine(params: {
 }
 
 describe("terminal driver module", () => {
+  it.each(["edit", "reply"] as const)("rejects formatted whitespace before %s navigation", async (kind) => {
+    const mod = await import("./terminalDriver.js");
+    const sent: string[] = [];
+    const bot = { getLines: async () => [], getLine: () => ({ str: "" }), send: async (value: string) => { sent.push(value); return true; } };
+    const request = { boardName: "Test", articleIndex: 0, expectedAuthor: "alice", expectedTitle: "title", body: " \t\n ", formatting: [{ start: 0, end: 4, bold: true }] };
+    const result = await (kind === "edit" ? mod.submitArticleEditFromBot(bot, request) : mod.submitArticleReplyToBoardFromBot(bot, request));
+    expect(result).toMatchObject({ ok: false, outcome: "not-sent", reason: kind === "edit" ? "文章正文不可為空" : "回應正文不可為空" });
+    expect(sent).toEqual([]);
+  });
+
+  it.each([{ editor: true, body: "red" }, { editor: false, body: "red" }, { editor: true, body: "   " }])("requires nonblank content and an actual editor before formatted create ($editor, '$body')", async ({ editor, body }) => {
+    const mod = await import("./terminalDriver.js");
+    const sent: string[] = [];
+    let rows = ["【主功能表】"];
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      enterBoardByName: async () => { rows = ["看板《Test》", buildBoardLine({ index: 1, author: "alice", title: "old" })]; return true; },
+      getLine: (index: number) => ({ str: rows[index] ?? "" }),
+      getLines: async () => rows,
+      send: async (command: string) => {
+        sent.push(command);
+        if (command === "\x10") rows = ["標題:"];
+        else if (command === "title\r") rows = [editor ? "文章編輯  離開[Ctrl-X]  插入模式" : "權限不足，請按任意鍵繼續"];
+        else if (command === "\x18") rows = ["文章已發表"];
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+    const result = await driver.postArticle("Test", "", "title", body, [{ start: 0, end: 3, color: 31 }]);
+    if (editor && body.trim()) {
+      expect(result).toMatchObject({ ok: true, outcome: "sent" });
+      expect(sent).toContain("\x15[0;31mred\x15[0m\r");
+    } else {
+      expect(result).toMatchObject({ ok: false, outcome: "not-sent" });
+      expect(sent.some(command => command.includes("\x15"))).toBe(false);
+      if (!body.trim()) expect(sent).toEqual([]);
+    }
+  });
+
   it("parses canonical AID evidence from the PTT article-info screen", async () => {
     const mod = await import("./terminalDriver.js");
     expect(mod.parseArticleInfoAid(
@@ -2032,7 +2074,60 @@ describe("terminal driver module", () => {
       785692,
       785691,
     ]);
-    expect(calls).toEqual([]);
+    expect(calls).toEqual(["send:\x1b[4~\x1b[4~"]);
+  });
+
+  it("refreshes from the latest screen after an older page was read", async () => {
+    const mod = await import("./terminalDriver.js");
+    let latest = false;
+    const bot = {
+      async send(command: string) {
+        if (command === "\x1b[4~\x1b[4~") latest = true;
+        return true;
+      },
+      getLine(index: number) {
+        const rows = ["  看板《Test》[測試] 人氣:1", "", "",
+          buildBoardLine({ index: latest ? 100 : 70, date: "4/17", author: "author", title: "[測試] 文章" }),
+          ...(latest ? [buildBoardLine({ index: 101, date: "4/17", author: "mod", title: "[公告] 置底" }).replace("101", "  *")] : []),
+        ];
+        return { str: rows[index] ?? "" };
+      },
+    };
+    const articles = await mod.fetchBoardArticlesFromBotManually(bot, "Test");
+    expect(articles.some((article) => article.index === 100)).toBe(true);
+    expect(articles.some((article) => article.fixed)).toBe(true);
+  });
+
+  it("refreshes an active title filter from its latest results after pagination", async () => {
+    const mod = await import("./terminalDriver.js");
+    const sent: string[] = [];
+    let filtered = false;
+    let latest = true;
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      async enterBoardByName() { filtered = false; return true; },
+      getLine(index: number) {
+        const rows = [filtered ? "系列《Test》" : "看板《Test》",
+          buildBoardLine({ index: latest ? 30 : 11, date: "4/17", author: "author", title: "matching topic" }),
+        ];
+        return { str: rows[index] ?? "" };
+      },
+      async send(command: string) {
+        sent.push(command);
+        if (command === "/topic\r") filtered = true;
+        if (command === "\x1b[4~\x1b[4~") latest = true;
+        if (command === "\x1b[4~\x1b[4~11\r") latest = false;
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+    expect((await driver.searchArticles("Test", "topic"))[0]?.index).toBe(30);
+    expect((await driver.searchArticles("Test", "topic", 20))[0]?.index).toBe(11);
+    expect((await driver.searchArticles("Test", "topic"))[0]?.index).toBe(30);
+    expect(sent.filter((command) => command === "/topic\r")).toHaveLength(1);
+    expect(filtered).toBe(true);
   });
 
   it("re-enters the board when forceReenter is true, even if already on a normal board list screen", async () => {
@@ -2628,6 +2723,45 @@ describe("terminal driver module", () => {
     expect(partial?.pushes).toEqual([
       expect.objectContaining({ author: "user1", content: "第一則" }),
     ]);
+  });
+
+  it("preserves terminal cell colors in first and subsequent raw article snapshots", async () => {
+    const { fetchArticleFromBotManually } = await import("./terminalDriver.js");
+    const Terminal = createRequire(import.meta.url)("terminal.js");
+    const terminal = new Terminal({ columns: 80, rows: 24 });
+    terminal.state.setMode("stringWidth", "dbcs");
+    const header = [
+      "作者  suwagutao (樹蛙孤逃)                 看板  Baseball",
+      "標題  [情報] 下半季",
+      "時間  Thu Sep 10 21:00:00 2026",
+      "───────────────────────────────────────",
+    ];
+    const colored = "\x1b[31m1 樂天桃猿 39 22-0-17\x1b[0m";
+    const pages = [
+      [...header, colored],
+      [colored, "\x1b[1;33m2 中信兄弟\x1b[0m", "G321 統一 \x1b[31m6\x1b[0m:0 中信"],
+    ];
+    const paint = (page: number) => {
+      terminal.write("\x1b[0m\x1b[2J\x1b[H" + pages[page].join("\r\n") +
+        `\x1b[24;1H瀏覽 第 ${page + 1}/2 頁 (${page ? 100 : 50}%)`);
+    };
+    paint(0);
+    const bot = {
+      async enterBoardByName() { return true; },
+      async send(command: string) {
+        if (command === "\x1b[6~") paint(1);
+        return true;
+      },
+      getLine(index: number) { return terminal.state.getLine(index); },
+    };
+    const snapshots: string[] = [];
+    await fetchArticleFromBotManually(bot, "Baseball", 1, undefined,
+      (raw) => snapshots.push(raw));
+    expect(snapshots[0]).toContain("\x1b[0;31m1 樂天桃猿");
+    const final = snapshots.at(-1)!;
+    expect(final).toContain("\x1b[0;1;33m2 中信兄弟");
+    expect(final).toContain("\x1b[0;31m6\x1b[0m:0 中信");
+    expect(final.match(/樂天桃猿/g)).toHaveLength(1);
   });
 
   it("waits for the first article screen before progressive paging", async () => {
@@ -3967,7 +4101,7 @@ describe("terminal driver module", () => {
     expect(fixtureSection(fixture, "verified")).toContain("(本文已被刪除) [TEST_USER]");
   });
 
-  it("edits the expected article without adding a custom summary", async () => {
+  it.each([false, true])("edits the expected article without adding a custom summary (formatted=%s)", async (formatted) => {
     const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     const articleRows = [
@@ -4021,10 +4155,12 @@ describe("terminal driver module", () => {
       expectedAuthor: "alice",
       expectedTitle: "[測試] 原標題",
       body: "更新正文",
+      formatting: formatted ? [{ start: 0, end: 2, bold: true, color: 31 }] : undefined,
     });
 
     expect(result).toEqual({ ok: true, outcome: "sent" });
     expect(sent).toContain("E");
+    expect(sent).toContain(formatted ? "\x15[0;1;31m更新\x15[0m正文\r" : "更新正文\r");
     expect(sent).toContain("\x1b,");
     expect(sent).toContain("舊簽名\r");
     expect(sent).toContain("※ PTTzzz 編輯摘要：第一次修正\r");
@@ -4397,7 +4533,7 @@ describe("terminal driver module", () => {
     expect(sent).toContain("y\r");
   });
 
-  it("replies to a verified article through the native PTT board flow", async () => {
+  it.each([false, true])("replies to a verified article through the native PTT board flow (formatted=%s)", async (formatted) => {
     const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     const articleRows = [
@@ -4442,6 +4578,7 @@ describe("terminal driver module", () => {
       expectedAuthor: "alice",
       expectedTitle: "[測試] 原標題",
       body: "回應第一行\n回應第二行",
+      formatting: formatted ? [{ start: 0, end: 5, color: 32 }] : undefined,
     });
 
     expect(result).toEqual({ ok: true, outcome: "sent" });
@@ -4450,7 +4587,7 @@ describe("terminal driver module", () => {
     expect(sent).toContain("\r");
     expect(sent).toContain("\x1b,");
     expect(sent).toContain("\x19".repeat(2000));
-    expect(sent).toContain("回應第一行\r");
+    expect(sent).toContain(formatted ? "\x15[0;32m回應第一行\x15[0m\r" : "回應第一行\r");
     expect(sent).toContain("回應第二行\r");
     expect(sent).toContain("\x18");
     expect(sent).toContain("y\r");
