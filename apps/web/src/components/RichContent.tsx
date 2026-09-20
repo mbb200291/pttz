@@ -5,6 +5,7 @@
  * variant="inline" → 推文內容，用 <span> 行內顯示
  */
 
+import { AdaptiveArticleBody } from "./AdaptiveArticleBody";
 import { parseContentSegments } from "../lib/ptt/contentSegments";
 import { ImagePreview } from "./MediaPreview";
 import { YouTubePreview } from "./MediaPreview";
@@ -18,26 +19,7 @@ export function RichContent({ text, variant }: RichContentProps) {
   const segments = parseContentSegments(text);
 
   if (variant === "body") {
-    return (
-      <div className="font-mono text-sm text-gray-200 leading-relaxed mb-8">
-        {segments.map((seg, i) => {
-          if (seg.kind === "image") {
-            return <ImagePreview key={i} url={seg.url} />;
-          }
-          if (seg.kind === "youtube") {
-            return <YouTubePreview key={i} videoId={seg.videoId} url={seg.url} />;
-          }
-          return (
-            <pre
-              key={i}
-              className="whitespace-pre-wrap break-words inline"
-            >
-              {seg.content}
-            </pre>
-          );
-        })}
-      </div>
-    );
+    return <AdaptiveArticleBody text={text} />;
   }
 
   // inline variant for push content

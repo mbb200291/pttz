@@ -141,7 +141,7 @@ describe("Article push voting", () => {
 
     expect((screen.getAllByRole("button", { name: "推" })[0] as HTMLButtonElement).disabled).toBe(false);
     expect((screen.getAllByRole("button", { name: "噓" })[0] as HTMLButtonElement).disabled).toBe(false);
-    expect(screen.queryByText("作者本人, 使用 → 加註方式")).toBeNull();
+    expect(screen.getByText("作者本人, 使用 → 加註方式").style.visibility).toBe("hidden");
   });
 
   it("renders authoritative article and reply vote totals from the core model", () => {
@@ -155,12 +155,17 @@ describe("Article push voting", () => {
       }],
     });
 
-    expect(screen.getByText("PTT 原生推").previousElementSibling?.textContent).toBe("8");
-    expect(screen.getByText("PTT 原生噓").previousElementSibling?.textContent).toBe("3");
+    expect(screen.queryByText("PTT 原生推")).toBeNull();
+    expect(screen.queryByText("PTT 原生噓")).toBeNull();
+    const toolbar=screen.getByRole("group", {name:"文章推噓與回覆"});
+    expect(toolbar.contains(screen.getByLabelText("聚合後回覆 1"))).toBe(true);
+    expect(toolbar.contains(screen.getByRole("button",{name:"回覆此文"}))).toBe(true);
     const pushButtons = screen.getAllByRole("button", { name: "推" });
     const booButtons = screen.getAllByRole("button", { name: "噓" });
     expect(pushButtons[0].textContent).toContain("5");
     expect(booButtons[0].textContent).toContain("2");
+    expect(toolbar.contains(pushButtons[0])).toBe(true);
+    expect(toolbar.contains(booButtons[0])).toBe(true);
     expect(pushButtons[1].textContent).toContain("6");
     expect(booButtons[1].textContent).toContain("4");
   });
@@ -178,38 +183,19 @@ describe("Article push voting", () => {
     expect(screen.getAllByText("作者本人, 使用 → 加註方式")).toHaveLength(2);
   });
 
-  it("keeps all directions available when the article author replies to a floor", () => {
-    renderArticle(article, "OP");
-
-    act(() => screen.getAllByRole("button", { name: "回覆" })[0].click());
-
-    const pushButtons = screen.getAllByRole("button", { name: "推" });
-    const booButtons = screen.getAllByRole("button", { name: "噓" });
-    expect((pushButtons[pushButtons.length - 1] as HTMLButtonElement).disabled).toBe(false);
-    expect((booButtons[booButtons.length - 1] as HTMLButtonElement).disabled).toBe(false);
-    expect((screen.getByRole("button", { name: "→" }) as HTMLButtonElement).disabled).toBe(false);
-  });
-
-  it.each(["推", "→", "噓"] as const)("sends floor reply direction %s through its stable replyId", async (label) => {
+  it.each(["OP", "viewer"])("sends floor replies as neutral for %s through the stable replyId", async (user) => {
     mocks.replyToReply.mockResolvedValue({ ok: true, value: undefined });
-    renderArticle(article, "OP");
-
+    renderArticle(article, user);
     act(() => screen.getAllByRole("button", { name: "回覆" })[0].click());
-    const directionButtons = screen.getAllByRole("button", { name: label });
-    act(() => directionButtons[directionButtons.length - 1].click());
-    fireEvent.change(screen.getByRole("textbox"), {
-      target: { value: "同意" },
-    });
+    const dialog = screen.getByRole("dialog");
+    for (const label of ["推", "→", "噓"]) {
+      expect(Array.from(dialog.querySelectorAll("button")).some((button) => button.textContent === label)).toBe(false);
+    }
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "同意" } });
     act(() => screen.getByRole("button", { name: "送出" }).click());
-
-    await waitFor(() =>
-      expect(mocks.replyToReply).toHaveBeenCalledWith({
-        article: { board: "Test", index: 99 },
-        replyId: "push-1",
-        content: "同意",
-        pushType: label === "推" ? "push" : label === "噓" ? "boo" : "neutral",
-      }),
-    );
+    await waitFor(() => expect(mocks.replyToReply).toHaveBeenCalledWith({
+      article: { board: "Test", index: 99 }, replyId: "push-1", content: "同意", pushType: "neutral",
+    }));
   });
 
   it("does not automatically retry a not-sent article reply", async () => {
@@ -232,37 +218,40 @@ describe("Article push voting", () => {
     expect(mocks.reload).not.toHaveBeenCalled();
   });
 
-  it("does not retry after reply content may have been sent", async () => {
+  it.each(["uncertain", "sent"])("refreshes then closes a %s reply without a warning or duplicate send", async (outcome) => {
     mocks.replyToArticle.mockResolvedValue({
-      ok: false,
-      error: {
-        code: "push-confirm-timeout",
-        message: "無法確認回文是否送出",
-        outcome: "uncertain",
-        retryable: false,
-      },
+      ok: false, error: { code: "push-confirm-timeout", message: "無法確認回文是否送出", outcome, retryable: false },
     });
+    let finishReload!: (value: boolean) => void;
+    mocks.reload.mockReturnValue(new Promise<boolean>((resolve) => { finishReload = resolve; }));
     renderArticle();
-
     act(() => screen.getByRole("button", { name: "回覆此文" }).click());
-    fireEvent.change(screen.getByRole("textbox"), {
-      target: { value: "不可重送" },
-    });
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "不可重送" } });
     act(() => screen.getByRole("button", { name: "送出" }).click());
-
-    expect((await screen.findByRole("alert")).textContent).toContain(
-      "可能已送出，請重新載入確認",
-    );
-    act(() => screen.getByRole("button", { name: "送出" }).click());
+    await waitFor(() => expect(mocks.reload).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText("尚未同步")).toBeNull();
+    expect(screen.getByRole("textbox")).toBeTruthy();
     expect(mocks.replyToArticle).toHaveBeenCalledTimes(1);
-    act(() => screen.getByRole("button", { name: "關閉" }).click());
+    await act(async () => finishReload(true));
+    await waitFor(() => expect(screen.queryByRole("textbox")).toBeNull());
     act(() => screen.getByRole("button", { name: "回覆此文" }).click());
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "不可重送" } });
     expect((screen.getByRole("button", { name: "送出" }) as HTMLButtonElement).disabled).toBe(true);
     expect(mocks.replyToArticle).toHaveBeenCalledTimes(1);
-    expect(mocks.replyToArticle).toHaveBeenCalledTimes(1);
-    expect(mocks.reload).not.toHaveBeenCalled();
-    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("不可重送");
+  });
+  it("closes after an unsuccessful refresh without retrying the floor reply", async () => {
+    mocks.replyToReply.mockResolvedValue({
+      ok: false, error: { code: "push-confirm-timeout", message: "unknown", outcome: "uncertain", retryable: false },
+    });
+    mocks.reload.mockResolvedValue(false);
+    renderArticle();
+    act(() => screen.getAllByRole("button", { name: "回覆" })[0].click());
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "TEST" } });
+    act(() => screen.getByRole("button", { name: "送出" }).click());
+    await waitFor(() => expect(screen.queryByRole("textbox")).toBeNull());
+    expect(mocks.reload).toHaveBeenCalledTimes(1);
+    expect(mocks.replyToReply).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("尚未同步")).toBeNull();
   });
   it("clicking the selected reply direction sends a withdrawal", async () => {
     mocks.withdrawReplyVote.mockResolvedValue({ ok: true, value: undefined });
@@ -508,7 +497,8 @@ describe("Article push voting", () => {
     expect(mocks.voteReply).toHaveBeenCalledTimes(1);
 
     act(() => pushButtons[2].click());
-    expect((await screen.findByRole("alert")).textContent).toContain("可能已送出，請重新載入確認");
+    expect((await screen.findByRole("status")).textContent).toContain("尚未同步");
+    expect(screen.getByRole("button", { name: "重新整理" })).toBeTruthy();
     expect(mocks.voteReply).toHaveBeenCalledTimes(2);
     act(() => pushButtons[2].click());
     expect(mocks.voteReply).toHaveBeenCalledTimes(2);

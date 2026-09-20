@@ -75,10 +75,16 @@ describe("upstairs replies", () => {
     expect(normalizeThreadEvents(rows)[1]).toMatchObject({ content: "推樓上", visible: true });
   });
 
+  it("keeps a relative vote with content nested under a withdrawn target", () => {
+    const result = parse(row("a", "問題。"), row("b", "推樓上：同意"), row("a", "撤回我在1樓的發言"));
+    expect(result.pushes[0]).toMatchObject({ content: "同意", replyTo: "reply:1" });
+    expect(result.withdrawnPushes[0].score).toBe(0);
+  });
+
   it("preserves an edited body when its target is later withdrawn", () => {
     const rows = [row("a", "問題。"), row("b", "回樓上：原回答"), row("b", "更正我在2樓的說法：推樓上"), row("a", "撤回我在1樓的發言")];
     const result = parse(...rows);
-    expect(result.pushes[0]).toMatchObject({ content: "推樓上", replyTo: null, score: 0 });
+    expect(result.pushes[0]).toMatchObject({ content: "推樓上", replyTo: "reply:1", score: 0 });
     expect(normalizeThreadEvents(rows)[1]).toMatchObject({ content: "推樓上", visible: true });
   });
 
@@ -93,7 +99,7 @@ describe("upstairs replies", () => {
       row("a", "撤回我在1樓的發言"),
     ];
     expect(normalizeThreadEvents(rows)[1]).toMatchObject({ content, visible: true });
-    expect(parse(...rows).pushes[0]).toMatchObject({ content, replyTo: null });
+    expect(parse(...rows).pushes[0]).toMatchObject({ content, replyTo: "reply:1" });
   });
 });
 

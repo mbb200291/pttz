@@ -1,0 +1,928 @@
+[
+  {
+    "action": "username",
+    "at": "2026-09-13T05:33:10.997Z",
+    "keys": "[REDACTED]",
+    "before": "001.txt",
+    "observedScreens": [
+      "002.txt"
+    ]
+  },
+  {
+    "action": "password",
+    "at": "2026-09-13T05:33:15.366Z",
+    "keys": "[REDACTED]",
+    "before": "002.txt",
+    "observedScreens": [
+      "003.txt",
+      "004.txt"
+    ]
+  },
+  {
+    "action": "kick",
+    "at": "2026-09-13T05:33:29.472Z",
+    "keys": "y\r",
+    "before": "004.txt",
+    "observedScreens": [
+      "005.txt",
+      "006.txt"
+    ]
+  },
+  {
+    "action": "continue",
+    "at": "2026-09-13T05:33:43.431Z",
+    "keys": "\r",
+    "before": "006.txt",
+    "observedScreens": [
+      "007.txt"
+    ]
+  },
+  {
+    "action": "favorites",
+    "at": "2026-09-13T05:33:58.271Z",
+    "keys": "f\r",
+    "before": "007.txt",
+    "observedScreens": [
+      "008.txt"
+    ]
+  },
+  {
+    "action": "known-board-prompt",
+    "at": "2026-09-13T05:34:04.049Z",
+    "keys": "s",
+    "before": "008.txt",
+    "observedScreens": [
+      "009.txt"
+    ]
+  },
+  {
+    "action": "enter-Test",
+    "at": "2026-09-13T05:34:09.834Z",
+    "keys": "Test\r",
+    "before": "009.txt",
+    "observedScreens": [
+      "010.txt",
+      "011.txt"
+    ]
+  },
+  {
+    "action": "dismiss-board-welcome",
+    "at": "2026-09-13T05:34:16.788Z",
+    "keys": "\r",
+    "before": "011.txt",
+    "observedScreens": [
+      "012.txt"
+    ]
+  },
+  {
+    "action": "open-user-designated-AID",
+    "at": "2026-09-13T05:34:22.679Z",
+    "keys": "#1gfWDlNT\r",
+    "before": "012.txt",
+    "observedScreens": [
+      "013.txt"
+    ]
+  },
+  {
+    "action": "read-designated-article",
+    "at": "2026-09-13T05:34:27.977Z",
+    "keys": "\r",
+    "before": "013.txt",
+    "observedScreens": [
+      "014.txt"
+    ]
+  },
+  {
+    "action": "other-author-push-entry",
+    "at": "2026-09-13T05:34:36.162Z",
+    "keys": "X",
+    "before": "014.txt",
+    "observedScreens": [
+      "015.txt"
+    ]
+  },
+  {
+    "action": "other-author-neutral-input",
+    "at": "2026-09-13T05:34:45.556Z",
+    "keys": "3",
+    "before": "015.txt",
+    "observedScreens": [
+      "016.txt"
+    ]
+  },
+  {
+    "action": "cancel-empty-neutral",
+    "at": "2026-09-13T05:34:59.255Z",
+    "keys": "\r",
+    "before": "016.txt",
+    "observedScreens": [
+      "017.txt"
+    ]
+  },
+  {
+    "action": "create-article-category",
+    "at": "2026-09-13T05:35:07.676Z",
+    "keys": "\u0010",
+    "before": "017.txt",
+    "observedScreens": [
+      "018.txt"
+    ]
+  },
+  {
+    "action": "select-test-category",
+    "at": "2026-09-13T05:35:13.053Z",
+    "keys": "1\r",
+    "before": "018.txt",
+    "observedScreens": [
+      "019.txt"
+    ]
+  },
+  {
+    "action": "set-test-title",
+    "at": "2026-09-13T05:35:20.105Z",
+    "keys": "pttzzz capture 20260913-1335\r",
+    "before": "019.txt",
+    "observedScreens": [
+      "020.txt"
+    ]
+  },
+  {
+    "action": "compose-body-header",
+    "at": "2026-09-13T05:35:50.461Z",
+    "keys": "PTTzzz terminal capture test 20260913-1335\r本篇用於終端畫面測試，完成後刪除。\r\r",
+    "before": "020.txt",
+    "observedScreens": [
+      "021.txt"
+    ]
+  },
+  {
+    "action": "compose-body-lines-01-15",
+    "at": "2026-09-13T05:35:58.046Z",
+    "keys": "Line 01 - pagination fixture\rLine 02 - pagination fixture\rLine 03 - pagination fixture\rLine 04 - pagination fixture\rLine 05 - pagination fixture\rLine 06 - pagination fixture\rLine 07 - pagination fixture\rLine 08 - pagination fixture\rLine 09 - pagination fixture\rLine 10 - pagination fixture\rLine 11 - pagination fixture\rLine 12 - pagination fixture\rLine 13 - pagination fixture\rLine 14 - pagination fixture\rLine 15 - pagination fixture\r",
+    "before": "021.txt",
+    "observedScreens": [
+      "022.txt"
+    ]
+  },
+  {
+    "action": "compose-body-lines-16-27",
+    "at": "2026-09-13T05:36:06.009Z",
+    "keys": "Line 16 - pagination fixture\rLine 17 - pagination fixture\rLine 18 - pagination fixture\rLine 19 - pagination fixture\rLine 20 - pagination fixture\rLine 21 - pagination fixture\rLine 22 - pagination fixture\rLine 23 - pagination fixture\rLine 24 - pagination fixture\rLine 25 - pagination fixture\rLine 26 - pagination fixture\rLine 27 - pagination fixture\rEND-OF-CAPTURE-BODY\r",
+    "before": "022.txt",
+    "observedScreens": [
+      "023.txt"
+    ]
+  },
+  {
+    "action": "compose-exit-menu",
+    "at": "2026-09-13T05:36:14.118Z",
+    "keys": "\u0018",
+    "before": "023.txt",
+    "observedScreens": [
+      "024.txt"
+    ]
+  },
+  {
+    "action": "publish-test-article",
+    "at": "2026-09-13T05:36:23.344Z",
+    "keys": "s\r",
+    "before": "024.txt",
+    "observedScreens": [
+      "025.txt"
+    ]
+  },
+  {
+    "action": "no-signature",
+    "at": "2026-09-13T05:36:40.218Z",
+    "keys": "0\r",
+    "before": "025.txt",
+    "observedScreens": [
+      "026.txt"
+    ]
+  },
+  {
+    "action": "continue",
+    "at": "2026-09-13T05:36:44.697Z",
+    "keys": "\r",
+    "before": "026.txt",
+    "observedScreens": [
+      "027.txt"
+    ]
+  },
+  {
+    "action": "select-created-article",
+    "at": "2026-09-13T05:36:50.659Z",
+    "keys": "290\r",
+    "before": "027.txt",
+    "observedScreens": [
+      "028.txt"
+    ]
+  },
+  {
+    "action": "created-article-AID",
+    "at": "2026-09-13T05:36:57.721Z",
+    "keys": "Q",
+    "before": "028.txt",
+    "observedScreens": [
+      "029.txt"
+    ]
+  },
+  {
+    "action": "continue",
+    "at": "2026-09-13T05:37:07.417Z",
+    "keys": "\r",
+    "before": "029.txt",
+    "observedScreens": [
+      "030.txt"
+    ]
+  },
+  {
+    "action": "created-article-first-page",
+    "at": "2026-09-13T05:37:12.366Z",
+    "keys": "\r",
+    "before": "030.txt",
+    "observedScreens": [
+      "031.txt"
+    ]
+  },
+  {
+    "action": "article-page-down",
+    "at": "2026-09-13T05:37:17.725Z",
+    "keys": "\u001b[6~",
+    "before": "031.txt",
+    "observedScreens": [
+      "032.txt"
+    ]
+  },
+  {
+    "action": "author-own-push-entry",
+    "at": "2026-09-13T05:37:24.654Z",
+    "keys": "X",
+    "before": "032.txt",
+    "observedScreens": [
+      "033.txt"
+    ]
+  },
+  {
+    "action": "push-test-content",
+    "at": "2026-09-13T05:37:31.205Z",
+    "keys": "capture-1335-push-once 測試留言\r",
+    "before": "033.txt",
+    "observedScreens": [
+      "034.txt"
+    ]
+  },
+  {
+    "action": "confirm-push-once",
+    "at": "2026-09-13T05:37:36.496Z",
+    "keys": "y\r",
+    "before": "034.txt",
+    "observedScreens": [
+      "035.txt"
+    ]
+  },
+  {
+    "action": "push-readback-open",
+    "at": "2026-09-13T05:37:44.763Z",
+    "keys": "\r",
+    "before": "035.txt",
+    "observedScreens": [
+      "036.txt"
+    ]
+  },
+  {
+    "action": "push-readback-end",
+    "at": "2026-09-13T05:37:51.993Z",
+    "keys": "\u001b[4~",
+    "before": "036.txt",
+    "observedScreens": [
+      "037.txt"
+    ]
+  },
+  {
+    "action": "board-reply-entry",
+    "at": "2026-09-13T05:38:06.537Z",
+    "keys": "y",
+    "before": "037.txt",
+    "observedScreens": [
+      "038.txt"
+    ]
+  },
+  {
+    "action": "reply-to-board-only",
+    "at": "2026-09-13T05:38:18.183Z",
+    "keys": "f\r",
+    "before": "038.txt",
+    "observedScreens": [
+      "039.txt"
+    ]
+  },
+  {
+    "action": "reply-keep-title",
+    "at": "2026-09-13T05:38:36.233Z",
+    "keys": "y\r",
+    "before": "039.txt",
+    "observedScreens": [
+      "040.txt"
+    ]
+  },
+  {
+    "action": "reply-without-quote",
+    "at": "2026-09-13T05:38:55.153Z",
+    "keys": "n\r",
+    "before": "040.txt",
+    "observedScreens": [
+      "041.txt"
+    ]
+  },
+  {
+    "action": "compose-board-reply",
+    "at": "2026-09-13T05:39:10.166Z",
+    "keys": "capture-1335-board-reply-once\r這是回文測試，完成後刪除。\r",
+    "before": "041.txt",
+    "observedScreens": [
+      "042.txt"
+    ]
+  },
+  {
+    "action": "reply-save-menu",
+    "at": "2026-09-13T05:39:19.153Z",
+    "keys": "\u0018",
+    "before": "042.txt",
+    "observedScreens": [
+      "043.txt"
+    ]
+  },
+  {
+    "action": "publish-board-reply",
+    "at": "2026-09-13T05:39:30.977Z",
+    "keys": "s\r",
+    "before": "043.txt",
+    "observedScreens": [
+      "044.txt"
+    ]
+  },
+  {
+    "action": "reply-no-signature",
+    "at": "2026-09-13T05:39:52.235Z",
+    "keys": "0\r",
+    "before": "044.txt",
+    "observedScreens": [
+      "045.txt"
+    ]
+  },
+  {
+    "action": "continue",
+    "at": "2026-09-13T05:39:59.664Z",
+    "keys": "\r",
+    "before": "045.txt",
+    "observedScreens": [
+      "046.txt"
+    ]
+  },
+  {
+    "action": "select-created-reply",
+    "at": "2026-09-13T05:40:05.375Z",
+    "keys": "291\r",
+    "before": "046.txt",
+    "observedScreens": [
+      "047.txt"
+    ]
+  },
+  {
+    "action": "reply-AID",
+    "at": "2026-09-13T05:40:10.723Z",
+    "keys": "Q",
+    "before": "047.txt",
+    "observedScreens": [
+      "048.txt"
+    ]
+  },
+  {
+    "action": "continue",
+    "at": "2026-09-13T05:40:17.149Z",
+    "keys": "\r",
+    "before": "048.txt",
+    "observedScreens": [
+      "049.txt"
+    ]
+  },
+  {
+    "action": "reply-readback",
+    "at": "2026-09-13T05:40:25.749Z",
+    "keys": "\r",
+    "before": "049.txt",
+    "observedScreens": [
+      "050.txt"
+    ]
+  },
+  {
+    "action": "return-from-reply",
+    "at": "2026-09-13T05:40:32.893Z",
+    "keys": "q",
+    "before": "050.txt",
+    "observedScreens": [
+      "051.txt"
+    ]
+  },
+  {
+    "action": "select-original-by-AID-for-edit",
+    "at": "2026-09-13T05:40:38.871Z",
+    "keys": "#1gfZPfeb\r",
+    "before": "051.txt",
+    "observedScreens": [
+      "052.txt"
+    ]
+  },
+  {
+    "action": "edit-own-article",
+    "at": "2026-09-13T05:40:45.972Z",
+    "keys": "E",
+    "before": "052.txt",
+    "observedScreens": [
+      "053.txt"
+    ]
+  },
+  {
+    "action": "edit-body-position",
+    "at": "2026-09-13T05:40:53.201Z",
+    "keys": "\u001b[B\u001b[B\u001b[B\u001b[B",
+    "before": "053.txt",
+    "observedScreens": [
+      "054.txt"
+    ]
+  },
+  {
+    "action": "insert-edit-marker",
+    "at": "2026-09-13T05:40:59.347Z",
+    "keys": "EDIT-1335-VERIFIED 編輯測試\r",
+    "before": "054.txt",
+    "observedScreens": [
+      "055.txt"
+    ]
+  },
+  {
+    "action": "edit-save-menu",
+    "at": "2026-09-13T05:41:05.009Z",
+    "keys": "\u0018",
+    "before": "055.txt",
+    "observedScreens": [
+      "056.txt"
+    ]
+  },
+  {
+    "action": "save-article-edit",
+    "at": "2026-09-13T05:41:10.591Z",
+    "keys": "s\r",
+    "before": "056.txt",
+    "observedScreens": [
+      "057.txt"
+    ]
+  },
+  {
+    "action": "edit-readback-first-page",
+    "at": "2026-09-13T05:41:26.968Z",
+    "keys": "\r",
+    "before": "057.txt",
+    "observedScreens": [
+      "058.txt"
+    ]
+  },
+  {
+    "action": "edit-record-readback",
+    "at": "2026-09-13T05:41:32.273Z",
+    "keys": "\u001b[4~",
+    "before": "058.txt",
+    "observedScreens": [
+      "059.txt"
+    ]
+  },
+  {
+    "action": "return-before-cleanup",
+    "at": "2026-09-13T05:41:39.024Z",
+    "keys": "q",
+    "before": "059.txt",
+    "observedScreens": [
+      "060.txt"
+    ]
+  },
+  {
+    "action": "select-reply-for-cleanup",
+    "at": "2026-09-13T05:41:50.021Z",
+    "keys": "#1gfZSfsx\r",
+    "before": "060.txt",
+    "observedScreens": [
+      "061.txt"
+    ]
+  },
+  {
+    "action": "delete-reply-prompt",
+    "at": "2026-09-13T05:41:58.527Z",
+    "keys": "d",
+    "before": "061.txt",
+    "observedScreens": [
+      "062.txt"
+    ]
+  },
+  {
+    "action": "cancel-delete-reply",
+    "at": "2026-09-13T05:42:06.255Z",
+    "keys": "n\r",
+    "before": "062.txt",
+    "observedScreens": [
+      "063.txt"
+    ]
+  },
+  {
+    "action": "delete-reply-prompt-again",
+    "at": "2026-09-13T05:42:13.292Z",
+    "keys": "d",
+    "before": "063.txt",
+    "observedScreens": [
+      "064.txt"
+    ]
+  },
+  {
+    "action": "confirm-delete-reply",
+    "at": "2026-09-13T05:42:19.478Z",
+    "keys": "y\r",
+    "before": "064.txt",
+    "observedScreens": [
+      "065.txt"
+    ]
+  },
+  {
+    "action": "continue",
+    "at": "2026-09-13T05:42:24.329Z",
+    "keys": "\r",
+    "before": "065.txt",
+    "observedScreens": [
+      "066.txt"
+    ]
+  },
+  {
+    "action": "select-original-for-cleanup",
+    "at": "2026-09-13T05:42:29.813Z",
+    "keys": "#1gfZPfeb\r",
+    "before": "066.txt",
+    "observedScreens": [
+      "067.txt"
+    ]
+  },
+  {
+    "action": "delete-original-prompt",
+    "at": "2026-09-13T05:42:38.538Z",
+    "keys": "d",
+    "before": "067.txt",
+    "observedScreens": [
+      "068.txt"
+    ]
+  },
+  {
+    "action": "confirm-delete-original",
+    "at": "2026-09-13T05:42:49.573Z",
+    "keys": "y\r",
+    "before": "068.txt",
+    "observedScreens": [
+      "069.txt"
+    ]
+  },
+  {
+    "action": "continue",
+    "at": "2026-09-13T05:42:58.207Z",
+    "keys": "\r",
+    "before": "069.txt",
+    "observedScreens": [
+      "070.txt"
+    ]
+  },
+  {
+    "action": "title-search-prompt",
+    "at": "2026-09-13T05:43:14.250Z",
+    "keys": "/",
+    "before": "070.txt",
+    "observedScreens": [
+      "071.txt"
+    ]
+  },
+  {
+    "action": "title-search-results",
+    "at": "2026-09-13T05:43:19.742Z",
+    "keys": "test test\r",
+    "before": "071.txt",
+    "observedScreens": [
+      "072.txt"
+    ]
+  },
+  {
+    "action": "read-filtered-designated-article",
+    "at": "2026-09-13T05:43:27.029Z",
+    "keys": "\r",
+    "before": "072.txt",
+    "observedScreens": [
+      "073.txt"
+    ]
+  },
+  {
+    "action": "filtered-push-warning",
+    "at": "2026-09-13T05:43:32.278Z",
+    "keys": "X",
+    "before": "073.txt",
+    "observedScreens": [
+      "074.txt"
+    ]
+  },
+  {
+    "action": "filtered-boo-input",
+    "at": "2026-09-13T05:43:39.592Z",
+    "keys": "2",
+    "before": "074.txt",
+    "observedScreens": [
+      "075.txt"
+    ]
+  },
+  {
+    "action": "cancel-empty-filtered-boo",
+    "at": "2026-09-13T05:43:46.205Z",
+    "keys": "\r",
+    "before": "075.txt",
+    "observedScreens": [
+      "076.txt"
+    ]
+  },
+  {
+    "action": "exit-title-search",
+    "at": "2026-09-13T05:43:53.178Z",
+    "keys": "q",
+    "before": "076.txt",
+    "observedScreens": [
+      "077.txt"
+    ]
+  },
+  {
+    "action": "board-list-push-entry",
+    "at": "2026-09-13T05:43:59.582Z",
+    "keys": "X",
+    "before": "077.txt",
+    "observedScreens": [
+      "078.txt"
+    ]
+  },
+  {
+    "action": "positive-push-input",
+    "at": "2026-09-13T05:44:05.670Z",
+    "keys": "1",
+    "before": "078.txt",
+    "observedScreens": [
+      "079.txt"
+    ]
+  },
+  {
+    "action": "cancel-empty-positive-push",
+    "at": "2026-09-13T05:44:20.731Z",
+    "keys": "\r",
+    "before": "079.txt",
+    "observedScreens": [
+      "080.txt"
+    ]
+  },
+  {
+    "action": "author-search-prompt",
+    "at": "2026-09-13T05:44:26.775Z",
+    "keys": "a",
+    "before": "080.txt",
+    "observedScreens": [
+      "081.txt"
+    ]
+  },
+  {
+    "action": "author-search-results",
+    "at": "2026-09-13T05:44:32.004Z",
+    "keys": "askz0\r",
+    "before": "081.txt",
+    "observedScreens": [
+      "082.txt"
+    ]
+  },
+  {
+    "action": "exit-author-search",
+    "at": "2026-09-13T05:44:38.545Z",
+    "keys": "q",
+    "before": "082.txt",
+    "observedScreens": [
+      "083.txt"
+    ]
+  },
+  {
+    "action": "push-threshold-prompt",
+    "at": "2026-09-13T05:45:01.441Z",
+    "keys": "Z",
+    "before": "083.txt",
+    "observedScreens": [
+      "084.txt"
+    ]
+  },
+  {
+    "action": "push-threshold-results",
+    "at": "2026-09-13T05:45:07.677Z",
+    "keys": "1\r",
+    "before": "084.txt",
+    "observedScreens": [
+      "085.txt"
+    ]
+  },
+  {
+    "action": "filtered-list-page-up",
+    "at": "2026-09-13T05:45:13.585Z",
+    "keys": "\u001b[5~",
+    "before": "085.txt",
+    "observedScreens": [
+      "086.txt"
+    ]
+  },
+  {
+    "action": "filtered-list-home",
+    "at": "2026-09-13T05:45:19.267Z",
+    "keys": "\u001b[1~",
+    "before": "086.txt",
+    "observedScreens": [
+      "087.txt"
+    ]
+  },
+  {
+    "action": "filtered-list-end",
+    "at": "2026-09-13T05:45:24.549Z",
+    "keys": "\u001b[4~",
+    "before": "087.txt",
+    "observedScreens": [
+      "088.txt"
+    ]
+  },
+  {
+    "action": "combined-title-prompt",
+    "at": "2026-09-13T05:45:29.648Z",
+    "keys": "/",
+    "before": "088.txt",
+    "observedScreens": [
+      "089.txt"
+    ]
+  },
+  {
+    "action": "combined-push-title-results",
+    "at": "2026-09-13T05:45:36.313Z",
+    "keys": "test test\r",
+    "before": "089.txt",
+    "observedScreens": [
+      "090.txt"
+    ]
+  },
+  {
+    "action": "exit-combined-search",
+    "at": "2026-09-13T05:45:41.643Z",
+    "keys": "q",
+    "before": "090.txt",
+    "observedScreens": [
+      "091.txt"
+    ]
+  },
+  {
+    "action": "no-results-title-prompt",
+    "at": "2026-09-13T05:45:46.361Z",
+    "keys": "/",
+    "before": "091.txt",
+    "observedScreens": [
+      "092.txt"
+    ]
+  },
+  {
+    "action": "title-search-no-results",
+    "at": "2026-09-13T05:45:54.267Z",
+    "keys": "pttzzz-no-match-20260913-unique\r",
+    "before": "092.txt",
+    "observedScreens": [
+      "093.txt"
+    ]
+  },
+  {
+    "action": "normal-board-home",
+    "at": "2026-09-13T05:46:06.176Z",
+    "keys": "\u001b[1~",
+    "before": "093.txt",
+    "observedScreens": [
+      "094.txt"
+    ]
+  },
+  {
+    "action": "normal-board-page-down",
+    "at": "2026-09-13T05:46:11.662Z",
+    "keys": "\u001b[6~",
+    "before": "094.txt",
+    "observedScreens": [
+      "095.txt"
+    ]
+  },
+  {
+    "action": "normal-board-end-cleanup-recheck",
+    "at": "2026-09-13T05:46:17.399Z",
+    "keys": "\u001b[4~",
+    "before": "095.txt",
+    "observedScreens": [
+      "096.txt"
+    ]
+  },
+  {
+    "action": "verify-designated-article-preserved",
+    "at": "2026-09-13T05:46:27.243Z",
+    "keys": "#1gfWDlNT\r",
+    "before": "096.txt",
+    "observedScreens": [
+      "097.txt"
+    ]
+  },
+  {
+    "action": "final-designated-readback",
+    "at": "2026-09-13T05:46:34.023Z",
+    "keys": "\r",
+    "before": "097.txt",
+    "observedScreens": [
+      "098.txt"
+    ]
+  },
+  {
+    "action": "main-menu-return",
+    "at": "2026-09-13T05:46:41.318Z",
+    "keys": "\u001a",
+    "before": "098.txt",
+    "observedScreens": []
+  },
+  {
+    "action": "hot-boards-after-Ctrl-Z",
+    "at": "2026-09-13T05:47:00.093Z",
+    "keys": "t",
+    "before": "098.txt",
+    "observedScreens": [
+      "099.txt"
+    ]
+  },
+  {
+    "action": "leave-Test",
+    "at": "2026-09-13T05:47:06.799Z",
+    "keys": "q",
+    "before": "099.txt",
+    "observedScreens": [
+      "100.txt"
+    ]
+  },
+  {
+    "action": "favorites-page-down",
+    "at": "2026-09-13T05:47:11.894Z",
+    "keys": "\u001b[6~",
+    "before": "100.txt",
+    "observedScreens": [
+      "101.txt"
+    ]
+  },
+  {
+    "action": "favorites-home",
+    "at": "2026-09-13T05:47:17.561Z",
+    "keys": "\u001b[1~",
+    "before": "101.txt",
+    "observedScreens": [
+      "102.txt"
+    ]
+  },
+  {
+    "action": "return-main-menu",
+    "at": "2026-09-13T05:47:25.541Z",
+    "keys": "q",
+    "before": "102.txt",
+    "observedScreens": [
+      "103.txt"
+    ]
+  },
+  {
+    "action": "logout-prompt",
+    "at": "2026-09-13T05:47:33.678Z",
+    "keys": "g\r",
+    "before": "103.txt",
+    "observedScreens": [
+      "104.txt"
+    ]
+  },
+  {
+    "action": "confirm-logout",
+    "at": "2026-09-13T05:47:40.465Z",
+    "keys": "y\r",
+    "before": "104.txt",
+    "observedScreens": [
+      "105.txt"
+    ]
+  },
+  {
+    "action": "finish-logout",
+    "at": "2026-09-13T05:47:49.541Z",
+    "keys": "\r",
+    "before": "105.txt",
+    "observedScreens": []
+  }
+]

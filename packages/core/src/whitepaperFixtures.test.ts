@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import editCases from "../../../docs/fixtures/thread-events/edit.json";
+import manifest from "../../../docs/fixtures/thread-events/manifest.json";
 import mergeCases from "../../../docs/fixtures/thread-events/merge.json";
 import opCases from "../../../docs/fixtures/thread-events/op.json";
 import rawCases from "../../../docs/fixtures/thread-events/raw.json";
@@ -502,7 +503,7 @@ function validateFixtureCases(value: unknown): FixtureCase[] {
 }
 
 function stableAggregatedThread(result: AggregatedThread) {
-  const authorById = new Map(result.pushes.map((push) => [push.id, push.author]));
+  const authorById = new Map([...result.pushes, ...result.withdrawnPushes].map((push) => [push.id, push.author]));
   return {
     replies: result.pushes.map((push) => ({
       author: push.author,
@@ -682,8 +683,11 @@ describe("whitepaper conformance fixtures", () => {
     expect(new Set(ids).size).toBe(ids.length);
 
     const ruleIds = whitepaperRuleDetails(whitepaper);
-    const referencedRules = new Set(cases.flatMap((fixture) => fixture.rules));
-    const primaryRules = new Set(cases.map((fixture) => fixture.primaryRule));
+    // Sending limits cannot be exercised by receiver-only event fixtures.
+    // Their executable conformance tests live in the browser sender suite.
+    const senderRules = Object.keys(manifest.senderRules);
+    const referencedRules = new Set([...senderRules, ...cases.flatMap((fixture) => fixture.rules)]);
+    const primaryRules = new Set([...senderRules, ...cases.map((fixture) => fixture.primaryRule)]);
 
     expect(ruleIds.length).toBeGreaterThan(0);
     expect(new Set(ruleIds).size).toBe(ruleIds.length);

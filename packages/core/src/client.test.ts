@@ -69,6 +69,43 @@ class MemoryGateway implements PttGateway {
 }
 
 describe("PttzzzClient lifecycle", () => {
+  it("keeps legacy gateways compatible and never treats unknown draft failures as not-sent", async () => {
+    const gateway = new MemoryGateway();
+    const input = { operationId: "draft", article: indexKey, content: "x".repeat(160), pushType: "neutral" as const };
+    expect(await new PttzzzClient(gateway).sendReplyDraft(input)).toMatchObject({ ok: false, error: { code: "UNSUPPORTED", outcome: "not-sent" } });
+    const extended: PttGateway = Object.assign(gateway, { sendReplyDraft: async () => { throw new Error("lost connection"); } });
+    const client = new PttzzzClient(extended);
+    expect(await client.sendReplyDraft(input)).toMatchObject({ ok: false, error: { outcome: "uncertain", retryable: false } });
+    extended.sendReplyDraft = async () => { throw new GatewayError("REPLY_DRAFT_NOT_SENT", "unsupported symbol", true); };
+    expect(await client.sendReplyDraft(input)).toMatchObject({ ok: false, error: { outcome: "not-sent", retryable: true } });
+    expect(gateway.commands).toHaveLength(0);
+  });
+  it("projects partial and final articles using a copied aggregation profile", async () => {
+    const gateway = new MemoryGateway();
+    const rawText = raw("profile", "body", ["→ bob: first 08/22 10:00", "→ carol: aside。 08/22 10:01", "→ bob: last|! 08/22 10:04"].join("\n"));
+    gateway.sources = [
+      { articleKey: indexKey, completeness: "incomplete", revision: 1, rawText },
+      { articleKey: indexKey, completeness: "final", revision: 2, rawText },
+    ];
+    const aggregation = { nonconsecutiveGapMinutes: 3 };
+    const client = new PttzzzClient(gateway, { aggregation });
+    aggregation.nonconsecutiveGapMinutes = 5;
+    const lengths: number[] = [];
+    client.subscribe((event) => {
+      if (event.type === "article.partial" || event.type === "article.updated") lengths.push(event.article.replies.length);
+    });
+    expect((await client.getArticle({ article: indexKey })).ok).toBe(true);
+    expect(lengths).toEqual([3, 3]);
+    const defaultResult = await new PttzzzClient(gateway).getArticle({ article: indexKey });
+    expect(defaultResult.ok && defaultResult.value.replies.length).toBe(3);
+  });
+
+  it("rejects invalid aggregation settings before subscribing", () => {
+    const gateway = new MemoryGateway();
+    expect(() => new PttzzzClient(gateway, { aggregation: { nonconsecutiveGapMinutes: -1 } })).toThrow(RangeError);
+    expect(gateway.listeners.size).toBe(0);
+  });
+
   it("normalizes expected and unknown gateway failures into Result", async () => {
     const gateway = new MemoryGateway();
     const cause = new Error("socket closed");
@@ -193,6 +230,33 @@ describe("PttzzzClient lifecycle", () => {
 });
 
 describe("PttzzzClient article reads", () => {
+  it.each(["\n", "\r\n"])("preserves body ANSI in partial events and final getArticle results after a colored header separator (%j)", async (newline) => {
+    const gateway = new MemoryGateway();
+    const partialBody = "\x1b[31m紅字\x1b[0m\n正文  保留空格";
+    const finalBody = `${partialBody}\n\x1b[1;44m高亮藍底\x1b[0m`;
+    const source = (body: string, push = "") => raw("彩色主題", body, push)
+      .replace("───────────────────────────────────────", "\x1b[36m───────────────────────────────────────\x1b[0m")
+      .replace(/\n/g, newline);
+    gateway.sources = [
+      { articleKey: indexKey, completeness: "incomplete", revision: 1, rawText: source(partialBody) },
+      { articleKey: indexKey, completeness: "final", revision: 2, rawText: source(finalBody, "→ bob: 回覆 08/22 10:01") },
+    ];
+    const client = new PttzzzClient(gateway);
+    const events: CoreEvent[] = [];
+    client.subscribe((event) => events.push(event));
+
+    const result = await client.getArticle({ article: indexKey });
+
+    const partial = events.find((event) => event.type === "article.partial");
+    expect(partial?.type === "article.partial" && partial.article.body).toBe(partialBody);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.body).toBe(finalBody);
+    expect(result.value.title).toBe("彩色主題");
+    expect(result.value.replies[0].content).toBe("回覆");
+    const final = events.find((event) => event.type === "article.updated");
+    expect(final?.type === "article.updated" && final.article.body).toBe(finalBody);
+  });
   it("parses partial and final raw sources into nested public DTOs", async () => {
     const gateway = new MemoryGateway();
     gateway.sources = [
@@ -399,6 +463,60 @@ describe("PttzzzClient article reads", () => {
     });
   });
 
+  it("preserves the original nested heart reply separately from its two section edits", async () => {
+    const gateway = new MemoryGateway();
+    gateway.sources = [{ articleKey: indexKey, completeness: "final", revision: 1,
+      rawText: raw("hearts", "body", [
+        "→ askz0: 測試 09/16 23:21",
+        "→ askz0: 喔喔 09/16 23:22",
+        "→ MBB200291: 推1樓 09/16 23:24",
+        "→ MBB200291: 回1樓：♡ 09/16 23:26",
+        "→ MBB200291: 回4樓：♥♥♥♥♥ 09/16 23:30",
+        "→ MBB200291: 更正我在5樓發言：^1:4=♡♥♡ 09/16 23:31",
+        "→ MBB200291: 更正我在5樓發言：^5:5=♡ 09/16 23:35",
+      ].join("\n")) }];
+    const result = await new PttzzzClient(gateway).getArticle({ article: indexKey });
+    expect(result).toMatchObject({ ok: true, value: { replies: [{ children: [{ children: [{
+      content: "♥♡♥♡♥♡",
+      originalVersion: { content: "♥♥♥♥♥", createdAt: "09/16 23:30" },
+      edits: [
+        { kind: "replace", resultContent: "♥♡♥♡♥", createdAt: "09/16 23:31" },
+        { kind: "replace", resultContent: "♥♡♥♡♥♡", createdAt: "09/16 23:35" },
+      ],
+    }] }] }] } });
+  });
+
+  it("keeps withdrawn parents between the root and edited nested replies", async () => {
+    const gateway = new MemoryGateway();
+    gateway.sources = [{ articleKey: indexKey, completeness: "final", revision: 1,
+      rawText: raw("hearts", "body", [
+        "→ askz0: 測試 09/16 23:21", "→ askz0: 喔喔 09/16 23:22",
+        "→ MBB200291: 推1樓 09/16 23:24", "→ MBB200291: 回1樓：♡ 09/16 23:26",
+        "→ MBB200291: 回4樓：♥♥♥♥♥ 09/16 23:30",
+        "→ MBB200291: 更正我在5樓發言：^1:4=♡♥♡ 09/16 23:31",
+        "→ MBB200291: 更正我在5樓發言：^5:5=♡ 09/16 23:35",
+        "→ MBB200291: 撤回我在4樓的發言 09/16 23:43",
+      ].join("\n")) }];
+    const result = await new PttzzzClient(gateway).getArticle({ article: indexKey });
+    expect(result).toMatchObject({ ok: true, value: { replies: [{ replyId: "reply:1", children: [{
+      replyId: "reply:4", visible: false, content: " ", replyTo: "reply:1", depth: 2,
+      children: [{ replyId: "reply:5", content: "♥♡♥♡♥♡", replyTo: "reply:4", depth: 3 }],
+    }] }] } });
+    if (result.ok) expect(result.value.replies).toHaveLength(1);
+  });
+
+  it("keeps a withdrawn root in its original order", async () => {
+    const gateway = new MemoryGateway();
+    gateway.sources = [{ articleKey: indexKey, completeness: "final", revision: 1,
+      rawText: raw("roots", "body", [
+        "→ alice: first. 09/16 23:21", "→ bob: middle. 09/16 23:22",
+        "→ carol: last. 09/16 23:23", "→ bob: 撤回我在2樓的發言 09/16 23:24",
+      ].join("\n")) }];
+    const result = await new PttzzzClient(gateway).getArticle({ article: indexKey });
+    if (!result.ok) throw new Error("read failed");
+    expect(result.value.replies.map((reply) => reply.replyId)).toEqual(["reply:1", "reply:2", "reply:3"]);
+  });
+
   it("publishes one hidden reply for a withdrawn aggregate with blank withdraw content", async () => {
     const gateway = new MemoryGateway();
     gateway.sources = [{
@@ -501,6 +619,18 @@ describe("PttzzzClient article reads", () => {
 });
 
 describe("PttzzzClient writes", () => {
+  it("rejects invalid article styles before gateway writes and preserves valid formatting", async () => {
+    const gateway = new MemoryGateway();
+    const client = new PttzzzClient(gateway);
+    const invalid = { content: "abc", formatting: [{ start: 0, end: 20, bold: true }] };
+    expect(await client.createArticle({ board: "Test", title: "title", ...invalid })).toMatchObject({ ok: false });
+    expect(await client.editArticle({ article: indexKey, ...invalid })).toMatchObject({ ok: false });
+    expect(await client.replyArticleToBoard({ article: indexKey, ...invalid })).toMatchObject({ ok: false });
+    expect(gateway.commands).toHaveLength(0);
+    const formatting = [{ start: 0, end: 2, bold: true }];
+    await client.createArticle({ board: "Test", title: "title", content: "abc", formatting });
+    expect(gateway.commands[0]).toMatchObject({ content: "abc", formatting });
+  });
   it("maps every article-level write to one gateway command", async () => {
     const gateway = new MemoryGateway();
     const client = new PttzzzClient(gateway);

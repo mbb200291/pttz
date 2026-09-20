@@ -31,8 +31,37 @@ function push(overrides: Partial<AggregatedPush>): AggregatedPush {
 }
 
 describe("PushThread", () => {
+  it("renders a withdrawn placeholder without content or actions and retains its children", () => {
+    const { container } = render(<PushThread score={0} pushes={[
+      push({ id: "gone", content: "secret old body", visible: false, author: "alice", time: "09/16 23:26" }),
+      push({ id: "child", content: "still here", replyTo: "gone", anchorOrder: 1 }),
+    ]} onReply={vi.fn()} onEdit={vi.fn()} onVote={vi.fn()} currentUser="alice" />);
+    expect(screen.getByText("此回覆已撤回")).toBeTruthy();
+    expect(screen.queryByText("secret old body")).toBeNull();
+    const parent = container.querySelector('[data-reply-id="gone"]')!;
+    expect(parent.querySelector('[data-reply-id="child"]')).not.toBeNull();
+    expect(parent.querySelectorAll('button[aria-label="回覆"]')).toHaveLength(1);
+    expect(parent.querySelectorAll('button[aria-label="編輯"]')).toHaveLength(0);
+  });
   afterEach(() => {
     cleanup();
+  });
+
+  it("hides an already open edit history on withdrawal and excludes the placeholder from discussion counts", () => {
+    const original = push({ id: "gone", content: "edited body" });
+    const edits = new Map([["gone", { content: "edited body", history: [
+      { kind: "original" as const, content: "original secret", time: "09/16 23:26" },
+      { kind: "replace" as const, content: "edited body", time: "09/16 23:30" },
+    ] }]]);
+    const { rerender } = render(<PushThread score={0} pushes={[original]} pushEdits={edits} />);
+    fireEvent.click(screen.getByRole("button", { name: "編輯歷史" }));
+    expect(screen.getByText("original secret")).toBeTruthy();
+    rerender(<PushThread score={0} pushes={[{ ...original, visible: false }]} pushEdits={edits} />);
+    expect(screen.getByText("此回覆已撤回")).toBeTruthy();
+    expect(screen.queryByText("original secret")).toBeNull();
+    expect(screen.queryByText("edited body")).toBeNull();
+    expect(screen.queryByRole("button", { name: "編輯歷史" })).toBeNull();
+    expect(screen.getByText("(0 則討論)")).toBeTruthy();
   });
 
   it("sorts top-level replies by time ascending by default", () => {
@@ -262,7 +291,8 @@ describe("PushThread", () => {
     expect(html).toContain("first");
     expect(html).toContain("second");
     expect(html).not.toContain("third");
-    expect(html).toContain("已顯示 2 / 3 則第一層回覆");
+    expect(html).toContain("已顯示 2 / 3 則");
+    expect(html).not.toContain("則第一層回覆");
   });
 
   it("shows refresh controls when refresh is available", () => {
@@ -321,8 +351,8 @@ describe("PushThread", () => {
     );
 
     expect(html).toContain("推 好文");
-    expect(html).toContain("1 則第一層回覆");
-    expect(html).not.toContain("2 則第一層回覆");
+    expect(html).toContain("1 則討論");
+    expect(html).not.toContain("2 則討論");
     expect(html).not.toContain(">推</div>");
     expect(html).not.toContain(">噓</div>");
   });
@@ -493,7 +523,7 @@ describe("PushThread", () => {
     const editData = {
       content: "current content",
       history: [
-        { time: "2024/01/01", content: "original" },
+        { kind: "original" as const, time: "2024/01/01", content: "original" },
         { time: "2024/01/02", content: "current content" },
       ],
     };
@@ -509,11 +539,32 @@ describe("PushThread", () => {
     expect(screen.getByRole("button", { name: "編輯歷史" })).toBeDefined();
   });
 
+  it("shows operation results without mistaking the first edit for the original", () => {
+    render(<PushThread score={0} pushes={[push({ id: "edited", content: "最新" })]}
+      pushEdits={new Map([["edited", { content: "最新", history: [
+        { kind: "append", time: "12:01", content: "補充片段", resultContent: "原文加上補充" },
+        { kind: "replace", time: "12:02", content: "最新", resultContent: "最新" },
+      ] }]])} />);
+    fireEvent.click(screen.getByRole("button", { name: "編輯歷史" }));
+    expect(screen.queryByText("原始")).toBeNull();
+    expect(screen.getByText("原文加上補充")).toBeTruthy();
+    expect(screen.queryByText("補充片段")).toBeNull();
+    expect(screen.getByText("目前版本")).toBeTruthy();
+  });
+
+  it("does not offer edit history for an unedited original snapshot", () => {
+    render(<PushThread score={0} pushes={[push({ id: "original", content: "原文" })]}
+      pushEdits={new Map([["original", { content: "原文", history: [
+        { kind: "original", time: "12:00", content: "原文" },
+      ] }]])} />);
+    expect(screen.queryByRole("button", { name: "編輯歷史" })).toBeNull();
+  });
+
   it("shows EditHistoryPanel after clicking 編輯歷史, hides after clicking 收起歷史", () => {
     const editData = {
       content: "current content",
       history: [
-        { time: "2024/01/01", content: "original" },
+        { kind: "original" as const, time: "2024/01/01", content: "original" },
         { time: "2024/01/02", content: "current content" },
       ],
     };

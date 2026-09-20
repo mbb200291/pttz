@@ -10,6 +10,214 @@ afterEach(() => {
 });
 
 describe("ArticleList", () => {
+  it("skips deleted articles, retains selection across refresh and restores it after reading", async () => {
+    const { ArticleList } = await import("../ArticleList");
+    const open = vi.fn();
+    const props = { boardName: "KeyboardRestore", onBack: vi.fn(), onSelectArticle: open, onSelectArticleByAid: vi.fn(), mockArticles: [
+      { index: 3, title: "new", author: "a", date: "9/16", pushCount: "", mark: "" },
+      { index: 2, title: "(本文已被刪除)", author: "-", date: "9/16", pushCount: "", mark: "" },
+      { index: 1, title: "old", author: "b", date: "9/16", pushCount: "", mark: "" },
+    ] };
+    const { container, rerender, unmount } = render(<ArticleList {...props} />);
+    const selected = () => container.querySelector('[aria-current="true"]')?.getAttribute("data-article-index");
+    fireEvent.keyDown(document.body, { key: "ArrowDown" });
+    expect(selected()).toBe("3");
+    fireEvent.keyDown(document.body, { key: "ArrowDown" });
+    expect(selected()).toBe("1");
+    fireEvent.keyDown(document.body, { key: "ArrowDown" });
+    expect(selected()).toBe("1");
+    rerender(<ArticleList {...props} mockArticles={[{ ...props.mockArticles[0], index: 4 }, ...props.mockArticles]} />);
+    expect(selected()).toBe("1");
+    const input = screen.getByRole("textbox");
+    input.focus();
+    fireEvent.keyDown(input, { key: "ArrowUp" });
+    fireEvent.keyDown(input, { key: "ArrowRight" });
+    expect(selected()).toBe("1");
+    expect(open).not.toHaveBeenCalled();
+    input.blur();
+    fireEvent.keyDown(document.body, { key: "ArrowRight" });
+    expect(open).toHaveBeenCalledWith(expect.objectContaining({ index: 1 }));
+    unmount();
+    const restored = render(<ArticleList {...props} />);
+    expect(restored.container.querySelector('[aria-current="true"]')?.getAttribute("data-article-index")).toBe("1");
+    expect(document.activeElement).toBe(document.body);
+  });
+  it.each(["s", "/"])("focuses search with %s and exits search without selecting articles", async (key) => {
+    const { ArticleList } = await import("../ArticleList");
+    const open = vi.fn();
+    const { container } = render(<ArticleList boardName="Test" onBack={() => {}} onSelectArticle={open} onSelectArticleByAid={open}
+      mockArticles={[{ index: 1, title: "第一篇", author: "a", date: "9/14", pushCount: "", mark: "" }]} />);
+    const row = container.querySelector<HTMLElement>('[data-article-index="1"]')!;
+    const input = screen.getByPlaceholderText(/搜尋標題.*#AID/) as HTMLInputElement;
+    row.focus();
+    fireEvent.keyDown(row, { key, ctrlKey: true });
+    expect(document.activeElement).toBe(row);
+    fireEvent.keyDown(row, { key });
+    expect(document.activeElement).toBe(input);
+    fireEvent.change(input, { target: { value: "保留搜尋" } });
+    fireEvent.keyDown(input, { key: "Escape", isComposing: true });
+    expect(document.activeElement).toBe(input);
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(document.activeElement?.hasAttribute("data-navigation-item")).toBe(false);
+    expect(input.value).toBe("保留搜尋");
+    expect(open).not.toHaveBeenCalled();
+    (document.activeElement as HTMLElement).blur();
+    fireEvent.keyDown(document.body, { key });
+    expect(document.activeElement).toBe(input);
+  });
+  it.each(["(本文已被刪除) [alice]", "(已被刪除) [alice]"])("disables deleted rows: %s", async (title) => {
+    const { ArticleList } = await import("../ArticleList");
+    const select = vi.fn();
+    const { container } = render(<ArticleList boardName="Test" onBack={() => {}} onSelectArticle={select} onSelectArticleByAid={() => {}}
+      mockArticles={[{ index: 286, mark: "", pushCount: "", date: "9/13", author: "-", title }]} />);
+    const row = container.querySelector('[data-article-index="286"]') as HTMLButtonElement;
+    expect(row.disabled).toBe(true);
+    fireEvent.click(row);
+    expect(select).not.toHaveBeenCalled();
+  });
+  it("presents the article index before PTT's yearless month/day label", async () => {
+    const { ArticleList } = await import("../ArticleList");
+    const { container } = render(
+      <ArticleList
+        boardName="Test"
+        onBack={() => {}}
+        onSelectArticle={() => {}}
+        onSelectArticleByAid={() => {}}
+        mockArticles={[{
+          index: 216,
+          mark: "",
+          pushCount: "",
+          date: "9/06",
+          author: "author",
+          title: "發文測試",
+        }]}
+      />,
+    );
+    const row = container.querySelector('[data-article-index="216"]');
+    expect(row).not.toBeNull();
+    expect(row!.textContent!.indexOf("#216")).toBeLessThan(row!.textContent!.indexOf("9/06"));
+  });
+  it("offers an inline retry when loading older articles temporarily fails", async () => {
+    const retry = vi.fn();
+    const { ArticleList } = await import("../ArticleList");
+    render(
+      <ArticleList
+        boardName="Test"
+        onBack={() => {}}
+        onSelectArticle={() => {}}
+        onSelectArticleByAid={() => {}}
+        mockArticles={[{
+          index: 216,
+          mark: "",
+          pushCount: "",
+          date: "9/06",
+          author: "author",
+          title: "發文測試",
+        }]}
+        mockError="文章列表尚未更新，請再試一次"
+        onMockLoadMore={retry}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "再試一次" }));
+    expect(retry).toHaveBeenCalledOnce();
+  });
+  it("does not restore article focus behind an open sibling dialog", async () => {
+    const { ArticleList } = await import("../ArticleList");
+    const { writeBoardAnchorCache } = await import("../../lib/ptt/viewCache");
+    writeBoardAnchorCache("KeyboardDialog", { articleIndex: 1, viewportTop: 0, scrollY: 0 });
+    const dialog = document.createElement("div"); dialog.setAttribute("role", "dialog"); document.body.append(dialog);
+    let restore: FrameRequestCallback = () => {};
+    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => { restore = callback; return 1; });
+    const scroll = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    try {
+      render(<ArticleList boardName="KeyboardDialog" onBack={() => {}} onSelectArticle={() => {}} onSelectArticleByAid={() => {}}
+        mockLoading={false} mockArticles={[{ index: 1, title: "First", author: "a", date: "9/8", pushCount: "1", mark: " " }]} />);
+      act(() => restore(0));
+      expect(document.activeElement).toBe(document.body);
+    } finally { dialog.remove(); raf.mockRestore(); scroll.mockRestore(); }
+  });
+  it.each(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"])("uses fixed arrow behavior from body: %s", async (key) => {
+    const { ArticleList } = await import("../ArticleList");
+    const open = vi.fn(), back = vi.fn();
+    const { container, unmount } = render(<ArticleList boardName={`Keyboard-${key}`} onBack={back} onSelectArticle={open} onSelectArticleByAid={() => {}}
+      mockLoading={false} mockArticles={[
+        { index: 2, title: "First", author: "a", date: "9/8", pushCount: "1", mark: " " },
+        { index: 1, title: "Second", author: "b", date: "9/8", pushCount: "1", mark: " " },
+      ]} />);
+    (document.activeElement as HTMLElement).blur();
+    expect(fireEvent.keyDown(document.body, { key })).toBe(false);
+    const first = container.querySelector<HTMLElement>('[data-article-index="2"]')!;
+    expect(document.activeElement).toBe(document.body);
+    expect(open).toHaveBeenCalledTimes(key === "ArrowRight" ? 1 : 0); expect(back).toHaveBeenCalledTimes(key === "ArrowLeft" ? 1 : 0);
+    open.mockClear();
+    fireEvent.keyDown(first, { key: "ArrowRight" });
+    expect(open).toHaveBeenCalledWith(expect.objectContaining({ index: 2 }));
+    unmount(); expect(fireEvent.keyDown(document.body, { key })).toBe(true);
+  });
+  it("opens threshold with z from body or a row, but not input/modifiers/dialog/selection", async () => {
+    const { ArticleList } = await import("../ArticleList");
+    const { container } = render(<ArticleList boardName="Keyboard" onBack={() => {}} onSelectArticle={() => {}} onSelectArticleByAid={() => {}}
+      mockLoading={false} mockArticles={[{ index: 1, title: "First", author: "a", date: "9/8", pushCount: "1", mark: " " }]} />);
+    const row = container.querySelector<HTMLElement>('[data-article-index="1"]')!;
+    const input = container.querySelector("input")!;
+    input.focus(); fireEvent.keyDown(input, { key: "z" });
+    for (const extra of [{ repeat: true }, { isComposing: true }, { altKey: true }, { ctrlKey: true }, { metaKey: true }, { shiftKey: true }]) fireEvent.keyDown(row, { key: "z", ...extra });
+    const selection = window.getSelection()!; selection.selectAllChildren(row);
+    fireEvent.keyDown(row, { key: "z" }); selection.removeAllRanges();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    row.focus(); expect(fireEvent.keyDown(row, { key: "z" })).toBe(false);
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    fireEvent.keyDown(document.body, { key: "z" });
+    fireEvent.keyDown(row, { key: "ArrowRight" });
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    (document.activeElement as HTMLElement).blur();
+    fireEvent.keyDown(document.body, { key: "z" });
+    expect(screen.getByRole("dialog", { name: "自訂推文門檻" })).toBeTruthy();
+  });
+  it("opens compose with Ctrl+P without intercepting search or modified shortcuts", async () => {
+    const { ArticleList } = await import("../ArticleList");
+    const compose = vi.fn();
+    const { container } = render(<ArticleList boardName="Test" onBack={() => {}} onSelectArticle={() => {}}
+      onSelectArticleByAid={() => {}} onCompose={compose} mockLoading={false} mockArticles={[
+        { index: 1, title: "[請益] 第一篇", author: "b", date: "9/8", pushCount: "1", mark: " " },
+      ]} />);
+    const row = container.querySelector<HTMLElement>('[data-article-index="1"]')!;
+    expect(fireEvent.keyDown(row, { key: "p", ctrlKey: true })).toBe(false);
+    expect(compose).toHaveBeenCalledWith(["請益"]);
+    compose.mockClear();
+    for (const extra of [{ repeat: true }, { isComposing: true }, { altKey: true }, { shiftKey: true }, { metaKey: true }]) {
+      fireEvent.keyDown(row, { key: "p", ctrlKey: true, ...extra });
+    }
+    fireEvent.keyDown(container.querySelector("input")!, { key: "p", ctrlKey: true });
+    expect(compose).not.toHaveBeenCalled();
+  });
+  it("selects article rows independently of element focus and opens with Right", async () => {
+    const { ArticleList } = await import("../ArticleList");
+    const open = vi.fn();
+    const back = vi.fn();
+    const { container } = render(<ArticleList boardName="Test" onBack={back} onSelectArticle={open}
+      onSelectArticleByAid={() => {}} mockLoading={false} mockArticles={[
+        { index: 2, title: "第二篇", author: "a", date: "9/8", pushCount: "1", mark: " " },
+        { index: 1, title: "第一篇", author: "b", date: "9/8", pushCount: "1", mark: " " },
+      ]} />);
+    const first = container.querySelector<HTMLButtonElement>('[data-article-index="2"]')!;
+    const second = container.querySelector<HTMLButtonElement>('[data-article-index="1"]')!;
+    first.focus();
+    fireEvent.keyDown(first, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(first);
+    expect(first.getAttribute("aria-current")).toBe("true");
+    fireEvent.keyDown(first, { key: "ArrowDown" });
+    expect(second.getAttribute("aria-current")).toBe("true");
+    expect(document.activeElement).toBe(first);
+    expect(open).not.toHaveBeenCalled();
+    fireEvent.keyDown(second, { key: "ArrowRight" });
+    expect(open).toHaveBeenCalledWith(expect.objectContaining({ index: 1 }));
+    fireEvent.keyDown(second, { key: "ArrowLeft" });
+    expect(back).toHaveBeenCalledOnce();
+  });
   it("preloads more articles before the list bottom reaches the viewport", async () => {
     const mod = await import("../ArticleList");
 

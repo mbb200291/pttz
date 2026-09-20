@@ -4,9 +4,12 @@
  * Modal dialog for replying to articles/pushes, or editing own pushes.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { NativeSymbolPalette } from "./NativeSymbolPalette";
 import { uploadToImgur } from "../lib/imgur";
 import { approximatePttBytes } from "../lib/ptt/pttBytes";
+import { replyEditDifference } from "../lib/replyEditDifference";
+import type { ReplyDelivery } from "@pttzzz/core";
 
 export type ComposerMode = "reply" | "reply-push" | "edit-push";
 export type EditPushMode = "補充" | "更正" | "區段" | "撤回";
@@ -33,7 +36,7 @@ const PUSH_TYPES: { value: "push" | "neutral" | "boo"; label: string }[] = [
   { value: "boo", label: "噓" },
 ];
 
-const EDIT_MODES: EditPushMode[] = ["補充", "更正", "區段", "撤回"];
+const EDIT_MODES: EditPushMode[] = ["區段", "撤回"];
 
 export function Composer({
   mode,
@@ -43,6 +46,10 @@ export function Composer({
   submitLocked = false,
   isSubmitLocked,
   submitError = null,
+  multipartEnabled = false,
+  contentLocked = false,
+  delivery,
+  onRefresh,
   onClose,
   onSubmit,
 }: {
@@ -53,6 +60,10 @@ export function Composer({
   submitLocked?: boolean;
   isSubmitLocked?: (payload: ComposerPayload) => boolean;
   submitError?: string | null;
+  multipartEnabled?: boolean;
+  contentLocked?: boolean;
+  delivery?: ReplyDelivery;
+  onRefresh?: () => void;
   onClose: () => void;
   onSubmit: (payload: ComposerPayload) => void;
 }): JSX.Element {
@@ -61,15 +72,32 @@ export function Composer({
     neutralOnly ? "neutral" : initial.pushType ?? "push",
   );
   const [editMode, setEditMode] = useState<EditPushMode>(
-    initial.editMode ?? "補充",
+    initial.editMode === "撤回" ? "撤回" : "區段",
   );
-  const [sectionStart, setSectionStart] = useState(0);
-  const [sectionEnd, setSectionEnd] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [symbolsOpen, setSymbolsOpen] = useState(false);
+  const [symbolGroup, setSymbolGroup] = useState(0);
+  const editingLocked = submitting || contentLocked;
+  const multipart = multipartEnabled && mode !== "edit-push";
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pendingCaret = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    if (pendingCaret.current === null || !textareaRef.current) return;
+    textareaRef.current.focus();
+    textareaRef.current.setSelectionRange(pendingCaret.current, pendingCaret.current);
+    pendingCaret.current = null;
+  }, [body, symbolsOpen]);
+  const insertSymbol = (symbol: string) => {
+    const input = textareaRef.current;
+    if (!input || editingLocked) return;
+    const start = input.selectionStart, end = input.selectionEnd;
+    pendingCaret.current = start + symbol.length;
+    setBody(body.slice(0, start) + symbol + body.slice(end));
+    setSymbolsOpen(false);
+  };
 
   // Auto-focus textarea on mount, cursor at end
   useEffect(() => {
@@ -84,23 +112,37 @@ export function Composer({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        if (symbolsOpen) {
+          e.preventDefault();
+          setSymbolsOpen(false);
+          textareaRef.current?.focus();
+          return;
+        }
         if (submitting) return;
         onClose();
       }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose, submitting]);
+  }, [onClose, submitting, symbolsOpen]);
 
-  const submittedContent = body;
-  const effectivePushType = neutralOnly ? "neutral" : pushType;
-  const currentPayload = { body, pushType: effectivePushType, editMode, sectionStart, sectionEnd };
-  const remaining = MAX_BYTES - approximatePttBytes(submittedContent);
+  const difference = replyEditDifference(initial.body ?? "", body);
+  const sectionStart = difference.start;
+  const sectionEnd = difference.end;
+  const isSectionEdit = mode === "edit-push" && editMode === "區段";
+  const submittedContent = isSectionEdit ? difference.replacement : body;
+  const effectivePushType = mode === "reply-push" || neutralOnly ? "neutral" : pushType;
+  const currentPayload = { body: submittedContent, pushType: effectivePushType, editMode, sectionStart, sectionEnd };
+  const remaining = MAX_BYTES - (mode === "edit-push" && editMode === "撤回" ? 0 : approximatePttBytes(submittedContent));
   const isSubmitDisabled =
     submitting ||
+    uploading ||
+    delivery?.status === "uncertain" ||
+    delivery?.status === "complete" ||
     submitLocked ||
     Boolean(isSubmitLocked?.(currentPayload)) ||
-    remaining < 0 ||
+    (!multipart && remaining < 0) ||
+    (isSectionEdit && body === (initial.body ?? "")) ||
     (mode === "edit-push" && editMode === "區段" && (
       !Number.isInteger(sectionStart) || !Number.isInteger(sectionEnd) ||
       sectionStart < 0 || sectionEnd < sectionStart || sectionEnd > (initial.body?.length ?? 0)
@@ -124,7 +166,7 @@ export function Composer({
     const file = e.target.files?.[0];
     // Reset input so the same file can be picked again later
     if (fileInputRef.current) fileInputRef.current.value = "";
-    if (!file) return;
+    if (!file || editingLocked) return;
 
     setUploading(true);
     setUploadError(null);
@@ -190,12 +232,12 @@ export function Composer({
         </div>
 
         {/* Push type selector */}
-        {(mode === "reply" || mode === "reply-push") && (
+        {mode === "reply" && (
           <div>
             <div className="flex gap-2">
               {PUSH_TYPES.map(({ value, label }) => {
                 const isActive = effectivePushType === value;
-                const typeDisabled = submitting || (neutralOnly && value !== "neutral");
+                const typeDisabled = editingLocked || (neutralOnly && value !== "neutral");
                 const activeClass =
                   value === "push"
                     ? "bg-green-500/15 text-green-300"
@@ -237,8 +279,6 @@ export function Composer({
                   key={em}
                   type="button"
                   onClick={() => {
-                    if (em === "區段" && editMode !== "區段") setBody("");
-                    if (em !== "區段" && editMode === "區段") setBody(initial.body ?? "");
                     setEditMode(em);
                   }}
                   disabled={submitting}
@@ -248,45 +288,10 @@ export function Composer({
                       : "border-gray-700 text-gray-400 hover:text-gray-200"
                   }`}
                 >
-                  {em}
+                  {em === "區段" ? "編輯" : em}
                 </button>
               );
             })}
-          </div>
-        )}
-
-        {mode === "edit-push" && editMode === "區段" && (
-          <div className="rounded-xl border border-gray-700 bg-gray-800/50 p-3">
-            <p className="mb-2 text-xs text-gray-400">
-              以原內容字元位置指定半開區間 [起點, 終點)；起點等於終點時會插入文字。
-            </p>
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-2 text-xs text-gray-400">
-                起點
-                <input
-                  aria-label="區段起點"
-                  type="number"
-                  min={0}
-                  max={initial.body?.length ?? 0}
-                  value={sectionStart}
-                  onChange={(event) => setSectionStart(Number(event.target.value))}
-                  className="w-20 rounded-lg border border-gray-700 bg-gray-900 px-2 py-1 text-gray-100"
-                />
-              </label>
-              <label className="flex items-center gap-2 text-xs text-gray-400">
-                終點
-                <input
-                  aria-label="區段終點"
-                  type="number"
-                  min={0}
-                  max={initial.body?.length ?? 0}
-                  value={sectionEnd}
-                  onChange={(event) => setSectionEnd(Number(event.target.value))}
-                  className="w-20 rounded-lg border border-gray-700 bg-gray-900 px-2 py-1 text-gray-100"
-                />
-              </label>
-              <span className="text-xs text-gray-500">原內容共 {initial.body?.length ?? 0} 字元</span>
-            </div>
           </div>
         )}
 
@@ -295,22 +300,22 @@ export function Composer({
           <textarea
             ref={textareaRef}
             value={body}
-            disabled={submitting}
+            disabled={editingLocked}
             onChange={(e) => {
               setBody(e.target.value);
               if (uploadError) setUploadError(null);
             }}
             rows={4}
             className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-sky-500 resize-none"
-            placeholder={editMode === "區段" ? "輸入替代內容；留空代表刪除…" : "輸入內容…"}
+            placeholder="輸入內容…"
           />
-          <span
+          {!multipart && <span
             className={`absolute bottom-3 right-3 text-xs ${
               remaining < 10 ? "text-red-400" : "text-gray-500"
             }`}
           >
             {remaining}
-          </span>
+          </span>}
         </div>
 
         {/* Upload error */}
@@ -324,9 +329,17 @@ export function Composer({
         )}
 
         {/* Footer */}
+        {delivery && <div role="status" className="flex items-center justify-between text-xs text-gray-400">
+          <span>{delivery.status === "uncertain" ? "尚未確認" : "已送出"} · {delivery.confirmed} / {delivery.total}</span>
+          {delivery.status === "uncertain" && onRefresh && <button type="button" onClick={onRefresh} className="text-sky-400">重新整理</button>}
+        </div>}
+        {symbolsOpen && <NativeSymbolPalette groupIndex={symbolGroup} onGroupChange={setSymbolGroup} onSelect={insertSymbol} disabled={editingLocked} />}
         <div className="flex items-center justify-between gap-3">
           {/* Image upload */}
-          <div>
+          <div className="flex items-center gap-2">
+            <button type="button" aria-label="表情符號" aria-expanded={symbolsOpen} disabled={editingLocked}
+              onMouseDown={(event) => event.preventDefault()} onClick={() => setSymbolsOpen((open) => !open)}
+              className="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-400 hover:text-gray-200 text-xl disabled:opacity-40">☺</button>
             <input
               ref={fileInputRef}
               type="file"
@@ -334,6 +347,7 @@ export function Composer({
               className="hidden"
               onChange={handleImageChange}
               aria-label="上傳圖片"
+              disabled={editingLocked}
             />
             <button
               type="button"
@@ -341,11 +355,15 @@ export function Composer({
                 if (uploadError) setUploadError(null);
                 fileInputRef.current?.click();
               }}
-              disabled={uploading || submitting}
+              disabled={uploading || editingLocked}
               className="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-400 hover:text-gray-200 text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               aria-label="新增圖片"
             >
-              {uploading ? "上傳中…" : "🖼"}
+              {uploading ? "上傳中…" : <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="3" />
+                <circle cx="8" cy="8" r="1.5" />
+                <path d="m3 17 5-5 4 4 3-3 6 6" />
+              </svg>}
             </button>
           </div>
 
@@ -356,7 +374,7 @@ export function Composer({
             disabled={isSubmitDisabled}
             className="px-6 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium text-white transition-colors"
           >
-            {submitting ? "送出中…" : "送出"}
+            {submitting ? "送出中…" : delivery?.status === "paused" ? "繼續送出" : "送出"}
           </button>
         </div>
       </div>

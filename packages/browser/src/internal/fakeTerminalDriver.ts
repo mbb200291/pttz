@@ -6,8 +6,12 @@ import type {
   PttCommand,
   PushType,
   RawArticleSource,
+  GatewayReplyDraftInput,
+  ReplyDelivery,
 } from "@pttzzz/core";
+import { encodedReplyBytes, ReplyDraftQueue } from "./multipartReply.js";
 import type { BrowserGatewayDriver } from "../gateway.js";
+import { formatEditorBody } from "./articleFormatting.js";
 import type {
   ActionResult,
   ConnectionStatus,
@@ -19,7 +23,9 @@ import type {
 } from "./terminalDriver.js";
 import {
   aggregatePushes,
+  pushContentCapacity,
   formatBoardReplyTitle,
+  formatEditPush,
   splitArticleBody,
   splitArticleEditableContent,
   type ArticleSummary,
@@ -348,6 +354,7 @@ export function createLegacyFakePttAdapterForUi() {
 }
 
 export class FakePttAdapter {
+  private readonly replyDrafts = new ReplyDraftQueue();
   private status: ConnectionStatus = "connected";
   private currentUser: string | null = getFakePttCurrentUser();
   private currentArticle: { boardName: string; articleIndex: number } | null = null;
@@ -361,6 +368,7 @@ export class FakePttAdapter {
   }
 
   async login(username: string): Promise<LoginResult> {
+    this.replyDrafts.invalidate();
     const nextUser = username.trim() || DEFAULT_USER;
     this.currentUser = nextUser;
     sessionStorage.setItem(FAKE_USER_KEY, nextUser);
@@ -647,6 +655,7 @@ export class FakePttAdapter {
   }
 
   async disconnect(): Promise<void> {
+    this.replyDrafts.invalidate();
     this.status = "closed";
     this.emitStatus("closed");
   }
@@ -704,6 +713,21 @@ export class FakePttAdapter {
       entry.board.name.toLowerCase().startsWith(prefix.toLowerCase()) ? [entry.board] : []);
   }
 
+  async sendReplyDraft(input: GatewayReplyDraftInput, onProgress?: (progress: ReplyDelivery) => void): Promise<ReplyDelivery> {
+    input = { ...input, article: { ...input.article } };
+    return this.replyDrafts.run(input, async () => {
+      if (!this.currentUser) throw new Error("尚未登入");
+      if (!articleForKey(readStore(), input.article)) throw new Error("找不到文章");
+      // The simulator renders non-aligned accounts without IP fields.
+      return { author: this.currentUser, capacity: pushContentCapacity(encodedReplyBytes(this.currentUser)) };
+    }, async (content, index) => {
+      const result = await this.executeArticleCommand({ type: "reply-article", article: input.article,
+        content, pushType: input.floor !== undefined || index > 0 ? "neutral" : input.pushType });
+      return result.ok ? { ok: true, outcome: "sent" } : { ok: false,
+        code: "FAKE_REPLY_FAILED", message: result.reason ?? "回文未送出", outcome: "not-sent", retryable: true };
+    }, onProgress);
+  }
+
   async executeArticleCommand(command: Exclude<PttCommand, { type: "create-article" }>): Promise<ActionResult> {
     const article = articleForKey(readStore(), command.article);
     if (!article) return { ok: false, outcome: "not-sent", reason: "找不到文章" };
@@ -738,7 +762,7 @@ export class FakePttAdapter {
       case "withdraw-floor":
         for (const range of command.ranges) {
           const result = await this.appendPush(article.board,
-            `撤回我在${range.start}${range.end === range.start ? "" : `~${range.end}`}樓發言`, "neutral");
+            formatEditPush("撤回", range.start, range.end === range.start ? null : range.end, ""), "neutral");
           if (!result.ok) return result;
         }
         return { ok: true };
@@ -829,6 +853,7 @@ function fakeGatewayDriver(adapter: FakePttAdapter): BrowserGatewayDriver {
     disconnect: () => adapter.disconnect(),
     subscribeStatus: (listener) => adapter.subscribeStatus(listener),
     readArticleSource: (key, emit, signal) => adapter.readArticleSource(key, emit, signal),
+    sendReplyDraft: (input, onProgress) => adapter.sendReplyDraft(input, onProgress),
     listBoards: (source) => adapter.listBoardEntries(source),
     searchBoards: (prefix) => adapter.searchBoardsByPrefix(prefix),
     listArticles: async ({ board, beforeIndex, author, keyword }) => {
@@ -838,6 +863,13 @@ function fakeGatewayDriver(adapter: FakePttAdapter): BrowserGatewayDriver {
         (!keyword || row.title.toLowerCase().includes(keyword.toLowerCase())));
     },
     execute: async (command) => {
+      if ((command.type === "create-article" || command.type === "edit-article" || command.type === "reply-article-to-board") && command.formatting?.length) {
+        if (command.type !== "create-article" && !command.content.trim()) {
+          return { ok: false, code: "INVALID_INPUT", reason: "正文不可為空", outcome: "not-sent", retryable: false };
+        }
+        // Simulate the editor's Ctrl+U conversion; validation rejects caller-supplied controls.
+        command = { ...command, content: formatEditorBody(command.content, command.formatting).replace(/\x15/g, "\x1b") };
+      }
       const result: ActionResult = command.type === "create-article"
         ? await adapter.postArticle(command.board, command.category ?? "", command.title, command.content)
         : await adapter.executeArticleCommand(command);

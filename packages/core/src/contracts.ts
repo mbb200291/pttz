@@ -95,6 +95,7 @@ export interface ArticleRef {
 export interface ArticleSummary extends ArticleRef {
   title: string;
   author: string;
+  /** Source-provided date text. Board listings may contain only month/day. */
   publishedAt?: string;
   nativeScore?: number;
   nativeScoreLabel?: string;
@@ -146,6 +147,8 @@ export interface Reply {
   viewerVote?: VoteDirection;
   isOp: boolean;
   visible: boolean;
+  /** Initial snapshot before edits, when retained by the source. Not an edit operation. */
+  originalVersion?: { content: string; createdAt?: string };
   edits: readonly EditRecord[];
   children: readonly Reply[];
   metadata?: ReplyMetadata;
@@ -242,12 +245,23 @@ export interface ListArticlesInput { board: string; cursor?: string; limit?: num
 export interface SearchArticlesInput { board: string; query: string; cursor?: string; limit?: number }
 export interface FilterArticlesInput { board: string; author?: string; keyword?: string; minimumNativeScore?: number; cursor?: string; limit?: number }
 export interface GetArticleInput { article: ArticleKey; includeDebugMetadata?: boolean }
-export interface CreateArticleInput { board: string; category?: string; title: string; content: string }
-export interface EditArticleInput { article: ArticleKey; content: string }
+/** Presentation offsets are UTF-16, start-inclusive/end-exclusive, not reply-edit indices. */
+export interface ArticleTextStyle { start: number; end: number; bold?: boolean; color?: 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37; backgroundColor?: 40 | 41 | 42 | 43 | 44 | 45 | 46 | 47 }
+export interface CreateArticleInput { board: string; category?: string; title: string; content: string; formatting?: readonly ArticleTextStyle[] }
+export interface EditArticleInput { article: ArticleKey; content: string; formatting?: readonly ArticleTextStyle[] }
 export interface DeleteArticleInput { article: ArticleKey }
 export interface ReplyToArticleInput { article: ArticleKey; content: string; pushType: PushType }
-export interface ReplyArticleToBoardInput { article: ArticleKey; content: string }
+export interface ReplyArticleToBoardInput { article: ArticleKey; content: string; formatting?: readonly ArticleTextStyle[] }
 export interface ReplyToReplyInput { article: ArticleKey; replyId: ReplyId; content: string; pushType: PushType }
+/** Immutable draft identity. Reuse only to resume this exact draft. */
+export interface ReplyDraftInput extends ReplyToArticleInput { operationId: string; replyId?: ReplyId; resume?: boolean }
+export interface GatewayReplyDraftInput extends ReplyToArticleInput { operationId: string; floor?: number; resume?: boolean }
+export interface ReplyDelivery {
+  operationId: string;
+  status: "complete" | "paused" | "uncertain";
+  confirmed: number;
+  total: number;
+}
 export interface SectionChange { start: number; end: number; replacement: string }
 export type EditReplyInput =
   | { article: ArticleKey; replyId: ReplyId; mode: "append" | "replace"; content: string }
@@ -271,11 +285,11 @@ export type GatewayEvent =
   | { type: "article.source"; source: RawArticleSource };
 
 export type PttCommand =
-  | { type: "create-article"; board: string; category?: string; title: string; content: string }
-  | { type: "edit-article"; article: ArticleKey; content: string }
+  | ({ type: "create-article" } & CreateArticleInput)
+  | ({ type: "edit-article" } & EditArticleInput)
   | { type: "delete-article"; article: ArticleKey }
   | { type: "reply-article"; article: ArticleKey; content: string; pushType: PushType }
-  | { type: "reply-article-to-board"; article: ArticleKey; content: string }
+  | ({ type: "reply-article-to-board" } & ReplyArticleToBoardInput)
   | { type: "reply-floor"; article: ArticleKey; floor: number; content: string; pushType: PushType }
   | { type: "edit-floor"; article: ArticleKey; floor: number; mode: "append" | "replace"; content: string }
   | { type: "edit-floor"; article: ArticleKey; floor: number; mode: "section"; changes: readonly SectionChange[] }
@@ -318,6 +332,8 @@ export interface PttGateway {
   filterArticles(input: FilterArticlesInput): Promise<ArticlePage>;
   readArticle(input: GetArticleInput): AsyncIterable<RawArticleSource>;
   execute(command: PttCommand): Promise<ActionReceipt>;
+  /** Optional transport capability; old gateways retain their single-push API. */
+  sendReplyDraft?(input: GatewayReplyDraftInput, onProgress?: (progress: ReplyDelivery) => void): Promise<ReplyDelivery>;
   subscribe(listener: (event: GatewayEvent) => void): Unsubscribe;
 }
 

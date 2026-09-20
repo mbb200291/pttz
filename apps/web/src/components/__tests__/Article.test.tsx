@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import { projectThreadForDisplay, type AggregatedPush } from "../../lib/ptt/uiTypes";
 
 describe("Article", () => {
   it("shows the selected list row as an immediate fallback while loading", async () => {
@@ -29,7 +30,7 @@ describe("Article", () => {
     expect(html).not.toContain(">載入中…<");
   });
 
-  it("uses lightweight article rendering while partial content is still loading", async () => {
+  it("formats partial body while keeping the pending discussion lightweight", async () => {
     vi.resetModules();
     vi.doMock("../../hooks/useArticle", () => ({
       useArticle: () => ({
@@ -71,6 +72,8 @@ describe("Article", () => {
               floorNumber: 1,
               anchorOrder: 1,
               sourceFloors: [1],
+              pushVoters: [],
+              booVoters: [],
             },
           ],
           articleNotes: [],
@@ -98,13 +101,11 @@ describe("Article", () => {
     expect(html).toContain("新聞");
     expect(html).toContain("partial article");
     expect(html).toContain("https://youtu.be/dQw4w9WgXcQ");
-    expect(html).not.toContain("播放 YouTube 影片");
-    expect(html).not.toContain("時間");
-    expect(html).not.toContain("推噓分");
-    expect(html).not.toContain("舊到新");
-    expect(html).toContain("回文");
+    expect(html).toContain("播放 YouTube 影片");
+    expect(html).toContain("文章推噓與回覆");
+    expect(html).not.toContain("已載入 1 則");
     expect(html).not.toContain(">噓</pre>");
-    expect(html).toContain("完整討論串整理中…");
+    expect(html).toContain("討論載入中…");
   });
 
   it("renders structured revisions after the article body", async () => {
@@ -139,10 +140,10 @@ describe("Article", () => {
     expect(html).toContain("修正來源");
   });
 
-  it("shows visible aggregated replies instead of the native neutral count", async () => {
+  it("counts four visible aggregated replies at every depth but only one root discussion", async () => {
     vi.resetModules();
     const { Article } = await import("../Article");
-    const push = (overrides: Record<string, unknown>) => ({
+    const push = (overrides: Partial<AggregatedPush>): AggregatedPush => ({
       id: "reply-1",
       type: "neutral",
       author: "alice",
@@ -151,6 +152,7 @@ describe("Article", () => {
       ipAddresses: [],
       isOP: false,
       replyTo: null,
+      structuralDepth: 1,
       score: 0,
       floorNumber: 1,
       anchorOrder: 0,
@@ -158,6 +160,21 @@ describe("Article", () => {
       pushVoters: [],
       booVoters: [],
       ...overrides,
+    });
+    const pushes = projectThreadForDisplay([
+      // Two native floors are already aggregated into one visible reply.
+      push({ sourceFloors: [1, 2] }),
+      push({ id: "reply-2", content: "第二層回覆", replyTo: "reply-1", structuralDepth: 2, sourceFloors: [3] }),
+      push({ id: "reply-3", content: "第三層回覆", replyTo: "reply-2", structuralDepth: 3, sourceFloors: [4] }),
+      push({ id: "reply-4", content: "第四層回覆", replyTo: "reply-3", structuralDepth: 4, sourceFloors: [5] }),
+      push({ id: "article-vote", content: "推", sourceFloors: [6], visible: false }),
+      push({ id: "reply-vote", content: "推1樓", replyTo: "reply-1", sourceFloors: [7], visible: false }),
+      push({ id: "withdraw", content: "撤回我對1樓的推", sourceFloors: [8], visible: false }),
+      push({ id: "edit-command", content: "補充我在1樓說的：補充", sourceFloors: [9], visible: false }),
+      push({ id: "edit", type: "edit", content: "編輯紀錄", replyTo: "reply-1", sourceFloors: [10] }),
+    ]);
+    expect(pushes.find((reply) => reply.id === "reply-4")).toMatchObject({
+      replyTo: "reply-3", displayReplyTo: "reply-2",
     });
 
     const html = renderToStaticMarkup(
@@ -171,12 +188,7 @@ describe("Article", () => {
           date: "08/22",
           board: "Test",
           body: "正文",
-          pushes: [
-            push({}),
-            push({ id: "reply-2", content: "巢狀回覆", replyTo: "reply-1", sourceFloors: [2] }),
-            push({ id: "article-vote", content: "推", sourceFloors: [3], visible: false }),
-            push({ id: "edit", type: "edit", content: "編輯紀錄", sourceFloors: [4] }),
-          ],
+          pushes,
           articleNotes: [],
           score: 0,
           nativePushCount: 1,
@@ -186,7 +198,11 @@ describe("Article", () => {
       />,
     );
 
-    expect(html).toContain('aria-label="聚合後回覆 2"');
+    expect(html).toContain('aria-label="聚合後回覆 4"');
+    expect(html).toContain("1 則討論");
+    expect(html).not.toContain("4 則討論");
+    expect(html).not.toContain("撤回我對1樓的推");
+    expect(html).not.toContain("補充我在1樓說的：補充");
     expect(html).not.toContain(">中立<");
   });
 });

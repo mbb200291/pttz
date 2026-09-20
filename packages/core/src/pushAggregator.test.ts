@@ -13,6 +13,115 @@ import type { ArticleEditRecord, OpEditedReplySegment, RawPush } from "./parser.
 
 const OP = "opUser";
 
+describe("opaque replacement marker suffixes", () => {
+  it.each(["_", "|", "||", "|!"])("preserves literal %s in a single-fragment replacement", (suffix) => {
+    const thread = aggregatePushes([
+      push("alice", "original_"),
+      push("alice", `更正我在1樓發言：literal${suffix}`),
+      push("alice", "next_"),
+    ], OP);
+    expect(thread.pushes.map((item) => item.content)).toEqual([`literal${suffix}`, "next"]);
+    expect(thread.pushes[0].editHistory?.at(-1)?.resultContent).toBe(`literal${suffix}`);
+  });
+
+  it("keeps replacement suffixes opaque across merged fragments and later append", () => {
+    const thread = aggregatePushes([
+      { ...push("alice", "first|"), remainingContentColumns: 0 },
+      push("alice", "second_"),
+      push("alice", "更正我在1樓發言：changed_"),
+      push("alice", "更正我在2樓發言：tail|"),
+      push("alice", "補充我在1樓發言：append_"),
+    ], OP);
+    expect(thread.pushes).toHaveLength(1);
+    expect(thread.pushes[0]).toMatchObject({ content: "changed_tail|\nappend_", sourceFloors: [1, 2] });
+    expect(thread.pushes[0].editHistory?.map((entry) => entry.resultContent)).toEqual([
+      "firstsecond", "changed_second", "changed_tail|", "changed_tail|\nappend_",
+    ]);
+  });
+
+  it("applies section offsets against the complete literal replacement payload", () => {
+    const thread = aggregatePushes([
+      push("alice", "original_"),
+      push("alice", "更正我在1樓發言：abc_|"),
+      push("alice", "更正我在1樓發言：^3:5=XY"),
+    ], OP);
+    expect(thread.pushes[0].content).toBe("abcXY");
+    expect(thread.pushes[0].editHistory?.map((entry) => entry.resultContent)).toEqual([
+      "original", "abc_|", "abcXY",
+    ]);
+  });
+});
+
+describe("aggregation profile and explicit stop marker", () => {
+  it("preserves |! as text terminated by natural punctuation", () => {
+    const input = [push("alice", "last|!"), push("alice", "separate")];
+    expect(aggregatePushes(input, OP).pushes.map((p) => p.content)).toEqual(["last|!", "separate"]);
+  });
+
+  it.each([2, 3, 4, 5, 6])("applies default two and configured three to interleaved gap %s", (minutes) => {
+    const input = [push("alice", "first"), push("bob", "aside。"), push("alice", "last", `01/01 12:0${minutes}`)];
+    expect(aggregatePushes(input, OP).pushes).toHaveLength(minutes <= 2 ? 2 : 3);
+    expect(aggregatePushes(input, OP, [], [], { nonconsecutiveGapMinutes: 3 }).pushes).toHaveLength(minutes <= 3 ? 2 : 3);
+  });
+
+  it.each([false, true])("strips _ and stops forward merge after attaching backward (full=%s)", (full) => {
+    const input = [push("alice", "first。|"), { ...push("alice", "last_  "), isFullWidthLine: full }, push("alice", "separate")];
+    expect(aggregatePushes(input, OP).pushes.map((p) => p.content)).toEqual(["first。\nlast", "separate"]);
+  });
+
+  it.each([
+    ["text。|", "text。", 1], ["text。||", "text。|", 1],
+    ["text_", "text", 2], ["text|!", "text|!", 2],
+    ["text|||", "text||", 1], ["text__", "text_", 2],
+    ["text_|", "text_", 1], ["text|_", "text|", 2],
+    ["text|!_", "text|!", 2], ["text_|!", "text_|!", 2],
+  ])("consumes exactly one latest-rule suffix from %s", (content, visible, count) => {
+    const result = aggregatePushes([push("alice", `${content}  `), push("alice", "next")], OP).pushes;
+    expect(result).toHaveLength(count);
+    expect(result[0].content).toBe(count === 1 ? `${visible}\nnext` : visible);
+  });
+
+  it("does not let | cross author, target, control, or interleaved time boundaries", () => {
+    const result = aggregatePushes([
+      push("root", "root。"), push("other", "other。"),
+      push("alice", "回1樓：first。|"), push("bob", "回1樓：different author。"),
+      push("alice", "回2樓：different target。|"), push("alice", "推"),
+      push("alice", "after control。|"), push("bob", "aside。"),
+      push("alice", "after gap", "01/01 12:03"),
+    ], OP).pushes;
+    expect(result.map((p) => p.content)).toEqual([
+      "root。", "other。", "first。", "different author。", "different target。", "after control。", "aside。", "after gap",
+    ]);
+  });
+
+  it.each(["01/01 12:06", ""])('ignores consecutive time gap "%s"', (time) => {
+    expect(aggregatePushes([push("alice", "first"), push("alice", "last", time)], OP, [], [], { nonconsecutiveGapMinutes: 3 }).pushes).toHaveLength(1);
+  });
+
+  it.each([-1, NaN, Infinity, -Infinity])("rejects invalid gap %s", (gap) => {
+    expect(() => aggregatePushes([], OP, [], [], { nonconsecutiveGapMinutes: gap })).toThrow(RangeError);
+  });
+
+  it("uses the same profile for both snapshot statuses, allowing zero", () => {
+    const input = [push("alice", "first"), push("bob", "aside。"), push("alice", "last", "01/01 12:01")];
+    for (const complete of [false, true]) {
+      expect(aggregateThreadSnapshot(input, OP, complete, { nonconsecutiveGapMinutes: 0 }).thread.pushes).toHaveLength(3);
+    }
+  });
+});
+
+it("withdraws the original reply after vote withdrawal and repeated edits", () => {
+  const commands = [
+    "測試", "推1樓", "撤回我對1樓的推", "更正我在1樓發言：測~試",
+    "補充我在1樓發言：測試", "更正我在1樓發言：測試", "撤回我在1樓的發言",
+  ];
+  const events = normalizeThreadEvents(commands.map((content) => ({
+    type: "neutral" as const, author: "MBB200291", content, time: "09/13 16:59",
+  })));
+  expect(events[0].withdrawn).toBe(true);
+  expect(events.filter((event) => event.visible)).toHaveLength(0);
+});
+
 type AnchoredRawPush = RawPush & {
   anchorOffset?: number;
   rawFloor?: number;
@@ -272,7 +381,7 @@ describe("連續同作者推文合併", () => {
   });
 
   it("連續同作者且前則以串接符號結尾時合併並移除串接符號", () => {
-    const raw = [push("alice", "Hello ||"), push("alice", "World")];
+    const raw = [push("alice", "Hello |"), push("alice", "World")];
     const thread = aggregatePushes(raw, OP);
     const alicePushes = thread.pushes.filter((r) => r.author === "alice");
     expect(alicePushes).toHaveLength(1);
@@ -282,7 +391,7 @@ describe("連續同作者推文合併", () => {
   it("連續同作者同目標以串接符號續接即使相隔六分鐘仍合併", () => {
     const raw = [
       push("root", "根。", "01/01 12:00", "neutral", 10, 1),
-      push("alice", "回1樓：前段。||", "01/01 12:01", "neutral", 20, 2),
+      push("alice", "回1樓：前段。|", "01/01 12:01", "neutral", 20, 2),
       push("alice", "回1樓：六分鐘後", "01/01 12:07", "neutral", 30, 3),
     ];
     const alicePushes = aggregatePushes(raw, OP).pushes.filter(
@@ -314,7 +423,7 @@ describe("連續同作者推文合併", () => {
 describe("不連續推文的合併條件", () => {
   const full45 = "a".repeat(44);
 
-  it("前則未用終止符且時間間隔小 → 合併為多行", () => {
+  it("前則未用終止符且時間間隔三分鐘 → 預設不合併", () => {
     const raw = [
       push("alice", "短句", "01/01 12:00"),
       push("bob", "插入一句"),
@@ -322,11 +431,10 @@ describe("不連續推文的合併條件", () => {
     ];
     const result = aggregatePushes(raw, OP).pushes;
     const alicePushes = result.filter((r) => r.author === "alice");
-    expect(alicePushes).toHaveLength(1);
-    expect(alicePushes[0].content).toBe("短句\n接續");
+    expect(alicePushes.map((item) => item.content)).toEqual(["短句", "接續"]);
   });
 
-  it("前則塞滿且未用終止符時，下一行直接接續該行", () => {
+  it("前則塞滿但時間間隔三分鐘 → 預設不合併", () => {
     const raw = [
       { ...push("alice", full45, "01/01 12:00"), isFullWidthLine: true },
       push("bob", "插入一句"),
@@ -334,8 +442,7 @@ describe("不連續推文的合併條件", () => {
     ];
     const result = aggregatePushes(raw, OP).pushes;
     const alicePushes = result.filter((r) => r.author === "alice");
-    expect(alicePushes).toHaveLength(1);
-    expect(alicePushes[0].content).toBe(`${full45}接續`);
+    expect(alicePushes.map((item) => item.content)).toEqual([full45, "接續"]);
   });
 
   it("前則結尾是終止符 → 不合併", () => {
@@ -349,7 +456,7 @@ describe("不連續推文的合併條件", () => {
     expect(alicePushes).toHaveLength(2);
   });
 
-  it("前則未用終止符但時間間隔超過 5 分鐘 → 不合併", () => {
+  it("前則未用終止符但時間間隔超過 2 分鐘 → 不合併", () => {
     const raw = [
       push("alice", "短句", "01/01 12:00"),
       push("bob", "插入"),
@@ -434,28 +541,26 @@ describe("不連續推文的合併條件", () => {
     expect(result.filter((r) => r.author === "alice")).toHaveLength(2);
   });
 
-  it("不連續但前則以串接符號結尾且時間間隔小 → 合併並移除串接符號", () => {
+  it("不連續且串接符號不能跨越三分鐘間隔，仍移除串接符號", () => {
     const raw = [
-      push("alice", "Hello||", "01/01 12:00"),
+      push("alice", "Hello|", "01/01 12:00"),
       push("bob", "插入"),
       push("alice", "World", "01/01 12:03"),
     ];
     const result = aggregatePushes(raw, OP).pushes;
     const alicePushes = result.filter((r) => r.author === "alice");
-    expect(alicePushes).toHaveLength(1);
-    expect(alicePushes[0].content).toBe("Hello\nWorld");
+    expect(alicePushes.map((item) => item.content)).toEqual(["Hello", "World"]);
   });
 
-  it("前則有終止符但後方有串接符號時仍合併", () => {
+  it("終止符後方有串接符號仍不能跨越三分鐘間隔", () => {
     const raw = [
-      push("alice", "Hello.||", "01/01 12:00"),
+      push("alice", "Hello.|", "01/01 12:00"),
       push("bob", "插入"),
       push("alice", "World", "01/01 12:03"),
     ];
     const result = aggregatePushes(raw, OP).pushes;
     const alicePushes = result.filter((r) => r.author === "alice");
-    expect(alicePushes).toHaveLength(1);
-    expect(alicePushes[0].content).toBe("Hello.\nWorld");
+    expect(alicePushes.map((item) => item.content)).toEqual(["Hello.", "World"]);
   });
 });
 
@@ -464,7 +569,7 @@ describe("不連續推文的合併條件", () => {
 describe("嵌套回覆識別", () => {
   it("「回x樓：...」以原始樓號對應聚合後回文", () => {
     const raw = [
-      push("alice", "第一段||", "01/01 12:00", "push", 10, 1),
+      push("alice", "第一段|", "01/01 12:00", "push", 10, 1),
       push("alice", "第二段", "01/01 12:01", "push", 20, 2),
       push("bob", "回2樓：回覆alice", "01/01 12:02", "push", 30, 3),
     ];
@@ -984,7 +1089,7 @@ describe("HTML vote model alignment", () => {
     });
   });
 
-  it("aggregates interleaved continuations by author and structural target", () => {
+  it("aggregates interleaved continuations by author and structural target with a configured five-minute profile", () => {
     const thread = aggregatePushes(
       [
         push("alice", "主題第一段還沒結束", "08/12 22:50", "neutral", 10, 1),
@@ -997,6 +1102,9 @@ describe("HTML vote model alignment", () => {
         push("erin", "回5樓：我從另一角度回 Bob。", "08/12 22:57", "neutral", 80, 8),
       ],
       OP,
+      [],
+      [],
+      { nonconsecutiveGapMinutes: 5 },
     );
 
     const byAuthor = new Map(thread.pushes.map((item) => [item.author, item]));
@@ -1284,7 +1392,7 @@ describe("HTML vote model alignment", () => {
   it("withdraws a floor range only for the command author", () => {
     const thread = aggregatePushes(
       [
-        push("alice", "第一段||", "08/12 22:40", "neutral", 10, 11),
+        push("alice", "第一段|", "08/12 22:40", "neutral", 10, 11),
         push("bob", "別人的內容。", "08/12 22:41", "neutral", 20, 12),
         push("alice", "第二段。", "08/12 22:42", "neutral", 30, 13),
         push("alice", "撤回我在11~13樓的發言", "08/12 22:43", "neutral", 40, 14),

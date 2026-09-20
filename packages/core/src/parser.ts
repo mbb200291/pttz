@@ -13,6 +13,7 @@ const PUSH_MARKER_PATTERN = "([推噓→])\\s+(\\S{2,12})\\s*:";
 const PUSH_MARKER_RE = new RegExp(PUSH_MARKER_PATTERN, "u");
 const RECOMMEND_LAYOUT_COLUMNS = 78;
 const RECOMMEND_LEAD_COLUMNS = 3;
+const RECOMMEND_CONTENT_SEPARATOR_COLUMNS = 1;
 const RECOMMEND_DATE_COLUMNS = 6;
 const RECOMMEND_DATE_TIME_SPACE_COLUMNS = 1;
 const RECOMMEND_TIME_COLUMNS = 6;
@@ -132,25 +133,30 @@ function authorFieldColumns(rawLine: string, author: string): number {
   return terminalColumns(prefix.slice(authorStart));
 }
 
+/** Stored author-field width includes alignment padding, but not the colon. */
+export function pushContentCapacity(authorColumns: number, hasIpAddress = false): number {
+  const inputBufferColumns =
+    RECOMMEND_LAYOUT_COLUMNS -
+    RECOMMEND_LEAD_COLUMNS -
+    RECOMMEND_CONTENT_SEPARATOR_COLUMNS -
+    RECOMMEND_DATE_COLUMNS -
+    RECOMMEND_DATE_TIME_SPACE_COLUMNS -
+    RECOMMEND_TIME_COLUMNS -
+    (hasIpAddress ? IPV4_FIELD_COLUMNS : 0) -
+    authorColumns;
+  return Math.max(
+    0,
+    inputBufferColumns - STRING_TERMINATOR_COLUMNS,
+  );
+}
+
 function remainingPushContentColumns(
   rawLine: string,
   author: string,
   content: string,
   hasIpAddress: boolean,
 ): number {
-  const inputBufferColumns =
-    RECOMMEND_LAYOUT_COLUMNS -
-    RECOMMEND_LEAD_COLUMNS -
-    RECOMMEND_DATE_COLUMNS -
-    RECOMMEND_DATE_TIME_SPACE_COLUMNS -
-    RECOMMEND_TIME_COLUMNS -
-    (hasIpAddress ? IPV4_FIELD_COLUMNS : 0) -
-    authorFieldColumns(rawLine, author);
-  const contentCapacity = Math.max(
-    0,
-    inputBufferColumns - STRING_TERMINATOR_COLUMNS,
-  );
-
+  const contentCapacity = pushContentCapacity(authorFieldColumns(rawLine, author), hasIpAddress);
   return Math.max(0, contentCapacity - terminalColumns(content));
 }
 

@@ -1,6 +1,12 @@
-# pttzzz 0.1 public contracts
+# pttzzz public contracts
 
 本文件描述 repository 內已實作並由 TypeScript、gateway contract tests 與 packed consumer 驗證的公開契約；npm registry 發布狀態不在此保證。語意規則以[核心規則白皮書](../../../docs/whitepaper/pttzzz-core.md)為準，套件分層見[核心架構](./README.md)。
+
+## 0.3 文章文字格式擴充
+
+文章發表、本文編輯與回應至看板可附加 `ArticleTextStyle[]`；正文與格式分離，普通文字語意不變。範圍採 UTF-16 左含右不含，不得重疊或切開 surrogate pair；樣式僅高亮與前景色 30–37。Core 與 browser 都在送出前驗證。詳細介面、預覽及錯誤處理見 [UI 開發指南](./DEVELOPMENT_GUIDE.md#article-text-formatting-corebrowser-03)。
+
+此為實作層公開 API 加法擴充，套件為 0.3.0。文字格式欄位本身不改變 body／回文語意及 Article DTO；其他 gateway 必須明確實作此欄位，不可承諾未知 gateway 會自動支援。目前規則相容性為 0.3.x，詳見白皮書。
 
 ## 漸進讀取狀態
 
@@ -125,6 +131,7 @@ export interface ArticleRef {
 export interface ArticleSummary extends ArticleRef {
   title: string;
   author: string;
+  /** Source-provided date text. A PTT board listing may contain only month/day. */
   publishedAt?: string;
   nativeScore?: number;
 }
@@ -182,6 +189,8 @@ export interface PartialArticle {
   replies: readonly Reply[];
 }
 ```
+
+`ArticleSummary.publishedAt` preserves the precision supplied by the source. PTT board-list rows expose month and day but no year, so consumers must not parse this field as a complete timestamp, invent a year, or sort pages by it. Keep the opaque pagination order, use the numeric article index as the stable order within an index-based PTT board, and use the complete timestamp from a loaded `Article` only when calendar chronology is required.
 
 `ArticleKey` 必須同時帶 board 與 `index`／`aid` 其中之一。一次 `getArticle()` operation 必須逐欄保留 input `ArticleKey` representation：index request 不轉成 aid，aid request 也不轉成 index；該 operation 的 partial/final DTO 與 Result 都使用同一 representation。即使兩個 key 指向同一篇 PTT 文章，以不同 representation 發起的 operations 在 0.1 仍有各自的 routing key，不做 alias mapping。
 
@@ -247,11 +256,12 @@ export interface SearchArticlesInput { board: string; query: string; cursor?: st
 export interface FilterArticlesInput { board: string; author?: string; keyword?: string; cursor?: string; limit?: number }
 export interface GetArticleInput { article: ArticleKey; includeDebugMetadata?: boolean }
 
-export interface CreateArticleInput { board: string; category?: string; title: string; content: string }
-export interface EditArticleInput { article: ArticleKey; content: string }
+export interface ArticleTextStyle { start: number; end: number; bold?: boolean; color?: 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 }
+export interface CreateArticleInput { board: string; category?: string; title: string; content: string; formatting?: readonly ArticleTextStyle[] }
+export interface EditArticleInput { article: ArticleKey; content: string; formatting?: readonly ArticleTextStyle[] }
 export interface DeleteArticleInput { article: ArticleKey }
 export interface ReplyToArticleInput { article: ArticleKey; content: string; pushType: PushType }
-export interface ReplyArticleToBoardInput { article: ArticleKey; content: string }
+export interface ReplyArticleToBoardInput { article: ArticleKey; content: string; formatting?: readonly ArticleTextStyle[] }
 export interface ReplyToReplyInput { article: ArticleKey; replyId: ReplyId; content: string; pushType: PushType }
 export interface EditReplyInput { article: ArticleKey; replyId: ReplyId; mode: "append" | "replace"; content: string }
 export interface WithdrawReplyInput { article: ArticleKey; replyId: ReplyId }

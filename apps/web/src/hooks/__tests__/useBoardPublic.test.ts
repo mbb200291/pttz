@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import type { PttzzzClient } from "@pttzzz/core";
 import { useBoard } from "../useBoard";
 import { usePttSocketStore } from "../usePttSocket";
@@ -22,7 +22,8 @@ const summary = (index: number) => ({
 
 describe("useBoard public client reads", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    cleanup();
+    vi.resetAllMocks();
     clearPttViewCache();
     usePttSocketStore.setState({ client, pttState: "ready" });
   });
@@ -37,6 +38,53 @@ describe("useBoard public client reads", () => {
     act(() => result.current.loadMore());
     await waitFor(() => expect(result.current.articles).toHaveLength(2));
     expect(listArticles).toHaveBeenNthCalledWith(2, { board: "Test", cursor: "next" });
+  });
+
+  it("sorts out-of-order load-more results by article index", async () => {
+    listArticles
+      .mockResolvedValueOnce({ ok: true, value: { items: [summary(10)], nextCursor: "next" } })
+      .mockResolvedValueOnce({ ok: true, value: { items: [summary(8), summary(9)] } });
+    const { result } = renderHook(() => useBoard("Test"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(result.current.articles).toHaveLength(3));
+
+    expect(result.current.articles.map((item) => item.key.index)).toEqual([10, 9, 8]);
+  });
+
+  it("sorts out-of-order refresh results before retaining proven older rows", async () => {
+    listArticles
+      .mockResolvedValueOnce({ ok: true, value: { items: [summary(10), summary(9)], nextCursor: "older" } })
+      .mockResolvedValueOnce({ ok: true, value: { items: [summary(10), summary(11)], nextCursor: "older" } });
+    const { result } = renderHook(() => useBoard("Test"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => result.current.refresh());
+    await waitFor(() => expect(result.current.refreshing).toBe(false));
+
+    expect(result.current.articles.map((item) => item.key.index)).toEqual([11, 10, 9]);
+  });
+
+  it("keeps pagination retryable and clears a transient load-more error after recovery", async () => {
+    listArticles
+      .mockResolvedValueOnce({ ok: true, value: { items: [summary(10)], nextCursor: "next" } })
+      .mockResolvedValueOnce({
+        ok: false,
+        error: { code: "ARTICLE_PAGE_STALLED", message: "文章列表尚未更新，請再試一次", retryable: true },
+      })
+      .mockResolvedValueOnce({ ok: true, value: { items: [summary(9)], nextCursor: "older" } });
+    const { result } = renderHook(() => useBoard("Test"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(result.current.error).toBe("文章列表尚未更新，請再試一次"));
+    expect(result.current.hasMore).toBe(true);
+
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(result.current.articles).toHaveLength(2));
+    expect(result.current.error).toBeNull();
+    expect(result.current.hasMore).toBe(true);
   });
 
   it("maps search and score filters to public commands", async () => {
@@ -54,6 +102,68 @@ describe("useBoard public client reads", () => {
     await waitFor(() => expect(filterArticles).toHaveBeenCalledWith({
       board: "Test", minimumNativeScore: 10, cursor: undefined,
     }));
+  });
+
+  it("deduplicates load-more callbacks before React renders loading state", async () => {
+    listArticles.mockResolvedValueOnce({ ok: true, value: { items: [summary(10)], nextCursor: "older" } });
+    listArticles.mockImplementation(() => new Promise(() => {}));
+    const { result } = renderHook(() => useBoard("Test"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => { result.current.loadMore(); result.current.loadMore(); });
+    expect(listArticles).toHaveBeenCalledTimes(2);
+  });
+
+  it("retains the usable older cursor when refresh fails", async () => {
+    listArticles
+      .mockResolvedValueOnce({ ok: true, value: { items: [summary(10)], nextCursor: "older" } })
+      .mockResolvedValueOnce({ ok: false, error: { message: "temporary failure" } })
+      .mockResolvedValueOnce({ ok: true, value: { items: [summary(9)] } });
+    const { result } = renderHook(() => useBoard("Test"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => result.current.refresh());
+    await waitFor(() => expect(result.current.error).toBe("temporary failure"));
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(listArticles).toHaveBeenCalledTimes(3));
+    expect(listArticles).toHaveBeenLastCalledWith({ board: "Test", cursor: "older" });
+    expect(result.current.articles.map((item) => item.key.index)).toEqual([10, 9]);
+  });
+
+  it("preserves pagination when an empty refresh keeps the displayed articles", async () => {
+    listArticles
+      .mockResolvedValueOnce({ ok: true, value: { items: [summary(10)], nextCursor: "older" } })
+      .mockResolvedValueOnce({ ok: true, value: { items: [] } })
+      .mockResolvedValueOnce({ ok: true, value: { items: [summary(9)] } });
+    const { result } = renderHook(() => useBoard("Test"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => { result.current.refresh(); result.current.refresh(); });
+    expect(listArticles).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(result.current.refreshing).toBe(false));
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(listArticles).toHaveBeenCalledTimes(3));
+    expect(listArticles).toHaveBeenLastCalledWith({ board: "Test", cursor: "older" });
+  });
+
+  it("does not declare cached articles exhausted before deferred revalidation has supplied a cursor", async () => {
+    writeBoardCache("Test", [summary(10)]);
+    writeBoardAnchorCache("Test", { articleIndex: 10, scrollY: 0, viewportTop: 0 });
+    const { result, unmount } = renderHook(() => useBoard("Test"));
+    act(() => result.current.loadMore());
+    expect(result.current.hasMore).toBe(true);
+    unmount();
+  });
+
+  it("does not declare cached articles exhausted when revalidation temporarily fails", async () => {
+    writeBoardCache("Test", [summary(10)]);
+    listArticles.mockResolvedValueOnce({
+      ok: false,
+      error: { code: "TEMPORARY", message: "temporary failure", retryable: true },
+    });
+    const { result } = renderHook(() => useBoard("Test"));
+
+    await waitFor(() => expect(result.current.error).toBe("temporary failure"));
+
+    expect(result.current.articles.map((item) => item.key.index)).toEqual([10]);
+    expect(result.current.hasMore).toBe(true);
   });
 
   it("puts authoritative refresh order first and retains only older cached rows", async () => {
