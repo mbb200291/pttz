@@ -1,5 +1,13 @@
 # pttzzz 實作概況
 
+Goal 11 可驗證文章工作階段：browser 完整讀文後可私下保留經 key、作者、標題與終端 snapshot 核對的文章畫面；推文型命令驗證成功便直接重用，否則沿用既有定位／重開／AID 與身分檢查。搜尋結果的相對編號必須先取得 canonical AID 才可寫入；連線版本在正文與確認前後持續核對，送出後無法證明回到同篇文章時回傳 `uncertain`。session 狀態不進入 `@pttzzz/core` 公開契約。
+
+Goal 11 推文安全：入口依延遲 terminal prompt 嚴格轉移並記錄不含正文的語意 action trace；neutral 意外落入原生推／噓框會取消並停止，不降級、不自動重送。自動測試只使用 fake gateway 與 transcript，沒有真實 PTT 寫入。
+
+本階段 Task 5 準備已通過 browser 262 項測試與 root build；最終 root `npm run verify`、commit、merge、push 均尚未執行。
+
+Goal 11 推文入口：browser 支援選單後空白推文欄位及作者直接加註，開發模式提供輸入前的本機終端診斷；保留失敗停止、不自動重送的行為。
+
 Goal 11 終端圖形：預格式化／原始本文使用 DBCS 欄寬，常用框線與色塊按格繪製以維持表格對齊；總回覆包含巢狀可見回文，第一層討論數另列。
 
 Goal 11 漸進閱讀：載入中的本文與完整本文共用格式化呈現，保留色碼、排版選擇與媒體節點，避免純文字預覽切換到完整版時的格式閃動。

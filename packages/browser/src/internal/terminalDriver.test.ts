@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createRequire } from "node:module";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 function readRealPttFixture(name: string): string {
   const local = resolve(process.cwd(), "src/internal/__fixtures__/real-ptt", name);
@@ -137,6 +137,111 @@ describe("terminal driver module", () => {
     expect(sent.at(-1)).toBe("q");
   });
 
+  it("refuses a push when getLines is stale but the visible screen is another article", async () => {
+    const mod = await import("./terminalDriver.js");
+    const sent: string[] = [];
+    const boardRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 42, date: "08/22", author: "alice", title: "目標文章" }),
+    ];
+    const staleTargetRows = [
+      "作者  alice 看板 Test",
+      "標題  目標文章",
+      "時間  Sat Aug 22 10:00:00 2026",
+      "───────────────────────────────────────",
+      "舊快照內容",
+    ];
+    const visibleWrongRows = [
+      "作者  bob 看板 Test",
+      "標題  其他文章",
+      "時間  Sat Aug 22 11:00:00 2026",
+      "───────────────────────────────────────",
+      "目前畫面內容",
+    ];
+    let screenRows = boardRows;
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      getLine(index: number) { return { str: screenRows[index] ?? "" }; },
+      async getLines() { return staleTargetRows; },
+      async send(command: string) {
+        sent.push(command);
+        if (command === "42\r\r") screenRows = visibleWrongRows;
+        else if (command === "q") screenRows = boardRows;
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+
+    await expect(driver.executeArticleCommand({
+      type: "reply-article",
+      article: { board: "Test", index: 42 },
+      content: "不可送到錯文",
+      pushType: "neutral",
+    })).resolves.toMatchObject({ ok: false, outcome: "not-sent" });
+
+    expect(sent).not.toContain("X");
+    expect(sent).not.toContain("不可送到錯文\r");
+    expect(sent.at(-1)).toBe("q");
+  });
+
+  it("does not authorize or record a push when disconnected during article acquisition", async () => {
+    const mod = await import("./terminalDriver.js");
+    const { ArticleSessionTracker } = await import("./articleSession.js");
+    const record = vi.spyOn(ArticleSessionTracker.prototype, "record");
+    const listeners = new Map<string, (...args: unknown[]) => void>();
+    const sent: string[] = [];
+    const boardRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 42, date: "08/22", author: "alice", title: "目標文章" }),
+    ];
+    const articleRows = [
+      "作者  alice 看板 Test",
+      "標題  目標文章",
+      "時間  Sat Aug 22 10:00:00 2026",
+      "───────────────────────────────────────",
+      "文章內容",
+    ];
+    let screenRows = boardRows;
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on(event: string, listener: (...args: unknown[]) => void) {
+        listeners.set(event, listener);
+        return this;
+      },
+      getLine(index: number) { return { str: screenRows[index] ?? "" }; },
+      async getLines() { return articleRows; },
+      async send(command: string) {
+        sent.push(command);
+        if (command === "42\r\r") {
+          screenRows = articleRows;
+          listeners.get("disconnect")?.();
+        } else if (command === "q") {
+          screenRows = boardRows;
+        }
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+
+    try {
+      await expect(driver.executeArticleCommand({
+        type: "reply-article",
+        article: { board: "Test", index: 42 },
+        content: "斷線不可送",
+        pushType: "neutral",
+      })).resolves.toMatchObject({ ok: false, outcome: "not-sent" });
+
+      expect(sent).not.toContain("X");
+      expect(sent).not.toContain("斷線不可送\r");
+      expect(record).not.toHaveBeenCalled();
+    } finally {
+      record.mockRestore();
+    }
+  });
+
   it("rejects wrong canonical AID evidence before every article write workflow", async () => {
     const mod = await import("./terminalDriver.js");
     const key = { board: "Test", aid: "#expected" } as const;
@@ -267,8 +372,8 @@ describe("terminal driver module", () => {
         if (command === "42\r\r") screenRows = articleRows;
         else if (command === "q") screenRows = boardRows;
         else if (command === "X") screenRows = ["1.值得推薦 2.給它噓聲 3.只加註解"];
-        else if (command === "3") screenRows = ["請輸入推文內容:"];
-        else if (command === "安全送出\r") screenRows = ["確定送出推文嗎"];
+        else if (command === "3") screenRows = ["→ TEST_USER:"];
+        else if (command === "安全送出\r") screenRows = ["→ TEST_USER: 安全送出    確定[y/N]:"];
         else if (command === "y\r") screenRows = articleRows;
         return true;
       },
@@ -287,7 +392,186 @@ describe("terminal driver module", () => {
     expect(sent.filter((command) => command === "42\r\r")).toHaveLength(2);
     expect(sent.indexOf("X")).toBeGreaterThan(sent.lastIndexOf("42\r\r"));
     expect(sent).toContain("安全送出\r");
-    expect(sent.at(-1)).toBe("q");
+    expect(sent.at(-1)).toBe("y\r");
+  });
+
+  it("does not submit push content when the connection invalidates the article session after type selection", async () => {
+    const mod = await import("./terminalDriver.js");
+    const listeners = new Map<string, (...args: unknown[]) => void>();
+    const sent: string[] = [];
+    const boardRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 42, date: "08/22", author: "alice", title: "目標文章" }),
+    ];
+    const articleRows = [
+      "作者  alice 看板 Test",
+      "標題  目標文章",
+      "時間  Sat Aug 22 10:00:00 2026",
+      "───────────────────────────────────────",
+      "內容",
+      ...Array.from({ length: 18 }, () => ""),
+      "瀏覽 第 1/1 頁 (100%)",
+    ];
+    let screenRows = boardRows;
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on(event: string, listener: (...args: unknown[]) => void) {
+        listeners.set(event, listener);
+        return this;
+      },
+      getLine(index: number) { return { str: screenRows[index] ?? "" }; },
+      async getLines() { return screenRows; },
+      async send(command: string) {
+        sent.push(command);
+        if (command === "42\r\r") screenRows = articleRows;
+        else if (command === "X") screenRows = ["您覺得這篇文章 1.值得推薦 2.給它噓聲 3.只加→註解 [1]?"];
+        else if (command === "3") {
+          screenRows = ["→ TEST_USER: "];
+          listeners.get("disconnect")?.();
+        } else if (command === "q") {
+          screenRows = boardRows;
+        }
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+
+    await expect(driver.executeArticleCommand({
+      type: "reply-article",
+      article: { board: "Test", index: 42 },
+      content: "PRIVATE_DRAFT",
+      pushType: "neutral",
+    })).resolves.toMatchObject({ ok: false, outcome: "not-sent", retryable: true });
+    expect(sent).not.toContain("PRIVATE_DRAFT\r");
+    expect(sent).not.toContain("\x03");
+  });
+
+  it("does not confirm a legacy reply when the connection invalidates after content submission", async () => {
+    const mod = await import("./terminalDriver.js");
+    const listeners = new Map<string, (...args: unknown[]) => void>();
+    const articleRows = [
+      "作者  alice 看板 Test",
+      "標題  目標文章",
+      "時間  Sat Aug 22 10:00:00 2026",
+      "───────────────────────────────────────",
+      "文章內容",
+      ...Array.from({ length: 18 }, () => ""),
+      "瀏覽 第 1/1 頁 (100%)",
+    ];
+    let screenRows = articleRows;
+    const sent: string[] = [];
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on(event: string, listener: (...args: unknown[]) => void) {
+        listeners.set(event, listener);
+        return this;
+      },
+      getLine(index: number) { return { str: screenRows[index] ?? "" }; },
+      async send(command: string) {
+        sent.push(command);
+        if (command === "X") screenRows = [...articleRows.slice(0, -1), "您覺得這篇文章 1.值得推薦 2.給它噓聲 3.只加→註解 [1]?"];
+        else if (command === "3") screenRows = [...articleRows.slice(0, -1), "→ TEST_USER: "];
+        else if (command === "PRIVATE_DRAFT\r") {
+          screenRows = [...articleRows.slice(0, -1), "→ TEST_USER: PRIVATE_DRAFT 確定[y/N]:"];
+          listeners.get("disconnect")?.();
+        }
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+
+    await expect(driver.replyToArticle("PRIVATE_DRAFT", "neutral", "Test"))
+      .resolves.toMatchObject({ ok: false, outcome: "uncertain" });
+    expect(sent).not.toContain("y\r");
+  });
+
+  it("reports a legacy reply as uncertain when the connection invalidates while sending confirmation", async () => {
+    const mod = await import("./terminalDriver.js");
+    const listeners = new Map<string, (...args: unknown[]) => void>();
+    const articleRows = [
+      "作者  alice 看板 Test",
+      "標題  目標文章",
+      "時間  Sat Aug 22 10:00:00 2026",
+      "───────────────────────────────────────",
+      "文章內容",
+      ...Array.from({ length: 18 }, () => ""),
+      "瀏覽 第 1/1 頁 (100%)",
+    ];
+    const boardRows = ["看板《Test》"];
+    let screenRows = articleRows;
+    const sent: string[] = [];
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on(event: string, listener: (...args: unknown[]) => void) {
+        listeners.set(event, listener);
+        return this;
+      },
+      getLine(index: number) { return { str: screenRows[index] ?? "" }; },
+      async send(command: string) {
+        sent.push(command);
+        if (command === "X") screenRows = [...articleRows.slice(0, -1), "→ TEST_USER: "];
+        else if (command === "PRIVATE_DRAFT\r") {
+          screenRows = [...articleRows.slice(0, -1), "→ TEST_USER: PRIVATE_DRAFT 確定[y/N]:"];
+        } else if (command === "y\r") {
+          screenRows = articleRows;
+          listeners.get("disconnect")?.();
+        } else if (command === "q") {
+          screenRows = boardRows;
+        }
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+
+    await expect(driver.replyToArticle("PRIVATE_DRAFT", "neutral", "Test"))
+      .resolves.toMatchObject({ ok: false, outcome: "uncertain" });
+    expect(sent).toContain("y\r");
+    expect(sent).not.toContain("q");
+  });
+
+  it("does not send generic cleanup keys when a full article screen retains an unknown push overlay", async () => {
+    const mod = await import("./terminalDriver.js");
+    const boardRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 42, date: "08/22", author: "alice", title: "目標文章" }),
+    ];
+    const articleRows = [
+      "作者  alice 看板 Test",
+      "標題  目標文章",
+      "時間  Sat Aug 22 10:00:00 2026",
+      "───────────────────────────────────────",
+      "文章內容",
+      ...Array.from({ length: 18 }, () => ""),
+      "瀏覽 第 1/1 頁 (100%)",
+    ];
+    const overlayRows = [...articleRows.slice(0, -1), "系統忙碌，請稍後再試"];
+    let screenRows = boardRows;
+    const sent: string[] = [];
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      getLine(index: number) { return { str: screenRows[index] ?? "" }; },
+      async getLines() { return screenRows; },
+      async send(command: string) {
+        sent.push(command);
+        if (command === "42\r\r") screenRows = articleRows;
+        else if (command === "X") screenRows = overlayRows;
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+
+    await expect(driver.executeArticleCommand({
+      type: "reply-article",
+      article: { board: "Test", index: 42 },
+      content: "PRIVATE_DRAFT",
+      pushType: "neutral",
+    })).resolves.toMatchObject({ ok: false, outcome: "not-sent" });
+    expect(sent).toEqual(["42\r\r", "X"]);
   });
 
   it("writes to a title-search result by its captured AID instead of its relative index", async () => {
@@ -316,8 +600,8 @@ describe("terminal driver module", () => {
       : mode === "normal" ? normalRows
         : mode === "info" ? infoRows
           : mode === "push-menu" ? ["1.值得推薦 2.給它噓聲 3.只加註解"]
-            : mode === "push-input" ? ["請輸入推文內容:"]
-              : mode === "confirm" ? ["確定送出推文嗎"]
+            : mode === "push-input" ? ["→ TEST_USER:"]
+              : mode === "confirm" ? ["→ TEST_USER: 安全回覆    確定[y/N]:"]
                 : articleRows;
     const bot = {
       state: { connect: true, login: true },
@@ -347,6 +631,7 @@ describe("terminal driver module", () => {
       { board: "Test", index: 1 },
       () => undefined,
     );
+    sent.length = 0;
     await expect(driver.executeArticleCommand({
       type: "reply-article",
       article: { board: "Test", index: 1 },
@@ -354,9 +639,241 @@ describe("terminal driver module", () => {
       pushType: "neutral",
     })).resolves.toEqual({ ok: true, outcome: "sent" });
 
-    expect(sent).toContain("#canonicalAid\r");
+    expect(sent[0]).toBe("X");
+    expect(sent).not.toContain("#canonicalAid\r");
     expect(sent).toContain("安全回覆\r");
+    expect(sent.slice(-2)).toEqual(["Q", "q"]);
     expect(sent).not.toContain("q安全回覆\r");
+  });
+
+  it("refuses to write a filtered relative index when canonical AID evidence is unavailable", async () => {
+    const mod = await import("./terminalDriver.js");
+    const filteredRows = [
+      "系列《Test》",
+      buildBoardLine({ index: 1, date: "08/31", author: "alice", title: "搜尋結果" }),
+    ];
+    const articleRows = [
+      "作者  alice 看板 Test",
+      "標題  搜尋結果",
+      "時間  Mon Aug 31 23:41:01 2026",
+      "───────────────────────────────────────",
+      "內容",
+      ...Array.from({ length: 18 }, () => ""),
+      "瀏覽 第 1/1 頁 (100%)",
+    ];
+    const missingInfoRows = ["文章資訊暫時無法取得"];
+    let mode: "filtered" | "article" | "info" | "push-menu" | "push-input" = "filtered";
+    const rows = () => mode === "filtered" ? filteredRows
+      : mode === "info" ? missingInfoRows
+        : mode === "push-menu" ? ["您覺得這篇文章 1.值得推薦 2.給它噓聲 3.只加→註解 [1]?"]
+          : mode === "push-input" ? ["→ TEST_USER:"]
+            : articleRows;
+    const sent: string[] = [];
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      getLine(index: number) { return { str: rows()[index] ?? "" }; },
+      async getLines() { return rows(); },
+      async send(value: string) {
+        sent.push(value);
+        if (value === "1\r\r" && mode === "filtered") mode = "article";
+        else if (value === "Q" && mode === "article") mode = "info";
+        else if (value === "q" && mode === "info") mode = "article";
+        else if (value === "X" && mode === "article") mode = "push-menu";
+        else if (value === "3" && mode === "push-menu") mode = "push-input";
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+
+    await driver.readArticleSource({ board: "Test", index: 1 }, () => undefined);
+    sent.length = 0;
+    await expect(driver.executeArticleCommand({
+      type: "reply-article",
+      article: { board: "Test", index: 1 },
+      content: "不可用相對樓號送出",
+      pushType: "neutral",
+    })).resolves.toMatchObject({ ok: false, outcome: "not-sent" });
+
+    expect(sent).not.toContain("X");
+    expect(sent).not.toContain("不可用相對樓號送出\r");
+  });
+
+  it("does not treat an unread filtered result index as an absolute board index", async () => {
+    const mod = await import("./terminalDriver.js");
+    const normalRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 1, date: "08/31", author: "wrong", title: "一般列表第一篇" }),
+    ];
+    const filteredRows = [
+      "系列《Test》",
+      buildBoardLine({ index: 1, date: "08/31", author: "alice", title: "搜尋結果" }),
+    ];
+    const wrongArticleRows = [
+      "作者  wrong 看板 Test",
+      "標題  一般列表第一篇",
+      "時間  Mon Aug 31 23:41:01 2026",
+      "───────────────────────────────────────",
+      "錯誤文章",
+      "瀏覽 第 1/1 頁 (100%)",
+    ];
+    let mode: "normal" | "filtered" | "article" = "normal";
+    const rows = () => mode === "filtered" ? filteredRows : mode === "article" ? wrongArticleRows : normalRows;
+    const sent: string[] = [];
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      getLine(index: number) { return { str: rows()[index] ?? "" }; },
+      async getLines() { return rows(); },
+      async enterIndex() { mode = "normal"; return true; },
+      async enterBoardByName() { mode = "normal"; return true; },
+      async send(command: string) {
+        sent.push(command);
+        if (command === "/topic\r") mode = "filtered";
+        else if (command === "1\r\r" && mode === "normal") mode = "article";
+        else if (command === "q" && mode === "article") mode = "normal";
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+    const internal = driver as unknown as {
+      articleAidByRelativeIndex: Map<string, string>;
+    };
+    internal.articleAidByRelativeIndex.set("test:1", "staleAid");
+
+    await expect(driver.searchArticles("Test", "topic")).resolves.toEqual([
+      expect.objectContaining({ index: 1, author: "alice", title: "搜尋結果" }),
+    ]);
+    sent.length = 0;
+    await expect(driver.executeArticleCommand({
+      type: "reply-article",
+      article: { board: "Test", index: 1 },
+      content: "不可寫入一般列表第一篇",
+      pushType: "neutral",
+    })).resolves.toMatchObject({ ok: false, outcome: "not-sent" });
+    expect(sent).not.toContain("1\r\r");
+    expect(sent).not.toContain("X");
+  });
+
+  it("keeps prior filtered result indexes non-writable after filter pagination", async () => {
+    const mod = await import("./terminalDriver.js");
+    const normalRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 1, date: "08/31", author: "wrong", title: "一般列表第一篇" }),
+    ];
+    const firstPageRows = [
+      "系列《Test》",
+      buildBoardLine({ index: 1, date: "08/31", author: "alice", title: "第一頁搜尋結果" }),
+    ];
+    const secondPageRows = [
+      "系列《Test》",
+      buildBoardLine({ index: 2, date: "08/30", author: "bob", title: "第二頁搜尋結果" }),
+    ];
+    const wrongArticleRows = [
+      "作者  wrong 看板 Test",
+      "標題  一般列表第一篇",
+      "時間  Mon Aug 31 23:41:01 2026",
+      "───────────────────────────────────────",
+      "錯誤文章",
+      "瀏覽 第 1/1 頁 (100%)",
+    ];
+    let mode: "normal" | "first" | "second" | "article" = "normal";
+    const rows = () => mode === "first" ? firstPageRows
+      : mode === "second" ? secondPageRows
+        : mode === "article" ? wrongArticleRows
+          : normalRows;
+    const sent: string[] = [];
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      getLine(index: number) { return { str: rows()[index] ?? "" }; },
+      async getLines() { return rows(); },
+      async enterIndex() { mode = "normal"; return true; },
+      async enterBoardByName() { mode = "normal"; return true; },
+      async send(command: string) {
+        sent.push(command);
+        if (command === "/topic\r") mode = "first";
+        else if (command.endsWith("11\r") && mode === "first") mode = "second";
+        else if (command === "1\r\r" && mode === "normal") mode = "article";
+        else if (command === "q" && mode === "article") mode = "normal";
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+
+    await expect(driver.searchArticles("Test", "topic")).resolves.toEqual([
+      expect.objectContaining({ index: 1 }),
+    ]);
+    await expect(driver.searchArticles("Test", "topic", 20)).resolves.toEqual([
+      expect.objectContaining({ index: 2 }),
+    ]);
+    sent.length = 0;
+
+    await expect(driver.executeArticleCommand({
+      type: "reply-article",
+      article: { board: "Test", index: 1 },
+      content: "不可寫入舊搜尋結果",
+      pushType: "neutral",
+    })).resolves.toMatchObject({ ok: false, outcome: "not-sent" });
+    expect(sent).not.toContain("1\r\r");
+    expect(sent).not.toContain("X");
+    expect(sent).not.toContain("不可寫入舊搜尋結果\r");
+  });
+
+  it("clears a stale filtered AID mapping when the same index is read from a normal board list", async () => {
+    const mod = await import("./terminalDriver.js");
+    const boardRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 42, date: "08/31", author: "alice", title: "一般文章" }),
+    ];
+    const articleRows = [
+      "作者  alice 看板 Test",
+      "標題  一般文章",
+      "時間  Mon Aug 31 23:41:01 2026",
+      "───────────────────────────────────────",
+      "內容",
+      ...Array.from({ length: 18 }, () => ""),
+      "瀏覽 第 1/1 頁 (100%)",
+    ];
+    let screenRows = boardRows;
+    const sent: string[] = [];
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      getLine(index: number) { return { str: screenRows[index] ?? "" }; },
+      async getLines() { return screenRows; },
+      async send(command: string) {
+        sent.push(command);
+        if (command === "42\r\r") screenRows = articleRows;
+        else if (command === "X") screenRows = ["→ TEST_USER:"];
+        else if (command === "安全內容\r") screenRows = ["→ TEST_USER: 安全內容 確定[y/N]:"];
+        else if (command === "y\r") screenRows = articleRows;
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+    const internal = driver as unknown as {
+      articleAidByRelativeIndex: Map<string, string>;
+      unresolvedRelativeArticleIndexes: Set<string>;
+    };
+    internal.articleAidByRelativeIndex.set("test:42", "staleAid");
+    internal.unresolvedRelativeArticleIndexes.add("test:42");
+
+    await driver.readArticleSource({ board: "Test", index: 42 }, () => undefined);
+    sent.length = 0;
+    await expect(driver.executeArticleCommand({
+      type: "reply-article",
+      article: { board: "Test", index: 42 },
+      content: "安全內容",
+      pushType: "neutral",
+    })).resolves.toEqual({ ok: true, outcome: "sent" });
+
+    expect(sent[0]).toBe("X");
+    expect(sent).not.toContain("#staleAid\r");
   });
 
   it("emits each reply vote and edit control command exactly once", async () => {
@@ -393,8 +910,8 @@ describe("terminal driver module", () => {
         if (value === "42\r\r") screenRows = articleRows;
         else if (value === "q") screenRows = boardRows;
         else if (value === "X") screenRows = ["1.值得推薦 2.給它噓聲 3.只加註解"];
-        else if (value === "3") screenRows = ["請輸入推文內容:"];
-        else if (controls.has(value.replace(/\r$/u, ""))) screenRows = ["確定送出推文嗎"];
+        else if (value === "3") screenRows = ["→ TEST_USER:"];
+        else if (controls.has(value.replace(/\r$/u, ""))) screenRows = [`→ TEST_USER: ${value.trim()}    確定[y/N]:`];
         else if (value === "y\r") screenRows = articleRows;
         return true;
       },
@@ -455,8 +972,8 @@ describe("terminal driver module", () => {
         if (value.endsWith("42\r") && value !== "42\r\r") screenRows = targetRows;
         else if (value === "42\r\r") screenRows = articleRows;
         else if (value === "q") screenRows = targetRows;
-        else if (value === "X") screenRows = ["請輸入推文內容:"];
-        else if (value === "安全送出\r") screenRows = ["確定送出推文嗎"];
+        else if (value === "X") screenRows = ["→ TEST_USER:"];
+        else if (value === "安全送出\r") screenRows = ["→ TEST_USER: 安全送出    確定[y/N]:"];
         else if (value === "y\r") screenRows = articleRows;
         return true;
       },
@@ -499,8 +1016,8 @@ describe("terminal driver module", () => {
         sent.push(value);
         if (value === "42\r\r") screenRows = articleRows;
         else if (value === "q") screenRows = boardRows;
-        else if (value === "X") screenRows = ["請輸入推文內容:"];
-        else if (value.startsWith("撤回我在")) screenRows = ["確定送出推文嗎"];
+        else if (value === "X") screenRows = ["→ TEST_USER:"];
+        else if (value.startsWith("撤回我在")) screenRows = [`→ TEST_USER: ${value.trim()}    確定[y/N]:`];
         else if (value === "y\r") screenRows = articleRows;
         return true;
       },
@@ -517,6 +1034,8 @@ describe("terminal driver module", () => {
 
     expect(sent.indexOf("SECOND")).toBeGreaterThan(sent.indexOf("撤回我在4樓發言\r"));
     expect(sent.filter((value) => value === "X")).toHaveLength(2);
+    expect(sent.filter((value) => value === "42\r\r")).toHaveLength(1);
+    expect(sent).not.toContain("q");
     expect(sent).toContain("撤回我在2樓發言\r");
     expect(sent).toContain("撤回我在4樓發言\r");
     expect(sent).not.toContain("撤回我在2~4樓發言\r");
@@ -549,8 +1068,8 @@ describe("terminal driver module", () => {
         sent.push(value);
         if (value === "42\r\r") screenRows = articleRows;
         else if (value === "q") screenRows = boardRows;
-        else if (value === "X") screenRows = ["請輸入推文內容:"];
-        else if (value === "撤回我在2樓發言\r") screenRows = ["確定送出推文嗎"];
+        else if (value === "X") screenRows = ["→ TEST_USER:"];
+        else if (value === "撤回我在2樓發言\r") screenRows = ["→ TEST_USER: 撤回我在2樓發言    確定[y/N]:"];
         else if (value === "撤回我在4樓發言\r") return false;
         else if (value === "y\r") screenRows = articleRows;
         return true;
@@ -594,6 +1113,745 @@ describe("terminal driver module", () => {
     await expect(driver.listArticles("Test")).resolves.toEqual([
       expect.objectContaining({ index: 42, title: "目標文章" }),
     ]);
+  });
+
+  it("keeps a successfully read article open and records its final verified screen", async () => {
+    const mod = await import("./terminalDriver.js");
+    const { ArticleSessionTracker } = await import("./articleSession.js");
+    const record = vi.spyOn(ArticleSessionTracker.prototype, "record");
+    const sent: string[] = [];
+    const boardRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 42, date: "08/22", author: "alice", title: "目標 文章" }),
+    ];
+    const articleRows = [
+      "作者  alice 看板 Test",
+      "標題  目標 文章",
+      "時間  Sat Aug 22 10:00:00 2026",
+      "───────────────────────────────────────",
+      "文章內容",
+      ...Array.from({ length: 18 }, () => ""),
+      "瀏覽 第 1/1 頁 (100%)",
+    ];
+    const finalArticleRows = [
+      "作者  ALICE 看板 test",
+      "標題    目標   文章",
+      ...articleRows.slice(2),
+    ];
+    let screenRows = boardRows;
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      getLine(index: number) { return { str: screenRows[index] ?? "" }; },
+      async getLines() { return screenRows; },
+      async send(command: string) {
+        sent.push(command);
+        if (command === "42\r\r") screenRows = articleRows;
+        else if (command === "\x1b[1~") screenRows = finalArticleRows;
+        else if (command === "q") screenRows = boardRows;
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+
+    try {
+      await driver.readArticleSource(
+        { board: "Test", index: 42 },
+        () => undefined,
+      );
+
+      expect(sent).not.toContain("q");
+      expect(screenRows).toBe(finalArticleRows);
+      expect(record).toHaveBeenCalledWith({
+        key: { board: "Test", index: 42 },
+        board: "Test",
+        author: "alice",
+        title: "目標 文章",
+        snapshot: finalArticleRows.join("\n"),
+      });
+    } finally {
+      record.mockRestore();
+    }
+  });
+
+  it("reuses an exactly matching active article session without reopening before push entry", async () => {
+    const mod = await import("./terminalDriver.js");
+    const { ArticleSessionTracker } = await import("./articleSession.js");
+    const match = vi.spyOn(ArticleSessionTracker.prototype, "match");
+    const sent: string[] = [];
+    const boardRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 42, date: "08/22", author: "alice", title: "目標文章" }),
+    ];
+    const articleRows = [
+      "作者  alice 看板 Test",
+      "標題  目標文章",
+      "時間  Sat Aug 22 10:00:00 2026",
+      "───────────────────────────────────────",
+      "文章內容",
+      ...Array.from({ length: 18 }, () => ""),
+      "瀏覽 第 1/1 頁 (100%)",
+    ];
+    let screenRows = boardRows;
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      getLine(index: number) { return { str: screenRows[index] ?? "" }; },
+      async getLines() { return screenRows; },
+      async send(command: string) {
+        sent.push(command);
+        if (command === "42\r\r") screenRows = articleRows;
+        else if (command === "q") screenRows = boardRows;
+        else if (command === "X") screenRows = ["1.值得推薦 2.給它噓聲 3.只加註解"];
+        else if (command === "3") screenRows = ["→ TEST_USER:"];
+        else if (command === "沿用文章\r") screenRows = ["→ TEST_USER: 沿用文章    確定[y/N]:"];
+        else if (command === "y\r") screenRows = articleRows;
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+
+    try {
+      await driver.readArticleSource({ board: "Test", index: 42 }, () => undefined);
+      sent.length = 0;
+      match.mockClear();
+
+      await expect(driver.executeArticleCommand({
+        type: "reply-article",
+        article: { board: "Test", index: 42 },
+        content: "沿用文章",
+        pushType: "neutral",
+      })).resolves.toEqual({ ok: true, outcome: "sent" });
+
+      expect(sent[0]).toBe("X");
+      expect(sent).not.toContain("q");
+      expect(sent).not.toContain("42\r\r");
+      expect(match).toHaveBeenCalledWith({
+        key: { board: "Test", index: 42 },
+        board: "Test",
+        author: "alice",
+        title: "目標文章",
+        snapshot: articleRows.join("\n"),
+      });
+    } finally {
+      match.mockRestore();
+    }
+  });
+
+  it("invalidates an exact-snapshot mismatch and uses the existing locate-and-reopen checks", async () => {
+    const mod = await import("./terminalDriver.js");
+    const { ArticleSessionTracker } = await import("./articleSession.js");
+    const invalidate = vi.spyOn(ArticleSessionTracker.prototype, "invalidate");
+    const sent: string[] = [];
+    const boardRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 42, date: "08/22", author: "alice", title: "目標文章" }),
+    ];
+    const articleRows = [
+      "作者  alice 看板 Test",
+      "標題  目標文章",
+      "時間  Sat Aug 22 10:00:00 2026",
+      "───────────────────────────────────────",
+      "文章內容",
+      ...Array.from({ length: 18 }, () => ""),
+      "瀏覽 第 1/1 頁 (100%)",
+    ];
+    const changedRows = articleRows.map((line, index) => index === 4 ? "畫面已更新" : line);
+    let screenRows = boardRows;
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      getLine(index: number) { return { str: screenRows[index] ?? "" }; },
+      async getLines() { return screenRows; },
+      async send(command: string) {
+        sent.push(command);
+        if (command === "42\r\r") screenRows = articleRows;
+        else if (command === "q") screenRows = boardRows;
+        else if (command === "X") screenRows = ["1.值得推薦 2.給它噓聲 3.只加註解"];
+        else if (command === "3") screenRows = ["→ TEST_USER:"];
+        else if (command === "重新確認\r") screenRows = ["→ TEST_USER: 重新確認    確定[y/N]:"];
+        else if (command === "y\r") screenRows = articleRows;
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+
+    try {
+      await driver.readArticleSource({ board: "Test", index: 42 }, () => undefined);
+      screenRows = changedRows;
+      sent.length = 0;
+      invalidate.mockClear();
+
+      await expect(driver.executeArticleCommand({
+        type: "reply-article",
+        article: { board: "Test", index: 42 },
+        content: "重新確認",
+        pushType: "neutral",
+      })).resolves.toEqual({ ok: true, outcome: "sent" });
+
+      expect(invalidate).toHaveBeenCalledWith("mismatch");
+      expect(sent.indexOf("q")).toBeGreaterThanOrEqual(0);
+      expect(sent.indexOf("42\r\r")).toBeGreaterThan(sent.indexOf("q"));
+      expect(sent.indexOf("X")).toBeGreaterThan(sent.indexOf("42\r\r"));
+    } finally {
+      invalidate.mockRestore();
+    }
+  });
+
+  it("stops a multi-range withdrawal when post-send AID verification fails", async () => {
+    const mod = await import("./terminalDriver.js");
+    const { ArticleSessionTracker } = await import("./articleSession.js");
+    const invalidate = vi.spyOn(ArticleSessionTracker.prototype, "invalidate");
+    const sent: string[] = [];
+    const boardRows = ["看板《Test》"];
+    const articleRows = [
+      "作者  alice 看板 Test",
+      "標題  AID 文章",
+      "時間  Sat Aug 22 10:00:00 2026",
+      "───────────────────────────────────────",
+      "文章內容",
+      ...Array.from({ length: 18 }, () => ""),
+      "瀏覽 第 1/1 頁 (100%)",
+    ];
+    const expectedInfoRows = ["文章代碼(AID): #expectedAid (Test)"];
+    const wrongInfoRows = ["文章代碼(AID): #otherAid (Test)"];
+    let postSent = false;
+    let submittedContent = "";
+    let mode: "board" | "article" | "info" | "push-menu" | "push-input" | "confirm" = "board";
+    const rows = () => mode === "board" ? boardRows
+      : mode === "info" ? (postSent ? wrongInfoRows : expectedInfoRows)
+        : mode === "push-menu" ? ["1.值得推薦 2.給它噓聲 3.只加註解"]
+          : mode === "push-input" ? ["→ TEST_USER:"]
+          : mode === "confirm" ? [`→ TEST_USER: ${submittedContent}    確定[y/N]:`]
+              : articleRows;
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      getLine(index: number) { return { str: rows()[index] ?? "" }; },
+      async getLines() { return rows(); },
+      async send(command: string) {
+        sent.push(command);
+        if (command === "#expectedAid\r") mode = "article";
+        else if (command === "Q" && mode === "article") mode = "info";
+        else if (command === "q" && mode === "info") mode = "article";
+        else if (command === "q" && mode === "article") mode = "board";
+        else if (command === "X" && mode === "article") mode = "push-menu";
+        else if (command === "3" && mode === "push-menu") mode = "push-input";
+        else if (command.startsWith("撤回我在") && mode === "push-input") {
+          submittedContent = command.trim();
+          mode = "confirm";
+        }
+        else if (command === "y\r" && mode === "confirm") {
+          postSent = true;
+          mode = "article";
+        }
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+
+    try {
+      await driver.readArticleSource(
+        { board: "Test", aid: "expectedAid" },
+        () => undefined,
+      );
+      sent.length = 0;
+      invalidate.mockClear();
+
+      await expect(driver.executeArticleCommand({
+        type: "withdraw-floor",
+        article: { board: "Test", aid: "expectedAid" },
+        ranges: [{ start: 2, end: 2 }, { start: 4, end: 4 }],
+      })).resolves.toMatchObject({ ok: false, outcome: "uncertain" });
+
+      expect(sent[0]).toBe("X");
+      expect(sent.slice(-3)).toEqual(["y\r", "Q", "q"]);
+      expect(mode).toBe("article");
+      expect(invalidate).toHaveBeenCalledWith("push-postcondition-failed");
+      expect(sent).toContain("撤回我在2樓發言\r");
+      expect(sent).not.toContain("撤回我在4樓發言\r");
+    } finally {
+      invalidate.mockRestore();
+    }
+  });
+
+  it("does not resurrect an AID session when an error occurs during post-send verification", async () => {
+    const mod = await import("./terminalDriver.js");
+    const { ArticleSessionTracker } = await import("./articleSession.js");
+    const record = vi.spyOn(ArticleSessionTracker.prototype, "record");
+    const invalidate = vi.spyOn(ArticleSessionTracker.prototype, "invalidate");
+    const listeners = new Map<string, (...args: unknown[]) => void>();
+    const sent: string[] = [];
+    const boardRows = ["看板《Test》"];
+    const articleRows = [
+      "作者  alice 看板 Test",
+      "標題  AID 文章",
+      "時間  Sat Aug 22 10:00:00 2026",
+      "───────────────────────────────────────",
+      "文章內容",
+      ...Array.from({ length: 18 }, () => ""),
+      "瀏覽 第 1/1 頁 (100%)",
+    ];
+    const infoRows = ["文章代碼(AID): #expectedAid (Test)"];
+    let postSent = false;
+    let mode: "board" | "article" | "info" | "push-menu" | "push-input" | "confirm" = "board";
+    const rows = () => mode === "board" ? boardRows
+      : mode === "info" ? infoRows
+        : mode === "push-menu" ? ["1.值得推薦 2.給它噓聲 3.只加註解"]
+          : mode === "push-input" ? ["→ TEST_USER:"]
+            : mode === "confirm" ? ["→ TEST_USER: 驗證期間錯誤    確定[y/N]:"]
+              : articleRows;
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on(event: string, listener: (...args: unknown[]) => void) {
+        listeners.set(event, listener);
+        return this;
+      },
+      getLine(index: number) { return { str: rows()[index] ?? "" }; },
+      async getLines() { return rows(); },
+      async send(command: string) {
+        sent.push(command);
+        if (command === "#expectedAid\r") mode = "article";
+        else if (command === "Q" && mode === "article") {
+          mode = "info";
+          if (postSent) listeners.get("error")?.();
+        } else if (command === "q" && mode === "info") mode = "article";
+        else if (command === "q" && mode === "article") mode = "board";
+        else if (command === "X" && mode === "article") mode = "push-menu";
+        else if (command === "3" && mode === "push-menu") mode = "push-input";
+        else if (command === "驗證期間錯誤\r" && mode === "push-input") mode = "confirm";
+        else if (command === "y\r" && mode === "confirm") {
+          postSent = true;
+          mode = "article";
+        }
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+
+    try {
+      await driver.readArticleSource(
+        { board: "Test", aid: "expectedAid" },
+        () => undefined,
+      );
+      sent.length = 0;
+      record.mockClear();
+      invalidate.mockClear();
+
+      await expect(driver.executeArticleCommand({
+        type: "reply-article",
+        article: { board: "Test", aid: "expectedAid" },
+        content: "驗證期間錯誤",
+        pushType: "neutral",
+      })).resolves.toMatchObject({ ok: false, outcome: "uncertain" });
+
+      expect(record).not.toHaveBeenCalled();
+      expect(invalidate).toHaveBeenCalledWith("connection-error");
+      expect(mode).toBe("article");
+      expect(sent.slice(-2)).toEqual(["Q", "q"]);
+    } finally {
+      record.mockRestore();
+      invalidate.mockRestore();
+    }
+  });
+
+  it.each(["disconnect", "error"] as const)(
+    "does not record an article if a %s event occurs during the read",
+    async (eventName) => {
+      const mod = await import("./terminalDriver.js");
+      const { ArticleSessionTracker } = await import("./articleSession.js");
+      const record = vi.spyOn(ArticleSessionTracker.prototype, "record");
+      const invalidate = vi.spyOn(ArticleSessionTracker.prototype, "invalidate");
+      const listeners = new Map<string, (...args: unknown[]) => void>();
+      const sent: string[] = [];
+      const boardRows = [
+        "看板《Test》",
+        buildBoardLine({ index: 42, date: "08/22", author: "alice", title: "目標文章" }),
+      ];
+      const articleRows = [
+        "作者  alice 看板 Test",
+        "標題  目標文章",
+        "時間  Sat Aug 22 10:00:00 2026",
+        "───────────────────────────────────────",
+        "文章內容",
+        ...Array.from({ length: 18 }, () => ""),
+        "瀏覽 第 1/1 頁 (100%)",
+      ];
+      let screenRows = boardRows;
+      const bot = {
+        state: { connect: true, login: true },
+        _state: { connect: true, login: true, position: { boardname: "Test" } },
+        on(event: string, listener: (...args: unknown[]) => void) {
+          listeners.set(event, listener);
+          return this;
+        },
+        getLine(index: number) { return { str: screenRows[index] ?? "" }; },
+        async getLines() { return screenRows; },
+        async send(command: string) {
+          sent.push(command);
+          if (command === "42\r\r") screenRows = articleRows;
+          else if (command === "\x1b[1~") listeners.get(eventName)?.();
+          else if (command === "q") screenRows = boardRows;
+          return true;
+        },
+      };
+      const driver = mod.createTerminalDriverForTesting(bot);
+
+      try {
+        await driver.readArticleSource(
+          { board: "Test", index: 42 },
+          () => undefined,
+        );
+        expect(record).not.toHaveBeenCalled();
+        expect(invalidate).toHaveBeenCalledWith(
+          eventName === "disconnect" ? "disconnected" : "connection-error",
+        );
+        expect(sent.at(-1)).toBe("q");
+      } finally {
+        record.mockRestore();
+        invalidate.mockRestore();
+      }
+    },
+  );
+
+  it("keeps a directly opened AID article active after Q/q verification", async () => {
+    const mod = await import("./terminalDriver.js");
+    const { ArticleSessionTracker } = await import("./articleSession.js");
+    const record = vi.spyOn(ArticleSessionTracker.prototype, "record");
+    const sent: string[] = [];
+    const boardRows = ["看板《Test》"];
+    const articleRows = [
+      "作者  alice 看板 Test",
+      "標題  AID 文章",
+      "時間  Sat Aug 22 10:00:00 2026",
+      "───────────────────────────────────────",
+      "文章內容",
+      ...Array.from({ length: 18 }, () => ""),
+      "瀏覽 第 1/1 頁 (100%)",
+    ];
+    const infoRows = ["文章代碼(AID): #1AbCdEfG (Test)"];
+    let mode: "board" | "article" | "info" = "board";
+    const rows = () => mode === "board" ? boardRows : mode === "info" ? infoRows : articleRows;
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      getLine(index: number) { return { str: rows()[index] ?? "" }; },
+      async getLines() { return rows(); },
+      async send(command: string) {
+        sent.push(command);
+        if (command === "#1AbCdEfG\r") mode = "article";
+        else if (command === "Q") mode = "info";
+        else if (command === "q" && mode === "info") mode = "article";
+        else if (command === "q") mode = "board";
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+
+    try {
+      await driver.readArticleSource(
+        { board: "Test", aid: "1AbCdEfG" },
+        () => undefined,
+      );
+      expect(sent.slice(-2)).toEqual(["Q", "q"]);
+      expect(mode).toBe("article");
+      expect(record).toHaveBeenCalledWith(expect.objectContaining({
+        key: { board: "Test", aid: "1AbCdEfG" },
+        board: "Test",
+        author: "alice",
+        title: "AID 文章",
+      }));
+    } finally {
+      record.mockRestore();
+    }
+  });
+
+  it("exits and invalidates an article session when a read is aborted", async () => {
+    const mod = await import("./terminalDriver.js");
+    const { ArticleSessionTracker } = await import("./articleSession.js");
+    const invalidate = vi.spyOn(ArticleSessionTracker.prototype, "invalidate");
+    const controller = new AbortController();
+    const sent: string[] = [];
+    const boardRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 42, date: "08/22", author: "alice", title: "目標文章" }),
+    ];
+    const articleRows = [
+      "作者  alice 看板 Test",
+      "標題  目標文章",
+      "時間  Sat Aug 22 10:00:00 2026",
+      "───────────────────────────────────────",
+      "文章內容",
+      ...Array.from({ length: 18 }, () => ""),
+      "瀏覽 第 1/1 頁 (100%)",
+    ];
+    let screenRows = boardRows;
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      getLine(index: number) { return { str: screenRows[index] ?? "" }; },
+      async getLines() { return screenRows; },
+      async send(command: string) {
+        sent.push(command);
+        if (command === "42\r\r") {
+          screenRows = articleRows;
+          controller.abort();
+        } else if (command === "q") {
+          screenRows = boardRows;
+        }
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+
+    try {
+      await expect(driver.readArticleSource(
+        { board: "Test", index: 42 },
+        () => undefined,
+        controller.signal,
+      )).rejects.toMatchObject({ name: "AbortError" });
+      expect(sent.at(-1)).toBe("q");
+      expect(invalidate).toHaveBeenCalledWith("read-failed");
+    } finally {
+      invalidate.mockRestore();
+    }
+  });
+
+  it("exits and invalidates when a final article emission fails", async () => {
+    const mod = await import("./terminalDriver.js");
+    const { ArticleSessionTracker } = await import("./articleSession.js");
+    const invalidate = vi.spyOn(ArticleSessionTracker.prototype, "invalidate");
+    const sent: string[] = [];
+    const boardRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 42, date: "08/22", author: "alice", title: "目標文章" }),
+    ];
+    const articleRows = [
+      "作者  alice 看板 Test",
+      "標題  目標文章",
+      "時間  Sat Aug 22 10:00:00 2026",
+      "───────────────────────────────────────",
+      "文章內容",
+      ...Array.from({ length: 18 }, () => ""),
+      "瀏覽 第 1/1 頁 (100%)",
+    ];
+    let screenRows = boardRows;
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      getLine(index: number) { return { str: screenRows[index] ?? "" }; },
+      async getLines() { return screenRows; },
+      async send(command: string) {
+        sent.push(command);
+        if (command === "42\r\r") screenRows = articleRows;
+        else if (command === "q") screenRows = boardRows;
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+
+    try {
+      await expect(driver.readArticleSource(
+        { board: "Test", index: 42 },
+        ({ completeness }) => {
+          if (completeness === "final") throw new Error("consumer failed");
+        },
+      )).rejects.toThrow("consumer failed");
+      expect(sent.at(-1)).toBe("q");
+      expect(invalidate).toHaveBeenCalledWith("read-failed");
+    } finally {
+      invalidate.mockRestore();
+    }
+  });
+
+  it("does not record a read when the final visible article has a different identity", async () => {
+    const mod = await import("./terminalDriver.js");
+    const { ArticleSessionTracker } = await import("./articleSession.js");
+    const record = vi.spyOn(ArticleSessionTracker.prototype, "record");
+    const invalidate = vi.spyOn(ArticleSessionTracker.prototype, "invalidate");
+    const sent: string[] = [];
+    const boardRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 42, date: "08/22", author: "alice", title: "目標文章" }),
+    ];
+    const articleRows = [
+      "作者  alice 看板 Test",
+      "標題  目標文章",
+      "時間  Sat Aug 22 10:00:00 2026",
+      "───────────────────────────────────────",
+      "文章內容",
+      ...Array.from({ length: 18 }, () => ""),
+      "瀏覽 第 1/1 頁 (100%)",
+    ];
+    const wrongArticleRows = [
+      "作者  bob 看板 Test",
+      "標題  其他文章",
+      "時間  Sat Aug 22 11:00:00 2026",
+      "───────────────────────────────────────",
+      "其他內容",
+      ...Array.from({ length: 18 }, () => ""),
+      "瀏覽 第 1/1 頁 (100%)",
+    ];
+    let screenRows = boardRows;
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      getLine(index: number) { return { str: screenRows[index] ?? "" }; },
+      async getLines() { return screenRows; },
+      async send(command: string) {
+        sent.push(command);
+        if (command === "42\r\r") screenRows = articleRows;
+        else if (command === "\x1b[1~") screenRows = wrongArticleRows;
+        else if (command === "q") screenRows = boardRows;
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+
+    try {
+      await driver.readArticleSource(
+        { board: "Test", index: 42 },
+        () => undefined,
+      );
+      expect(record).not.toHaveBeenCalled();
+      expect(invalidate).toHaveBeenCalledWith("read-unverified");
+      expect(sent.at(-1)).toBe("q");
+    } finally {
+      record.mockRestore();
+      invalidate.mockRestore();
+    }
+  });
+
+  it.each([
+    ["raw send", "raw-send"],
+    ["login", "login"],
+    ["disconnect", "disconnected"],
+    ["board navigation", "navigation"],
+  ] as const)("invalidates an established article session before %s", async (label, reason) => {
+    const mod = await import("./terminalDriver.js");
+    const { ArticleSessionTracker } = await import("./articleSession.js");
+    const record = vi.spyOn(ArticleSessionTracker.prototype, "record");
+    const invalidate = vi.spyOn(ArticleSessionTracker.prototype, "invalidate");
+    const boardRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 42, date: "08/22", author: "alice", title: "目標文章" }),
+    ];
+    const articleRows = [
+      "作者  alice 看板 Test",
+      "標題  目標文章",
+      "時間  Sat Aug 22 10:00:00 2026",
+      "───────────────────────────────────────",
+      "文章內容",
+      ...Array.from({ length: 18 }, () => ""),
+      "瀏覽 第 1/1 頁 (100%)",
+    ];
+    let screenRows = boardRows;
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      socket: { disconnect() {} },
+      on() { return this; },
+      getLine(index: number) { return { str: screenRows[index] ?? "" }; },
+      async getLines() { return screenRows; },
+      async enterBoardByName() {
+        screenRows = boardRows;
+        return true;
+      },
+      async send(command: string) {
+        if (command === "42\r\r") screenRows = articleRows;
+        else if (command === "q") screenRows = boardRows;
+        else if (command === "alice\r") screenRows = ["請輸入您的密碼:"];
+        else if (command === "secret\r") screenRows = ["【主功能表】"];
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+
+    try {
+      await driver.readArticleSource(
+        { board: "Test", index: 42 },
+        () => undefined,
+      );
+      expect(record).toHaveBeenCalled();
+      invalidate.mockClear();
+
+      if (label === "raw send") await driver.send("x");
+      else if (label === "login") {
+        screenRows = ["請輸入代號，或以 guest 參觀，或以 new 註冊:"];
+        await driver.login("alice", "secret");
+      } else if (label === "disconnect") await driver.disconnect();
+      else await driver.listArticles("Test");
+
+      expect(invalidate).toHaveBeenCalledWith(reason);
+    } finally {
+      record.mockRestore();
+      invalidate.mockRestore();
+    }
+  });
+
+  it.each([
+    { type: "edit-article", article: { board: "Test", index: 42 }, content: "new" },
+    { type: "delete-article", article: { board: "Test", index: 42 } },
+    { type: "reply-article-to-board", article: { board: "Test", index: 42 }, content: "reply" },
+  ] as const)("invalidates an established session before $type navigation", async (command) => {
+    const mod = await import("./terminalDriver.js");
+    const { ArticleSessionTracker } = await import("./articleSession.js");
+    const record = vi.spyOn(ArticleSessionTracker.prototype, "record");
+    const invalidate = vi.spyOn(ArticleSessionTracker.prototype, "invalidate");
+    const boardRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 42, date: "08/22", author: "alice", title: "目標文章" }),
+    ];
+    const articleRows = [
+      "作者  alice 看板 Test",
+      "標題  目標文章",
+      "時間  Sat Aug 22 10:00:00 2026",
+      "───────────────────────────────────────",
+      "文章內容",
+      ...Array.from({ length: 18 }, () => ""),
+      "瀏覽 第 1/1 頁 (100%)",
+    ];
+    let screenRows = boardRows;
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      getLine(index: number) { return { str: screenRows[index] ?? "" }; },
+      async getLines() { return screenRows; },
+      async send(command: string) {
+        if (command === "42\r\r") screenRows = articleRows;
+        else if (command === "q") screenRows = boardRows;
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+
+    try {
+      await driver.readArticleSource(
+        { board: "Test", index: 42 },
+        () => undefined,
+      );
+      expect(record).toHaveBeenCalled();
+      invalidate.mockClear();
+      bot.state.login = false;
+
+      await expect(driver.executeArticleCommand(command)).rejects.toThrow(
+        "PTT login is required",
+      );
+      expect(invalidate).toHaveBeenCalledWith("navigation");
+    } finally {
+      record.mockRestore();
+      invalidate.mockRestore();
+    }
   });
 
   it("restores the terminal index after a prefix board query", async () => {
@@ -647,18 +1905,24 @@ describe("terminal driver module", () => {
   it("waits for a delayed push-type menu before sending a boo", async () => {
     const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
-    let screen = "瀏覽文章";
+    const reader = "瀏覽 第 1/1 頁 (100%)";
+    let screen = reader;
     let snapshotsAfterCommand = 0;
+    let waitingForMenu = false;
     const bot = {
       async send(command: string) {
         sent.push(command);
-        if (command === "2") screen = "請輸入推文內容:";
+        if (command === "X") waitingForMenu = true;
+        if (command === "2") {
+          waitingForMenu = false;
+          screen = "請輸入推文內容:";
+        }
         if (command === "噓\r") screen = "確定送出推文嗎";
-        if (command === "y\r") screen = "瀏覽文章";
+        if (command === "y\r") screen = reader;
         return true;
       },
       getLine(index: number) {
-        if (sent.includes("X") && screen === "瀏覽文章" && index === 0) {
+        if (waitingForMenu && screen === reader && index === 0) {
           snapshotsAfterCommand += 1;
           if (snapshotsAfterCommand >= 2) {
             screen = "1.值得推薦 2.給它噓聲 3.只加註解";
@@ -710,19 +1974,20 @@ describe("terminal driver module", () => {
       reason: "PTT 未顯示推文方式，請重新載入文章後再試",
       retryable: true,
     });
-    expect(sent).toEqual(["X", "\x03"]);
+    expect(sent).toEqual(["X"]);
   });
 
   it("sends a neutral reply from the author's direct input prompt", async () => {
     const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
-    let screen = "瀏覽文章";
+    const reader = "瀏覽 第 1/1 頁 (100%)";
+    let screen = reader;
     const bot = {
       async send(command: string) {
         sent.push(command);
         if (command === "X") screen = "作者本人，使用 → 加註方式\n→ MBB200291:";
-        if (command === "噓1樓\r") screen = "確定送出推文嗎";
-        if (command === "y\r") screen = "瀏覽文章";
+        if (command === "噓1樓\r") screen = "→ MBB200291: 噓1樓    確定[y/N]:";
+        if (command === "y\r") screen = reader;
         return true;
       },
       getLine(index: number) {
@@ -779,14 +2044,16 @@ describe("terminal driver module", () => {
   it("reports when the push content prompt cannot be confirmed", async () => {
     const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
+    let screen = "瀏覽文章";
     const bot = {
       async send(command: string) {
         sent.push(command);
+        if (command === "X") screen = "1.值得推薦 2.給它噓聲 3.只加註解";
         return true;
       },
       getLine(index: number) {
         return {
-          str: index === 0 ? "1.值得推薦 2.給它噓聲 3.只加註解" : "",
+          str: index === 0 ? screen : "",
         };
       },
     };
@@ -807,17 +2074,58 @@ describe("terminal driver module", () => {
       reason: "PTT 未顯示推文輸入框，請重新載入文章後再試",
       retryable: true,
     });
-    expect(sent).toEqual(["X", "3", "\x03"]);
+    expect(sent).toEqual(["X", "3"]);
+  });
+
+  it("returns to the requested board after the legacy replyToArticle workflow", async () => {
+    const mod = await import("./terminalDriver.js");
+    const sent: string[] = [];
+    const articleRows = [
+      "作者  alice 看板 Test",
+      "標題  目標文章",
+      "時間  Sat Aug 22 10:00:00 2026",
+      "───────────────────────────────────────",
+      "文章內容",
+      "瀏覽 第 1/1 頁 (100%)",
+    ];
+    const boardRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 42, date: "08/22", author: "alice", title: "目標文章" }),
+    ];
+    let screenRows = articleRows;
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      getLine(index: number) { return { str: screenRows[index] ?? "" }; },
+      async send(command: string) {
+        sent.push(command);
+        if (command === "X") screenRows = [...articleRows, "您覺得這篇文章 1.值得推薦 2.給它噓聲 3.只加→註解 [1]?"];
+        else if (command === "3") screenRows = [...articleRows, "→ TEST_USER: "];
+        else if (command === "內容\r") screenRows = [...articleRows, "→ TEST_USER: 內容 確定[y/N]:"];
+        else if (command === "y\r") screenRows = articleRows;
+        else if (command === "q") screenRows = boardRows;
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+
+    await expect(driver.replyToArticle("內容", "neutral", "Test")).resolves.toEqual({
+      ok: true,
+      outcome: "sent",
+    });
+    expect(sent).toEqual(["X", "3", "內容\r", "y\r", "q"]);
   });
 
   it("reports an uncertain result when push confirmation is missing", async () => {
     const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
-    let screen = "1.值得推薦 2.給它噓聲 3.只加註解";
+    let screen = "瀏覽文章";
     const bot = {
       async send(command: string) {
         sent.push(command);
-        if (command === "3") screen = "請輸入推文內容:";
+        if (command === "X") screen = "1.值得推薦 2.給它噓聲 3.只加註解";
+        if (command === "3") screen = "→ TEST_USER:";
         if (command === "內容\r") screen = "瀏覽文章";
         return true;
       },
@@ -850,13 +2158,15 @@ describe("terminal driver module", () => {
   ] as const)("selects the PTT %s type key from the menu", async (type, key) => {
     const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
-    let screen = "1.值得推薦 2.給它噓聲 3.只加註解";
+    const reader = "瀏覽 第 1/1 頁 (100%)";
+    let screen = reader;
     const bot = {
       async send(command: string) {
         sent.push(command);
-        if (command === key) screen = "請輸入推文內容:";
-        if (command === "內容\r") screen = "確定送出推文嗎";
-        if (command === "y\r") screen = "瀏覽文章";
+        if (command === "X") screen = "1.值得推薦 2.給它噓聲 3.只加註解";
+        if (command === key) screen = type === "neutral" ? "→ TEST_USER:" : "請輸入推文內容:";
+        if (command === "內容\r") screen = "→ TEST_USER: 內容    確定[y/N]:";
+        if (command === "y\r") screen = reader;
         return true;
       },
       getLine(index: number) {
@@ -2128,6 +3438,43 @@ describe("terminal driver module", () => {
     expect((await driver.searchArticles("Test", "topic"))[0]?.index).toBe(30);
     expect(sent.filter((command) => command === "/topic\r")).toHaveLength(1);
     expect(filtered).toBe(true);
+  });
+
+  it("serializes filter state before a concurrently queued normal article listing", async () => {
+    const mod = await import("./terminalDriver.js");
+    const normalRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 42, date: "4/17", author: "normal", title: "一般文章" }),
+    ];
+    const filteredRows = [
+      "看板《Test》",
+      buildBoardLine({ index: 1, date: "4/17", author: "filtered", title: "推文篩選結果" }),
+    ];
+    let filtered = false;
+    const rows = () => filtered ? filteredRows : normalRows;
+    const bot = {
+      state: { connect: true, login: true },
+      _state: { connect: true, login: true, position: { boardname: "Test" } },
+      on() { return this; },
+      getLine(index: number) { return { str: rows()[index] ?? "" }; },
+      async getLines() { return rows(); },
+      async enterBoardByName() { filtered = false; return true; },
+      async send(command: string) {
+        if (command === "Z100\r") filtered = true;
+        return true;
+      },
+    };
+    const driver = mod.createTerminalDriverForTesting(bot);
+
+    const filtering = driver.filterArticlesByPush("Test", 100);
+    const normalListing = driver.listArticles("Test");
+
+    await expect(filtering).resolves.toEqual([
+      expect.objectContaining({ index: 1, author: "filtered" }),
+    ]);
+    await expect(normalListing).resolves.toEqual([
+      expect.objectContaining({ index: 42, author: "normal" }),
+    ]);
   });
 
   it("re-enters the board when forceReenter is true, even if already on a normal board list screen", async () => {

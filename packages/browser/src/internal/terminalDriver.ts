@@ -1,6 +1,7 @@
 import Ptt from "ptt-client";
 import { articleTerminalLine, type TerminalLine } from "./terminalLine.js";
 import { formatEditorBody } from "./articleFormatting.js";
+import { ArticleSessionTracker } from "./articleSession.js";
 import type { ArticleTextStyle } from "@pttzzz/core";
 import type PttConfig from "ptt-client/dist/config";
 import { Board as PttClientBoard } from "ptt-client/dist/sites/ptt/model/board.js";
@@ -191,6 +192,10 @@ export type ArticleCommand = Exclude<PttCommand, { type: "create-article" }>;
 export type ArticleTerminalDriver = TerminalDriver & {
   executeArticleCommand(command: ArticleCommand): Promise<ActionResult>;
 };
+
+type ArticleContextAcquisition =
+  | { ok: true; identity: { author: string; title: string } }
+  | { ok: false; result: ActionResult };
 
 export interface ArticleReplyTimeouts {
   completionMs: number;
@@ -462,7 +467,24 @@ const MAX_BOARD_SCREEN_INDEX_GAP = 50000;
 
 type AdapterDebugGlobal = typeof globalThis & {
   __pttzzzLastArticleOpenTrace?: ArticleOpenTrace | null;
+  __pttzzzLastPushTrace?: {
+    startedAt: number;
+    pushType: PushType;
+    outcome?: string;
+    snapshots: Array<{ stage: string; elapsedMs: number; screen: string }>;
+    actions: Array<{ action: PushTraceAction; elapsedMs: number }>;
+  };
 };
+
+type PushTraceAction =
+  | "open-push-menu"
+  | "select-push"
+  | "select-boo"
+  | "select-neutral"
+  | "submit-content"
+  | "confirm"
+  | "continue"
+  | "cancel";
 
 const IS_DEV = import.meta.env?.DEV ?? false;
 
@@ -669,6 +691,12 @@ export async function loginThroughTerminal(
 
 class PttClientTerminalDriver implements TerminalDriver {
   private bot: BotLike;
+  private readonly articleSession = new ArticleSessionTracker();
+  private articleSessionIdentity?: {
+    author: string;
+    title: string;
+  };
+  private articleSessionEpoch = 0;
   private status: ConnectionStatus = "connecting";
   private lastScreen = "";
   private readonly statusListeners = new Set<
@@ -677,6 +705,7 @@ class PttClientTerminalDriver implements TerminalDriver {
   private readonly screenListeners = new Set<(screen: string) => void>();
   private readonly runSerial = createSerialTaskRunner();
   private readonly articleAidByRelativeIndex = new Map<string, string>();
+  private readonly unresolvedRelativeArticleIndexes = new Set<string>();
   private lastFilterBoardName: string | null = null;
   private lastFilterConditions: Array<{
     type: "push" | "title" | "author";
@@ -684,8 +713,13 @@ class PttClientTerminalDriver implements TerminalDriver {
   }> | null = null;
 
   constructor(bot?: BotLike) {
-    this.bot = bot ?? this.createBot();
-    if (bot) this.status = bot.state.connect ? "connected" : "connecting";
+    if (bot) {
+      this.bot = bot;
+      this.status = bot.state.connect ? "connected" : "connecting";
+      this.attachBotListeners(bot);
+    } else {
+      this.bot = this.createBot();
+    }
   }
 
   private createBot(): BotLike {
@@ -705,14 +739,23 @@ class PttClientTerminalDriver implements TerminalDriver {
     };
     const bot = new Ptt(config) as unknown as BotLike;
 
+    this.attachBotListeners(bot);
+
+    this.setStatus("connecting");
+    return bot;
+  }
+
+  private attachBotListeners(bot: BotLike): void {
     bot
       .on("connect", () => {
         this.setStatus("connected");
       })
       .on("disconnect", () => {
+        this.invalidateArticleSession("disconnected");
         this.setStatus("closed");
       })
       .on("error", () => {
+        this.invalidateArticleSession("connection-error");
         this.setStatus("error");
       })
       .on("redraw", (screen) => {
@@ -722,13 +765,48 @@ class PttClientTerminalDriver implements TerminalDriver {
           listener(screen);
         }
       });
+  }
 
-    this.setStatus("connecting");
-    return bot;
+  private invalidateArticleSession(reason: string): void {
+    this.articleSessionEpoch += 1;
+    this.articleSessionIdentity = undefined;
+    this.articleSession.invalidate(reason);
+  }
+
+  private clearRelativeArticleReferences(boardName: string): void {
+    const prefix = `${boardName.toLowerCase()}:`;
+    for (const key of this.articleAidByRelativeIndex.keys()) {
+      if (key.startsWith(prefix)) this.articleAidByRelativeIndex.delete(key);
+    }
+    for (const key of this.unresolvedRelativeArticleIndexes) {
+      if (key.startsWith(prefix)) this.unresolvedRelativeArticleIndexes.delete(key);
+    }
+  }
+
+  private rolloverRelativeArticleReferences(boardName: string): void {
+    const prefix = `${boardName.toLowerCase()}:`;
+    for (const [key] of this.articleAidByRelativeIndex) {
+      if (!key.startsWith(prefix)) continue;
+      this.articleAidByRelativeIndex.delete(key);
+      this.unresolvedRelativeArticleIndexes.add(key);
+    }
+  }
+
+  private recordArticleSession(
+    key: ArticleKey,
+    identity: { board: string; author: string; title: string },
+    snapshot: string,
+  ): void {
+    this.articleSessionIdentity = {
+      author: identity.author,
+      title: identity.title,
+    };
+    this.articleSession.record({ key, ...identity, snapshot });
   }
 
   async send(data: string): Promise<boolean> {
     return this.runSerial(async () => {
+      this.invalidateArticleSession("raw-send");
       await this.waitUntilConnected();
       return this.bot.send(data);
     });
@@ -740,6 +818,7 @@ class PttClientTerminalDriver implements TerminalDriver {
     kickOthers = false,
   ): Promise<LoginResult> {
     return this.runSerial(async () => {
+      this.invalidateArticleSession("login");
       await this.waitUntilConnected();
 
       try {
@@ -760,10 +839,12 @@ class PttClientTerminalDriver implements TerminalDriver {
     boardName: string,
     beforeIndex?: number,
   ): Promise<ArticleSummary[]> {
-    const wasFiltered = this.lastFilterBoardName !== null;
-    this.lastFilterBoardName = null;
-    this.lastFilterConditions = null;
     return this.runSerial(async () => {
+      const wasFiltered = this.lastFilterBoardName !== null;
+      this.lastFilterBoardName = null;
+      this.lastFilterConditions = null;
+      this.clearRelativeArticleReferences(boardName);
+      this.invalidateArticleSession("navigation");
       return fetchBoardArticlesFromBotManually(
         this.bot,
         boardName,
@@ -779,6 +860,7 @@ class PttClientTerminalDriver implements TerminalDriver {
     onPartial?: (partial: PartialArticleData) => void,
   ): Promise<AdapterArticleData | null> {
     return this.runSerial(() => {
+      this.invalidateArticleSession("navigation");
       if (onPartial) {
         return fetchArticleFromBotManually(this.bot, boardName, articleIndex, onPartial);
       }
@@ -792,6 +874,7 @@ class PttClientTerminalDriver implements TerminalDriver {
     onPartial?: (partial: PartialArticleData) => void,
   ): Promise<AdapterArticleData | null> {
     return this.runSerial(() => {
+      this.invalidateArticleSession("navigation");
       const doFetch = async (): Promise<AdapterArticleData | null> =>
         fetchArticleByAidFromBotManually(this.bot, boardName, aid, onPartial);
 
@@ -817,6 +900,7 @@ class PttClientTerminalDriver implements TerminalDriver {
       throw new Error("Bot does not expose board navigation methods");
     }
 
+    this.rolloverRelativeArticleReferences(boardName);
     const conditionsKey = JSON.stringify(conditions);
     const currentScreen = readVisibleScreen(this.bot);
     const sameFilterActive =
@@ -858,9 +942,15 @@ class PttClientTerminalDriver implements TerminalDriver {
     }
 
     const screen = readVisibleScreen(this.bot);
-    return parsePartialBoardScreen(screen)
+    const articles = parsePartialBoardScreen(screen)
       .filter((a) => a.index > 0 && a.title.trim().length > 0)
       .sort((a, b) => b.index - a.index);
+    for (const article of articles) {
+      this.unresolvedRelativeArticleIndexes.add(
+        `${boardName.toLowerCase()}:${article.index}`,
+      );
+    }
+    return articles;
   }
 
   async searchArticles(
@@ -868,13 +958,14 @@ class PttClientTerminalDriver implements TerminalDriver {
     keyword: string,
     beforeIndex?: number,
   ): Promise<ArticleSummary[]> {
-    return this.runSerial(() =>
-      this.listArticlesWithConditions(
+    return this.runSerial(() => {
+      this.invalidateArticleSession("navigation");
+      return this.listArticlesWithConditions(
         boardName,
         [{ type: "title", criteria: keyword }],
         beforeIndex,
-      ),
-    );
+      );
+    });
   }
 
   async searchArticlesByKeywords(
@@ -882,13 +973,14 @@ class PttClientTerminalDriver implements TerminalDriver {
     keywords: string[],
     beforeIndex?: number,
   ): Promise<ArticleSummary[]> {
-    return this.runSerial(() =>
-      this.listArticlesWithConditions(
+    return this.runSerial(() => {
+      this.invalidateArticleSession("navigation");
+      return this.listArticlesWithConditions(
         boardName,
         keywords.map((keyword) => ({ type: "title", criteria: keyword })),
         beforeIndex,
-      ),
-    );
+      );
+    });
   }
 
   async searchArticlesByAuthor(
@@ -896,13 +988,14 @@ class PttClientTerminalDriver implements TerminalDriver {
     author: string,
     beforeIndex?: number,
   ): Promise<ArticleSummary[]> {
-    return this.runSerial(() =>
-      this.listArticlesWithConditions(
+    return this.runSerial(() => {
+      this.invalidateArticleSession("navigation");
+      return this.listArticlesWithConditions(
         boardName,
         [{ type: "author", criteria: author }],
         beforeIndex,
-      ),
-    );
+      );
+    });
   }
 
   async searchArticlesByAuthorAndKeywords(
@@ -911,16 +1004,17 @@ class PttClientTerminalDriver implements TerminalDriver {
     keywords: string[],
     beforeIndex?: number,
   ): Promise<ArticleSummary[]> {
-    return this.runSerial(() =>
-      this.listArticlesWithConditions(
+    return this.runSerial(() => {
+      this.invalidateArticleSession("navigation");
+      return this.listArticlesWithConditions(
         boardName,
         [
           { type: "author", criteria: author },
           ...keywords.map((keyword) => ({ type: "title" as const, criteria: keyword })),
         ],
         beforeIndex,
-      ),
-    );
+      );
+    });
   }
 
   async filterArticlesByPush(
@@ -928,13 +1022,14 @@ class PttClientTerminalDriver implements TerminalDriver {
     threshold: number,
     beforeIndex?: number,
   ): Promise<ArticleSummary[]> {
-    return this.runSerial(() =>
-      this.listArticlesWithConditions(
+    return this.runSerial(() => {
+      this.invalidateArticleSession("navigation");
+      return this.listArticlesWithConditions(
         boardName,
         [{ type: "push", criteria: String(threshold) }],
         beforeIndex,
-      ),
-    );
+      );
+    });
   }
 
   async filterArticlesByTitleAndPush(
@@ -943,20 +1038,22 @@ class PttClientTerminalDriver implements TerminalDriver {
     threshold: number,
     beforeIndex?: number,
   ): Promise<ArticleSummary[]> {
-    return this.runSerial(() =>
-      this.listArticlesWithConditions(
+    return this.runSerial(() => {
+      this.invalidateArticleSession("navigation");
+      return this.listArticlesWithConditions(
         boardName,
         [
           { type: "push", criteria: String(threshold) },
           ...keywords.map((keyword) => ({ type: "title" as const, criteria: keyword })),
         ],
         beforeIndex,
-      ),
-    );
+      );
+    });
   }
 
   async listHotBoards(): Promise<HotBoardSummary[]> {
     return this.runSerial(async () => {
+      this.invalidateArticleSession("navigation");
       await this.waitUntilLoggedIn();
       await leaveArticleReaderIfNeeded(this.bot);
       return fetchHotBoardsFromBotManually(this.bot);
@@ -965,6 +1062,7 @@ class PttClientTerminalDriver implements TerminalDriver {
 
   async getFavoriteBoards(): Promise<string[]> {
     return this.runSerial(async () => {
+      this.invalidateArticleSession("navigation");
       await this.waitUntilLoggedIn();
       try {
         const names = await fetchFavoriteBoardNamesFromBot(this.bot);
@@ -979,6 +1077,7 @@ class PttClientTerminalDriver implements TerminalDriver {
 
   async getPostCategoryOptions(boardName: string): Promise<string[]> {
     return this.runSerial(async () => {
+      this.invalidateArticleSession("navigation");
       await this.waitUntilLoggedIn();
       return fetchPostCategoryOptionsFromBot(this.bot, boardName);
     });
@@ -995,13 +1094,20 @@ class PttClientTerminalDriver implements TerminalDriver {
       emit({ rawText, completeness, revision });
     };
     await this.runSerial(async () => {
-      signal?.throwIfAborted();
-      const relativeSearchResult = "index" in key &&
-        isFilterModeScreen(readVisibleScreen(this.bot));
-      const open = "index" in key
-        ? () => this.bot.send?.(`${key.index}\r\r`) ?? Promise.resolve(false)
-        : () => this.bot.send?.(`#${key.aid}\r`) ?? Promise.resolve(false);
+      let verifiedArticleOpen = false;
       try {
+        signal?.throwIfAborted();
+        const readEpoch = this.articleSessionEpoch;
+        const relativeSearchResult = "index" in key &&
+          isFilterModeScreen(readVisibleScreen(this.bot));
+        if ("index" in key && !relativeSearchResult) {
+          const absoluteKey = `${key.board.toLowerCase()}:${key.index}`;
+          this.articleAidByRelativeIndex.delete(absoluteKey);
+          this.unresolvedRelativeArticleIndexes.delete(absoluteKey);
+        }
+        const open = "index" in key
+          ? () => this.bot.send?.(`${key.index}\r\r`) ?? Promise.resolve(false)
+          : () => this.bot.send?.(`#${key.aid}\r`) ?? Promise.resolve(false);
         const article = await fetchArticleFromBotManuallyWithOpen(
           this.bot,
           key.board,
@@ -1009,20 +1115,54 @@ class PttClientTerminalDriver implements TerminalDriver {
           open,
           undefined,
           (rawText, completeness) => emitRaw(rawText, completeness),
-          { signal, leaveOpen: relativeSearchResult },
+          { signal, leaveOpen: true },
         );
         if (!article) throw new Error("找不到文章");
+        let aidMatches = true;
+        let sessionKey = key;
         if (relativeSearchResult) {
+          const relativeKey = `${key.board.toLowerCase()}:${key.index}`;
+          this.articleAidByRelativeIndex.delete(relativeKey);
+          this.unresolvedRelativeArticleIndexes.add(relativeKey);
           const evidence = await readOpenedArticleAid(this.bot);
           if (evidence?.board.toLowerCase() === key.board.toLowerCase()) {
-            this.articleAidByRelativeIndex.set(
-              `${key.board.toLowerCase()}:${key.index}`,
-              evidence.aid,
-            );
+            this.articleAidByRelativeIndex.set(relativeKey, evidence.aid);
+            this.unresolvedRelativeArticleIndexes.delete(relativeKey);
+            sessionKey = { board: key.board, aid: evidence.aid };
           }
+        } else if (key.aid !== undefined) {
+          aidMatches = await verifyOpenedArticleAid(this.bot, {
+            board: key.board,
+            aid: key.aid,
+          });
         }
+
+        signal?.throwIfAborted();
+        const snapshot = readVisibleScreen(this.bot);
+        const visible = parsePartialScreen(snapshot);
+        if (
+          this.articleSessionEpoch === readEpoch &&
+          aidMatches &&
+          visible &&
+          normalizeArticleAuthor(visible.author) === normalizeArticleAuthor(article.author) &&
+          normalizeArticleIdentity(visible.title) === normalizeArticleIdentity(article.title) &&
+          visible.board.toLowerCase() === article.board.toLowerCase() &&
+          article.board.toLowerCase() === key.board.toLowerCase()
+        ) {
+          this.recordArticleSession(sessionKey, {
+            board: article.board,
+            author: article.author,
+            title: article.title,
+          }, snapshot);
+          verifiedArticleOpen = true;
+        } else if (this.articleSessionEpoch === readEpoch) {
+          this.invalidateArticleSession("read-unverified");
+        }
+      } catch (error) {
+        this.invalidateArticleSession("read-failed");
+        throw error;
       } finally {
-        await leaveArticleReaderIfNeeded(this.bot);
+        if (!verifiedArticleOpen) await leaveArticleReaderIfNeeded(this.bot);
       }
     });
   }
@@ -1062,6 +1202,7 @@ class PttClientTerminalDriver implements TerminalDriver {
 
   private async queryBoards(options: { prefix: string }): Promise<readonly Board[]> {
     return this.runSerial(async () => {
+      this.invalidateArticleSession("navigation");
       await this.waitUntilLoggedIn();
       return queryBoardsFromBot(this.bot, options);
     });
@@ -1072,6 +1213,7 @@ class PttClientTerminalDriver implements TerminalDriver {
     | { kind: "category"; title: string; route: readonly number[] }
   )[]> {
     return this.runSerial(async () => {
+      this.invalidateArticleSession("navigation");
       await this.waitUntilLoggedIn();
       return queryBoardDirectoryFromBot(this.bot, route);
     });
@@ -1083,8 +1225,17 @@ class PttClientTerminalDriver implements TerminalDriver {
     boardName?: string,
   ): Promise<ActionResult> {
     return this.runSerial(async () => {
+      this.invalidateArticleSession("navigation");
       await this.waitUntilLoggedIn();
-      return submitPushFromCurrentArticle(this.bot, content, pushType, boardName);
+      const writeEpoch = this.articleSessionEpoch;
+      return submitPushFromCurrentArticle(
+        this.bot,
+        content,
+        pushType,
+        boardName,
+        undefined,
+        () => this.articleSessionEpoch === writeEpoch,
+      );
     });
   }
 
@@ -1124,16 +1275,28 @@ class PttClientTerminalDriver implements TerminalDriver {
 
   async executeArticleCommand(command: ArticleCommand): Promise<ActionResult> {
     return this.runSerial(async () => {
+      if (
+        command.type === "edit-article" ||
+        command.type === "delete-article" ||
+        command.type === "reply-article-to-board"
+      ) {
+        this.invalidateArticleSession("navigation");
+      }
       await this.waitUntilLoggedIn();
       if (command.article.index !== undefined) {
-        const aid = this.articleAidByRelativeIndex.get(
-          `${command.article.board.toLowerCase()}:${command.article.index}`,
-        );
+        const relativeKey = `${command.article.board.toLowerCase()}:${command.article.index}`;
+        const aid = this.articleAidByRelativeIndex.get(relativeKey);
         if (aid) {
           command = {
             ...command,
             article: { board: command.article.board, aid },
           } as ArticleCommand;
+        } else if (this.unresolvedRelativeArticleIndexes.has(relativeKey)) {
+          return actionNotSent(
+            "無法取得搜尋結果的文章代碼，為避免寫入錯誤文章，請重新載入文章後再試",
+            undefined,
+            true,
+          );
         }
       }
       if (command.type === "withdraw-floor") {
@@ -1194,29 +1357,16 @@ class PttClientTerminalDriver implements TerminalDriver {
     >,
   ): Promise<ActionResult> {
     const key = command.article;
-    const articleIndex = key.index;
-    const open = articleIndex !== undefined
-        ? () => this.bot.send?.(`${articleIndex}\r\r`) ?? Promise.resolve(false)
-        : () => this.bot.send?.(`#${key.aid ?? ""}\r`) ?? Promise.resolve(false);
+    const writeEpoch = this.articleSessionEpoch;
+    let retainArticle = false;
+    let pushEntryStarted = false;
     try {
-      const expected = await this.locateArticleIdentity(key);
-      if (!expected) return actionNotSent("無法在看板確認指定文章");
-      const article = await fetchArticleFromBotManuallyWithOpen(
-        this.bot, key.board, articleIndex ?? 0, open,
-        undefined, undefined, { leaveOpen: true },
-      );
-      if (!article || article.board.toLowerCase() !== key.board.toLowerCase()) {
-        return actionNotSent("找不到指定文章");
+      const acquisition = await this.acquireArticleContext(key, writeEpoch);
+      if (!acquisition.ok) return acquisition.result;
+      if (this.articleSessionEpoch !== writeEpoch) {
+        return actionNotSent("連線狀態已變更，請重新載入文章");
       }
-      if (key.aid && !await verifyOpenedArticleAid(this.bot, { board: key.board, aid: key.aid })) {
-        return actionNotSent("文章 AID 驗證失敗");
-      }
-      if (
-        normalizeArticleAuthor(article.author) !== normalizeArticleAuthor(expected.author) ||
-        normalizeArticleIdentity(article.title) !== normalizeArticleIdentity(expected.title)
-      ) {
-        return actionNotSent("文章身分已變更，請重新載入");
-      }
+      const expected = acquisition.identity;
       let content: string;
       let pushType: PushType;
       switch (command.type) {
@@ -1246,10 +1396,132 @@ class PttClientTerminalDriver implements TerminalDriver {
             pushType = "neutral"; break;
           }
       }
-      return submitPushFromCurrentArticle(this.bot, content, pushType, key.board);
-      } finally {
+      pushEntryStarted = true;
+      const result = await submitPushFromCurrentArticle(
+        this.bot,
+        content,
+        pushType,
+        undefined,
+        undefined,
+        () => this.articleSessionEpoch === writeEpoch,
+      );
+      let finalResult = result;
+      if (result.ok && result.outcome === "sent") {
+        const aidMatches = this.articleSessionEpoch === writeEpoch && (
+          !key.aid || await verifyOpenedArticleAid(this.bot, {
+            board: key.board,
+            aid: key.aid,
+          })
+        );
+        const snapshot = readVisibleScreen(this.bot);
+        const visible = parsePartialScreen(snapshot);
+        if (
+          this.articleSessionEpoch === writeEpoch &&
+          aidMatches &&
+          visible &&
+          visible.board.toLowerCase() === key.board.toLowerCase() &&
+          normalizeArticleAuthor(visible.author) === normalizeArticleAuthor(expected.author) &&
+          normalizeArticleIdentity(visible.title) === normalizeArticleIdentity(expected.title)
+        ) {
+          this.recordArticleSession(key, {
+            board: visible.board,
+            author: expected.author,
+            title: expected.title,
+          }, snapshot);
+          retainArticle = true;
+        } else if (this.articleSessionEpoch === writeEpoch) {
+          this.invalidateArticleSession("push-postcondition-failed");
+        }
+        if (!retainArticle) {
+          finalResult = actionUncertain(
+            "推文可能已送出，但無法重新確認原文章，請重新整理文章檢查",
+            "push-confirm-timeout",
+          );
+        }
+      } else {
+        this.invalidateArticleSession("push-failed");
+      }
+      return finalResult;
+    } catch (error) {
+      this.invalidateArticleSession("push-failed");
+      throw error;
+    } finally {
+      if (!retainArticle && !pushEntryStarted) {
         await leaveArticleReaderIfNeeded(this.bot);
       }
+    }
+  }
+
+  private async acquireArticleContext(
+    key: ArticleKey,
+    expectedEpoch: number,
+  ): Promise<ArticleContextAcquisition> {
+    const snapshot = readVisibleScreen(this.bot);
+    const visible = parsePartialScreen(snapshot);
+    const stored = this.articleSessionIdentity;
+    if (visible && this.articleSession.match({
+      key,
+      board: visible.board,
+      author: visible.author,
+      title: visible.title,
+      snapshot,
+    }) && stored) {
+      return { ok: true, identity: { author: stored.author, title: stored.title } };
+    }
+
+    this.articleSessionIdentity = undefined;
+    if (!visible) this.articleSession.invalidate("article-screen-unavailable");
+
+    const expected = await this.locateArticleIdentity(key);
+    if (!expected) {
+      return { ok: false, result: actionNotSent("無法在看板確認指定文章") };
+    }
+    const articleIndex = key.index;
+    const open = articleIndex !== undefined
+      ? () => this.bot.send?.(`${articleIndex}\r\r`) ?? Promise.resolve(false)
+      : () => this.bot.send?.(`#${key.aid ?? ""}\r`) ?? Promise.resolve(false);
+    const article = await fetchArticleFromBotManuallyWithOpen(
+      this.bot, key.board, articleIndex ?? 0, open,
+      undefined, undefined, { leaveOpen: true },
+    );
+    if (!article || article.board.toLowerCase() !== key.board.toLowerCase()) {
+      return { ok: false, result: actionNotSent("找不到指定文章") };
+    }
+    if (key.aid && !await verifyOpenedArticleAid(this.bot, { board: key.board, aid: key.aid })) {
+      return { ok: false, result: actionNotSent("文章 AID 驗證失敗") };
+    }
+    if (
+      normalizeArticleAuthor(article.author) !== normalizeArticleAuthor(expected.author) ||
+      normalizeArticleIdentity(article.title) !== normalizeArticleIdentity(expected.title)
+    ) {
+      return { ok: false, result: actionNotSent("文章身分已變更，請重新載入") };
+    }
+
+    const openedSnapshot = readVisibleScreen(this.bot);
+    const openedVisible = parsePartialScreen(openedSnapshot);
+    if (this.articleSessionEpoch !== expectedEpoch) {
+      return {
+        ok: false,
+        result: actionNotSent("連線狀態已變更，請重新載入文章"),
+      };
+    }
+    if (
+      !openedVisible ||
+      openedVisible.board.toLowerCase() !== key.board.toLowerCase() ||
+      normalizeArticleAuthor(openedVisible.author) !== normalizeArticleAuthor(expected.author) ||
+      normalizeArticleIdentity(openedVisible.title) !== normalizeArticleIdentity(expected.title)
+    ) {
+      return {
+        ok: false,
+        result: actionNotSent("文章身分已變更，請重新載入"),
+      };
+    }
+    this.recordArticleSession(key, {
+      board: openedVisible.board,
+      author: expected.author,
+      title: expected.title,
+    }, openedSnapshot);
+    return { ok: true, identity: expected };
   }
 
   private async locateArticleIdentity(
@@ -1292,6 +1564,7 @@ class PttClientTerminalDriver implements TerminalDriver {
     formatting?: readonly ArticleTextStyle[],
   ): Promise<ActionResult> {
     return this.runSerial(async () => {
+      this.invalidateArticleSession("navigation");
       await this.waitUntilLoggedIn();
       return submitPostFromBot(this.bot, board, category, title, body, formatting);
     });
@@ -1301,6 +1574,7 @@ class PttClientTerminalDriver implements TerminalDriver {
     request: EditArticleRequest,
   ): Promise<ActionResult> {
     return this.runSerial(async () => {
+      this.invalidateArticleSession("navigation");
       await this.waitUntilLoggedIn();
       return submitArticleEditFromBot(this.bot, request);
     });
@@ -1308,6 +1582,7 @@ class PttClientTerminalDriver implements TerminalDriver {
 
   async deleteArticle(request: DeleteArticleRequest): Promise<ActionResult> {
     return this.runSerial(async () => {
+      this.invalidateArticleSession("navigation");
       await this.waitUntilLoggedIn();
       return submitArticleDeleteFromBot(this.bot, request);
     });
@@ -1317,6 +1592,7 @@ class PttClientTerminalDriver implements TerminalDriver {
     request: ReplyArticleToBoardRequest,
   ): Promise<ActionResult> {
     return this.runSerial(async () => {
+      this.invalidateArticleSession("navigation");
       await this.waitUntilLoggedIn();
       return submitArticleReplyToBoardFromBot(this.bot, request);
     });
@@ -1324,6 +1600,7 @@ class PttClientTerminalDriver implements TerminalDriver {
 
   async disconnect(): Promise<void> {
     return this.runSerial(async () => {
+      this.invalidateArticleSession("disconnected");
       this.bot.socket?.disconnect?.();
       this.setStatus("closed");
     });
@@ -2891,21 +3168,92 @@ const DEFAULT_SUBMIT_PUSH_TIMEOUTS: SubmitPushTimeouts = {
   afterContinueMs: 300,
 };
 
-const PUSH_TYPE_MENU_RE =
-  /1\..*(2\.|噓)|值得推薦|給它噓聲|只加註解|推文方式|推文種類/u;
+const PUSH_TYPE_MENU_WITH_BOO_RE =
+  /^(?:您覺得這篇文章\s*)?1\.\s*值得推薦\s+2\.\s*給它噓聲\s+3\.\s*只加(?:→)?註解(?:\s*\[[123]\]\?)?\s*$/u;
+const PUSH_TYPE_MENU_NO_BOO_RE =
+  /^您覺得這篇文章\s*1\.\s*值得推薦\s+3\.\s*只加(?:→)?註解(?:\s*\[[13]\]\?)?\s*$/u;
 const PUSH_CONTENT_PROMPT_RE =
-  /請輸入推文內容|輸入推文內容|推文內容[:：]|作者本人[，,]?\s*使用\s*→\s*加註方式/u;
+  /^(?:請輸入推文內容|輸入推文內容|推文內容)[:：]?\s*$/u;
+const PUSH_CONFIRMATION_PROMPT_RE =
+  /^(?:(?:推|噓|→)\s+[A-Za-z][A-Za-z0-9_]{0,11}[ \t]{0,11}:\s*.+?\s+確定\[y\/N\]:|確定送出推文嗎[?？]?)\s*$/iu;
+
+function lastTerminalPrompt(screen: string): string {
+  const lines = screen.split("\n").map(line => line.trim()).filter(Boolean);
+  return lines[lines.length - 1] ?? "";
+}
+
+function isPushContentPrompt(screen: string, pushType: PushType): boolean {
+  const prompt = lastTerminalPrompt(screen);
+  // A historical push or confirmation contains text after the colon and is not an empty input.
+  const bare = /^(推|噓|→)\s+[A-Za-z][A-Za-z0-9_]{0,11}[ \t]{0,11}:\s*$/u.exec(prompt);
+  if (bare) return bare[1] === (pushType === "push" ? "推" : pushType === "boo" ? "噓" : "→");
+  if (pushType === "neutral") return false;
+  return PUSH_CONTENT_PROMPT_RE.test(prompt);
+}
+
+function isPushConfirmationPrompt(screen: string): boolean {
+  return PUSH_CONFIRMATION_PROMPT_RE.test(lastTerminalPrompt(screen));
+}
+
+async function waitForPushConfirmation(
+  bot: WriteBot,
+  timeoutMs: number,
+  pollMs: number,
+): Promise<boolean> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const screen = stripAnsi(readVisibleScreen(bot)).replace(/\r/g, "");
+    if (isPushConfirmationPrompt(screen)) return true;
+    await sleep(pollMs);
+  }
+  return false;
+}
+
+function isSameArticleScreen(beforeScreen: string, afterScreen: string): boolean {
+  const before = stripAnsi(beforeScreen).replace(/\r/g, "");
+  const after = stripAnsi(afterScreen).replace(/\r/g, "");
+  const prompt = lastTerminalPrompt(after);
+  const hasReaderFooter = /瀏覽 第\s*\d+\/\d+\s*頁/u.test(after);
+  const hasPushOverlay =
+    PUSH_TYPE_MENU_WITH_BOO_RE.test(prompt) ||
+    PUSH_TYPE_MENU_NO_BOO_RE.test(prompt) ||
+    isPushConfirmationPrompt(after) ||
+    isPushContentPrompt(after, "push") ||
+    isPushContentPrompt(after, "boo") ||
+    isPushContentPrompt(after, "neutral") ||
+    /請按任意鍵繼續|按任意鍵繼續/u.test(prompt);
+  if (!hasReaderFooter || hasPushOverlay) return false;
+  if (before === after) return true;
+
+  const beforeArticle = parsePartialScreen(before);
+  const afterArticle = parsePartialScreen(after);
+  return Boolean(
+    beforeArticle &&
+    afterArticle &&
+    beforeArticle.board.toLowerCase() === afterArticle.board.toLowerCase() &&
+    normalizeArticleAuthor(beforeArticle.author) === normalizeArticleAuthor(afterArticle.author) &&
+    normalizeArticleIdentity(beforeArticle.title) === normalizeArticleIdentity(afterArticle.title),
+  );
+}
 
 async function waitForPushEntry(
   bot: WriteBot,
   timeoutMs: number,
   pollMs: number,
-): Promise<"menu" | "content" | null> {
+  previousScreen: string,
+  capture: (stage: string, screen: string) => void,
+): Promise<"menu" | "menu-no-boo" | "content" | "unexpected-type" | null> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
     const screen = stripAnsi(readVisibleScreen(bot)).replace(/\r/g, "");
-    if (PUSH_TYPE_MENU_RE.test(screen)) return "menu";
-    if (PUSH_CONTENT_PROMPT_RE.test(screen)) return "content";
+    capture("after-X", screen);
+    if (screen !== previousScreen) {
+      const prompt = lastTerminalPrompt(screen);
+      if (PUSH_TYPE_MENU_WITH_BOO_RE.test(prompt)) return "menu";
+      if (PUSH_TYPE_MENU_NO_BOO_RE.test(prompt)) return "menu-no-boo";
+      if (isPushContentPrompt(screen, "neutral")) return "content";
+      if (isPushContentPrompt(screen, "push") || isPushContentPrompt(screen, "boo")) return "unexpected-type";
+    }
     await sleep(pollMs);
   }
   return null;
@@ -2917,6 +3265,7 @@ export async function submitPushFromCurrentArticle(
   pushType: PushType,
   returnBoardName?: string,
   timeoutOverrides: Partial<SubmitPushTimeouts> = {},
+  articleSessionIsValid: () => boolean = () => true,
 ): Promise<ActionResult> {
   const trimmed = content.trim();
   if (!trimmed) return actionNotSent();
@@ -2928,24 +3277,95 @@ export async function submitPushFromCurrentArticle(
     ...timeoutOverrides,
   };
 
-  await bot.send("X");
+  const trace: NonNullable<AdapterDebugGlobal["__pttzzzLastPushTrace"]> = {
+    startedAt: Date.now(), pushType, snapshots: [], actions: [],
+  };
+  if (IS_DEV) (globalThis as AdapterDebugGlobal).__pttzzzLastPushTrace = trace;
+  const sendAction = async (action: PushTraceAction, data: string) => {
+    if (IS_DEV) {
+      trace.actions.push({ action, elapsedMs: Date.now() - trace.startedAt });
+    }
+    return bot.send!(data);
+  };
+  const capture = (stage: string, screen: string) => {
+    if (!IS_DEV) return;
+    // Never retain login/password screens; no snapshots are taken after entering draft text.
+    const safe = /密碼|password/iu.test(screen) ? "[sensitive screen omitted]" : screen;
+    const last = trace.snapshots[trace.snapshots.length - 1];
+    if (last?.stage === stage && last.screen === safe) return;
+    if (trace.snapshots.length >= 12) trace.snapshots.splice(1, 1);
+    trace.snapshots.push({ stage, elapsedMs: Date.now() - trace.startedAt, screen: safe });
+  };
+  const previousScreen = stripAnsi(readVisibleScreen(bot)).replace(/\r/g, "");
+  capture("before-X", previousScreen);
+  await sendAction("open-push-menu", "X");
   const entry = await waitForPushEntry(
     bot,
     timeouts.typePromptMs,
     timeouts.pollMs,
+    previousScreen,
+    capture,
   );
 
-  if (entry === "menu") {
-    await bot.send(getPushTypeKey(pushType));
-    await sleep(timeouts.afterTypeMs);
-    const contentReady = await waitForPattern(
-      bot,
-      PUSH_CONTENT_PROMPT_RE,
-      timeouts.typePromptMs,
-      timeouts.pollMs,
+  if (entry === "unexpected-type") {
+    trace.outcome = "push-entry-type-mismatch";
+    await sendAction("cancel", PTT_KEY_CTRL_C);
+    return actionNotSent(
+      "PTT 跳過類別選單並進入推／噓輸入框；為避免送錯類別，已取消，未送出內容",
+      "push-type-not-allowed",
     );
+  }
+  if (entry === "menu-no-boo" && pushType === "boo") {
+    await sendAction("select-neutral", getPushTypeKey("neutral"));
+    await sleep(timeouts.afterTypeMs);
+    const startedAt = Date.now();
+    let neutralInputReady = false;
+    while (Date.now() - startedAt < timeouts.typePromptMs) {
+      const screen = stripAnsi(readVisibleScreen(bot)).replace(/\r/g, "");
+      capture("after-type", screen);
+      if (isPushContentPrompt(screen, "neutral")) {
+        neutralInputReady = true;
+        break;
+      }
+      await sleep(timeouts.pollMs);
+    }
+    if (!neutralInputReady) {
+      trace.outcome = "push-content-prompt-timeout";
+      // Ctrl-C at a menu can select the default push. Leave the unknown terminal
+      // state untouched; the driver invalidates this article session on not-sent.
+      return actionNotSent(
+        "PTT 未顯示中性推文輸入框，狀態不明；未傳送取消鍵，請重新載入文章後再試",
+        "push-content-prompt-timeout",
+        true,
+      );
+    }
+    trace.outcome = "push-type-not-allowed";
+    await sendAction("cancel", PTT_KEY_CTRL_C);
+    return actionNotSent(
+      "PTT 此篇文章目前不提供噓文選項",
+      "push-type-not-allowed",
+    );
+  }
+  if (entry === "menu" || entry === "menu-no-boo") {
+    await sendAction(
+      pushType === "push"
+        ? "select-push"
+        : pushType === "boo"
+          ? "select-boo"
+          : "select-neutral",
+      getPushTypeKey(pushType),
+    );
+    await sleep(timeouts.afterTypeMs);
+    const startedAt = Date.now();
+    let contentReady = false;
+    while (Date.now() - startedAt < timeouts.typePromptMs) {
+      const screen = stripAnsi(readVisibleScreen(bot)).replace(/\r/g, "");
+      capture("after-type", screen);
+      if (isPushContentPrompt(screen, pushType)) { contentReady = true; break; }
+      await sleep(timeouts.pollMs);
+    }
     if (!contentReady) {
-      await bot.send(PTT_KEY_CTRL_C);
+      trace.outcome = "push-content-prompt-timeout";
       return actionNotSent(
         "PTT 未顯示推文輸入框，請重新載入文章後再試",
         "push-content-prompt-timeout",
@@ -2953,13 +3373,14 @@ export async function submitPushFromCurrentArticle(
       );
     }
   } else if (entry === "content" && pushType !== "neutral") {
-    await bot.send(PTT_KEY_CTRL_C);
+    trace.outcome = "push-type-not-allowed";
+    await sendAction("cancel", PTT_KEY_CTRL_C);
     return actionNotSent(
       "PTT 限制此文章只能使用 → 加註方式",
       "push-type-not-allowed",
     );
   } else if (entry !== "content") {
-    await bot.send(PTT_KEY_CTRL_C);
+    trace.outcome = "push-entry-timeout";
     return actionNotSent(
       "PTT 未顯示推文方式，請重新載入文章後再試",
       "push-entry-timeout",
@@ -2967,28 +3388,77 @@ export async function submitPushFromCurrentArticle(
     );
   }
 
-  await bot.send(`${trimmed}\r`);
-  const confirmed = await waitForPattern(
+  if (!articleSessionIsValid()) {
+    trace.outcome = "article-session-invalidated";
+    return actionNotSent(
+      "連線狀態已變更，請重新載入文章",
+      undefined,
+      true,
+    );
+  }
+
+  trace.outcome = "content-ready";
+  await sendAction("submit-content", `${trimmed}\r`);
+  const confirmed = await waitForPushConfirmation(
     bot,
-    /確定|是否|送出|儲存/u,
     timeouts.confirmMs,
     timeouts.pollMs,
   );
 
   if (confirmed) {
-    await bot.send("y\r");
-    await sleep(timeouts.afterConfirmMs);
-    const afterConfirm = stripAnsi(readVisibleScreen(bot));
-    if (/請按任意鍵繼續|按任意鍵繼續/u.test(afterConfirm)) {
-      await bot.send("\r");
-      await sleep(timeouts.afterContinueMs);
+    if (!articleSessionIsValid()) {
+      trace.outcome = "article-session-invalidated-after-content";
+      return actionUncertain(
+        "推文內容可能已輸入，但連線狀態已變更；未送出確認，請重新整理文章檢查",
+        "push-confirm-timeout",
+      );
+    }
+    await sendAction("confirm", "y\r");
+    const returnStartedAt = Date.now();
+    let articleReturned = false;
+    let continued = false;
+    let waitingForReturn = true;
+    while (waitingForReturn) {
+      if (!articleSessionIsValid()) {
+        trace.outcome = "article-session-invalidated-after-confirm";
+        return actionUncertain(
+          "已送出確認，但連線狀態已變更，請重新整理文章檢查",
+          "push-confirm-timeout",
+        );
+      }
+      const afterConfirm = stripAnsi(readVisibleScreen(bot)).replace(/\r/g, "");
+      if (isSameArticleScreen(previousScreen, afterConfirm)) {
+        articleReturned = true;
+        break;
+      }
+      if (!continued && /請按任意鍵繼續|按任意鍵繼續/u.test(afterConfirm)) {
+        continued = true;
+        await sendAction("continue", "\r");
+        await sleep(timeouts.afterContinueMs);
+        continue;
+      }
+      if (Date.now() - returnStartedAt >= timeouts.afterConfirmMs) {
+        waitingForReturn = false;
+      } else {
+        await sleep(timeouts.pollMs);
+      }
+    }
+
+    if (!articleReturned) {
+      trace.outcome = "push-confirm-return-timeout";
+      return actionUncertain(
+        "已送出確認，但無法確認是否回到原文章，請重新整理文章檢查",
+        "push-confirm-timeout",
+      );
     }
     if (returnBoardName) {
       await ensureNormalBoardView(bot, returnBoardName);
     }
+    trace.outcome = "sent";
     return actionSent();
   }
 
+  trace.outcome = "push-confirm-timeout";
   return actionUncertain(
     "無法確認回文是否送出，請重新整理文章檢查",
     "push-confirm-timeout",

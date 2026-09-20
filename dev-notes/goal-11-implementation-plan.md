@@ -1,5 +1,22 @@
 # Goal 11 鍵盤與排版 Implementation Plan
 
+## 推文入口補強
+
+- [x] 補非作者選單後的空白 `→ 帳號:` 輸入框與作者直接加註路徑測試。
+- [x] 排除舊留言、確認畫面、錯誤類別與送出 X 前已存在的輸入框。
+- [x] 開發模式記錄輸入正文前的本機終端診斷，不上傳、不自動重送。
+- [x] 完整 verify 通過；未進行真站登入或推文驗證。
+
+## 已批准：可驗證的文章工作階段
+
+- [x] browser 私有 tracker 以文章 key、正規化看板／作者／標題及相同終端 snapshot 驗證目前文章；成功完整讀取保留文章畫面，失敗、取消、斷線及無關導覽使狀態失效。
+- [x] 推文型操作優先重用可驗證的同篇文章，不送回看板或重開文章按鍵；session 過期、文章不符或 AID 無法核對時，沿用既有定位、重開及身分檢查，無法重新確認便停止。
+- [x] 推文入口改為嚴格 prompt state machine，並只記錄 `open-push-menu`、類型選擇、`submit-content`、`confirm`、`continue`、`cancel` 等語意 action；診斷不保存草稿正文。
+- [x] neutral 遇到原生推／噓輸入框會取消且回傳 `not-sent`，未知狀態不自動重送；共享 gateway contract 確認 12 種既有命令、`ActionReceipt` outcome 與 core 公開資料形狀不變。
+- [x] 更新 Goal 11 plan／notes／實作概況，明記 session reuse／fallback、診斷與安全界線；自動驗證只使用 fake/transcript，不連線或寫入真實 PTT。
+- [ ] 從 worktree root 執行最終 `npm run verify`。
+- [ ] 檢查最終 diff 並在 `feature/goal-11-ui-polish` 一次提交；不 merge/push。
+
 ## 任意方向鍵啟用、Z 推文門檻與登出
 
 - [x] 首頁／看板列表在 body 或非輸入空白位置按任一方向鍵，首次僅選取第一個可用項目；保留既有選取後移動規則。避免雙重事件與對話框干擾。

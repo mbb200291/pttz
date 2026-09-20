@@ -1,5 +1,31 @@
 # Goal 11 實作紀錄
 
+## 可驗證的文章工作階段
+
+browser 現在把文章工作階段保留為 package-private 終端狀態。完整讀取成功後，只有 requested `ArticleKey`、畫面看板／作者／標題，以及最後可見 terminal snapshot 都一致時才記錄；讀取失敗或取消、login/disconnect、raw send 與其他終端導覽都會使紀錄失效。後續推文型命令若仍可由目前畫面驗證同篇文章，直接進入 `X` 流程，不先返回看板或重開文章；否則沿用既有的看板定位、開文、作者／標題及 AID 核對。fallback 仍無法確認時回傳未送出，不傳正文。
+
+推文入口以實際畫面條件推進，涵蓋非作者 `X → 類型選單 → 3 → neutral input`、作者 `X → neutral input` 及延遲出現的 partial screens。開發診斷只保存 `open-push-menu`、`select-push`／`select-boo`／`select-neutral`、`submit-content`、`confirm`、`continue`、`cancel` 等語意 action 與輸入正文前的畫面，不保存密碼或草稿正文；畫面仍可能包含文章或帳號等個人資料，僅留在本機診斷。neutral 若意外進入原生推／噓輸入框會送 Ctrl-C 取消、使 article session 失效並回傳 `not-sent`；不把類型降級，也不自動重送任何可能已送出的內容。
+
+寫入安全採 fail-closed：未知或逾時畫面不盲送 Ctrl-C 或離開鍵；連線版本在正文前、確認前與確認後都會重新核對。送出 `y` 後必須看到相同看板、作者與標題，並確認已回到真正的文章閱讀器；提示選單、輸入框、確認或繼續畫面即使仍保留文章標頭，也不能當成成功。送出後的 AID／身分／連線證據不足時回傳 `uncertain`，多區間操作立即停止。
+
+篩選與搜尋結果的編號只視為相對位置。每次結果世代更新都會讓舊索引維持不可寫狀態；只有成功取得 canonical AID 的項目才可執行後續文章寫入。返回一般看板列表或直接讀取一般文章編號後才清除相關標記，避免把舊搜尋索引誤當成看板絕對編號。
+
+共享 gateway contract 繼續覆蓋 12 種公開 `PttCommand`，成功仍是 `{ ok: true, outcome: "sent" }`，`not-sent`／`sent`／`uncertain` 的 retryability 邊界不變；browser 私有 session 不會出現在 `@pttzzz/core` 的公開回傳型別。所有自動寫入案例都使用 fake storage、stub 或 terminal transcript，沒有登入或寫入真實 PTT。
+
+2026-09-12 最終 `npm run verify` 通過：core 374、browser 278、Web 302 項測試，以及 11 項輔助測試、三個 package build、lint（0 errors、3 個既有 Fast Refresh warnings）與 package smoke。所有自動驗證都不登入或寫入真實 PTT；四輪安全審查最後無 Critical／Important blocker。
+
+## 推文入口辨識與診斷
+
+2026-09-12 真站診斷：閱讀畫面在 X 後 56ms 直接變為空白原生「推」欄位，沒有捕捉到類別選單。這解釋原先 entry-timeout，但尚未證明選單為何被略過。依官方 bbs.c 的 recommend，非數字類別輸入亦會選預設值；目前不能斷言存在額外按鍵。新增重現測試與 push-entry-type-mismatch 保護：取消且不送正文，不將回文票降級成原生文章推。此為明確診斷／安全處理，不是完整送出功能修復；尚需查核實際出站按鍵序列。
+
+驗證：`npm run verify` 通過，core 374、browser 221、Web 302 項測試，輔助測試、build、lint（0 errors、3 個既有 warnings）與 package smoke 通過。
+
+非作者選單原本已能辨識；確定缺口是選擇類別後的空白 `→ 帳號:` 不在內容提示匹配範圍。現在辨識最後非空行，空白輸入框須符合指定原生類別，舊留言與確認畫面不算輸入框。X 前已存在的畫面不能作為新入口。既有四個測試改為由閱讀畫面經 X 進入選單，而非一開始就停在選單；原有預期結果不變。
+
+開發模式可在主控台執行 `JSON.stringify(window.__pttzzzLastPushTrace, null, 2)` 取得最近一次診斷：before-X、after-X、after-type 的畫面與經過時間，以及結果代碼。最多保留 12 筆於記憶體，不上傳、不儲存草稿、不在輸入正文後擷取畫面；含密碼提示的畫面整張省略。終端快照仍可能包含帳號、文章及 IP，分享前應檢查並遮蔽個資。
+
+13 項新增測試涵蓋兩種入口、錯誤類別、歷史留言、確認畫面、舊畫面及診斷。先前「未顯示推文方式」的真站原因尚未確認，需用新診斷觀察再次發生的狀態；本次沒有真站登入或送出測試，也不自動重試寫入。
+
 ## 終端圖形欄寬與回覆總數
 
 原始／預格式化本文的雙欄字元判斷改為匹配 ptt-client DBCS 欄寬，不再僅涵蓋 CJK。框線與色塊也固定佔兩個 ASCII 欄，常用單線框線及全／半／分數色塊以格內 SVG 繪製，避免字型 fallback 的字寬與上下留白破壞圖形。原文字元保留於 DOM，SVG 不參與可存取文字。一般散文仍沿用網站字體與行距。
