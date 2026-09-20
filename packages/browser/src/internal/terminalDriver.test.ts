@@ -4,10 +4,10 @@ import { createRequire } from "node:module";
 import { describe, expect, it, vi } from "vitest";
 
 function readRealPttFixture(name: string): string {
-  const local = resolve(process.cwd(), "src/internal/__fixtures__/real-ptt", name);
+  const local = resolve(process.cwd(), "src/internal/__fixtures__/real-ptt/2026-08-31_2026-09-01", name);
   const fromRepositoryRoot = resolve(
     process.cwd(),
-    "packages/browser/src/internal/__fixtures__/real-ptt",
+    "packages/browser/src/internal/__fixtures__/real-ptt/2026-08-31_2026-09-01",
     name,
   );
   return readFileSync(existsSync(local) ? local : fromRepositoryRoot, "utf8");

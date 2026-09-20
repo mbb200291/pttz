@@ -1,0 +1,640 @@
+{
+  "schemaVersion": 1,
+  "source": "live-ptt",
+  "endpoint": "wss://ws.ptt.cc/bbs",
+  "origin": "https://term.ptt.cc",
+  "charset": "big5",
+  "terminal": {
+    "columns": 80,
+    "rows": 24
+  },
+  "client": "ptt-client@0.9.0",
+  "totalScreens": 112,
+  "rawWebSocketFramesCaptured": false,
+  "runs": [
+    {
+      "id": "keep-others",
+      "screens": [
+        {
+          "file": "001.txt",
+          "at": "2026-09-13T02:05:30.734Z",
+          "afterAction": null
+        },
+        {
+          "file": "002.txt",
+          "at": "2026-09-13T02:05:41.365Z",
+          "afterAction": "username"
+        },
+        {
+          "file": "003.txt",
+          "at": "2026-09-13T02:05:45.747Z",
+          "afterAction": "password"
+        },
+        {
+          "file": "004.txt",
+          "at": "2026-09-13T02:05:46.343Z",
+          "afterAction": "password"
+        },
+        {
+          "file": "005.txt",
+          "at": "2026-09-13T02:05:50.447Z",
+          "afterAction": "keep"
+        },
+        {
+          "file": "006.txt",
+          "at": "2026-09-13T02:05:53.954Z",
+          "afterAction": "keep"
+        },
+        {
+          "file": "007.txt",
+          "at": "2026-09-13T02:06:07.795Z",
+          "afterAction": "continue"
+        }
+      ],
+      "count": 7,
+      "formats": [
+        "text"
+      ]
+    },
+    {
+      "id": "kick-and-board",
+      "screens": [
+        {
+          "file": "001.txt",
+          "at": "2026-09-13T05:33:06.857Z",
+          "afterAction": null
+        },
+        {
+          "file": "002.txt",
+          "at": "2026-09-13T05:33:11.235Z",
+          "afterAction": "username"
+        },
+        {
+          "file": "003.txt",
+          "at": "2026-09-13T05:33:15.582Z",
+          "afterAction": "password"
+        },
+        {
+          "file": "004.txt",
+          "at": "2026-09-13T05:33:16.646Z",
+          "afterAction": "password"
+        },
+        {
+          "file": "005.txt",
+          "at": "2026-09-13T05:33:29.687Z",
+          "afterAction": "kick"
+        },
+        {
+          "file": "006.txt",
+          "at": "2026-09-13T05:33:33.755Z",
+          "afterAction": "kick"
+        },
+        {
+          "file": "007.txt",
+          "at": "2026-09-13T05:33:43.655Z",
+          "afterAction": "continue"
+        },
+        {
+          "file": "008.txt",
+          "at": "2026-09-13T05:33:58.502Z",
+          "afterAction": "favorites"
+        },
+        {
+          "file": "009.txt",
+          "at": "2026-09-13T05:34:04.269Z",
+          "afterAction": "known-board-prompt"
+        },
+        {
+          "file": "010.txt",
+          "at": "2026-09-13T05:34:10.156Z",
+          "afterAction": "enter-Test"
+        },
+        {
+          "file": "011.txt",
+          "at": "2026-09-13T05:34:11.160Z",
+          "afterAction": "enter-Test"
+        },
+        {
+          "file": "012.txt",
+          "at": "2026-09-13T05:34:17.007Z",
+          "afterAction": "dismiss-board-welcome"
+        },
+        {
+          "file": "013.txt",
+          "at": "2026-09-13T05:34:22.893Z",
+          "afterAction": "open-user-designated-AID"
+        },
+        {
+          "file": "014.txt",
+          "at": "2026-09-13T05:34:28.196Z",
+          "afterAction": "read-designated-article"
+        },
+        {
+          "file": "015.txt",
+          "at": "2026-09-13T05:34:36.375Z",
+          "afterAction": "other-author-push-entry"
+        },
+        {
+          "file": "016.txt",
+          "at": "2026-09-13T05:34:45.770Z",
+          "afterAction": "other-author-neutral-input"
+        },
+        {
+          "file": "017.txt",
+          "at": "2026-09-13T05:34:59.475Z",
+          "afterAction": "cancel-empty-neutral"
+        },
+        {
+          "file": "018.txt",
+          "at": "2026-09-13T05:35:07.901Z",
+          "afterAction": "create-article-category"
+        },
+        {
+          "file": "019.txt",
+          "at": "2026-09-13T05:35:13.271Z",
+          "afterAction": "select-test-category"
+        },
+        {
+          "file": "020.txt",
+          "at": "2026-09-13T05:35:20.323Z",
+          "afterAction": "set-test-title"
+        },
+        {
+          "file": "021.txt",
+          "at": "2026-09-13T05:35:50.677Z",
+          "afterAction": "compose-body-header"
+        },
+        {
+          "file": "022.txt",
+          "at": "2026-09-13T05:35:58.265Z",
+          "afterAction": "compose-body-lines-01-15"
+        },
+        {
+          "file": "023.txt",
+          "at": "2026-09-13T05:36:06.277Z",
+          "afterAction": "compose-body-lines-16-27"
+        },
+        {
+          "file": "024.txt",
+          "at": "2026-09-13T05:36:14.344Z",
+          "afterAction": "compose-exit-menu"
+        },
+        {
+          "file": "025.txt",
+          "at": "2026-09-13T05:36:24.644Z",
+          "afterAction": "publish-test-article"
+        },
+        {
+          "file": "026.txt",
+          "at": "2026-09-13T05:36:40.439Z",
+          "afterAction": "no-signature"
+        },
+        {
+          "file": "027.txt",
+          "at": "2026-09-13T05:36:44.930Z",
+          "afterAction": "continue"
+        },
+        {
+          "file": "028.txt",
+          "at": "2026-09-13T05:36:50.875Z",
+          "afterAction": "select-created-article"
+        },
+        {
+          "file": "029.txt",
+          "at": "2026-09-13T05:36:57.950Z",
+          "afterAction": "created-article-AID"
+        },
+        {
+          "file": "030.txt",
+          "at": "2026-09-13T05:37:07.659Z",
+          "afterAction": "continue"
+        },
+        {
+          "file": "031.txt",
+          "at": "2026-09-13T05:37:12.587Z",
+          "afterAction": "created-article-first-page"
+        },
+        {
+          "file": "032.txt",
+          "at": "2026-09-13T05:37:17.949Z",
+          "afterAction": "article-page-down"
+        },
+        {
+          "file": "033.txt",
+          "at": "2026-09-13T05:37:24.869Z",
+          "afterAction": "author-own-push-entry"
+        },
+        {
+          "file": "034.txt",
+          "at": "2026-09-13T05:37:31.421Z",
+          "afterAction": "push-test-content"
+        },
+        {
+          "file": "035.txt",
+          "at": "2026-09-13T05:37:36.726Z",
+          "afterAction": "confirm-push-once"
+        },
+        {
+          "file": "036.txt",
+          "at": "2026-09-13T05:37:44.991Z",
+          "afterAction": "push-readback-open"
+        },
+        {
+          "file": "037.txt",
+          "at": "2026-09-13T05:37:52.214Z",
+          "afterAction": "push-readback-end"
+        },
+        {
+          "file": "038.txt",
+          "at": "2026-09-13T05:38:06.751Z",
+          "afterAction": "board-reply-entry"
+        },
+        {
+          "file": "039.txt",
+          "at": "2026-09-13T05:38:18.415Z",
+          "afterAction": "reply-to-board-only"
+        },
+        {
+          "file": "040.txt",
+          "at": "2026-09-13T05:38:36.451Z",
+          "afterAction": "reply-keep-title"
+        },
+        {
+          "file": "041.txt",
+          "at": "2026-09-13T05:38:55.386Z",
+          "afterAction": "reply-without-quote"
+        },
+        {
+          "file": "042.txt",
+          "at": "2026-09-13T05:39:10.383Z",
+          "afterAction": "compose-board-reply"
+        },
+        {
+          "file": "043.txt",
+          "at": "2026-09-13T05:39:19.368Z",
+          "afterAction": "reply-save-menu"
+        },
+        {
+          "file": "044.txt",
+          "at": "2026-09-13T05:39:32.195Z",
+          "afterAction": "publish-board-reply"
+        },
+        {
+          "file": "045.txt",
+          "at": "2026-09-13T05:39:52.458Z",
+          "afterAction": "reply-no-signature"
+        },
+        {
+          "file": "046.txt",
+          "at": "2026-09-13T05:39:59.885Z",
+          "afterAction": "continue"
+        },
+        {
+          "file": "047.txt",
+          "at": "2026-09-13T05:40:05.590Z",
+          "afterAction": "select-created-reply"
+        },
+        {
+          "file": "048.txt",
+          "at": "2026-09-13T05:40:10.961Z",
+          "afterAction": "reply-AID"
+        },
+        {
+          "file": "049.txt",
+          "at": "2026-09-13T05:40:17.375Z",
+          "afterAction": "continue"
+        },
+        {
+          "file": "050.txt",
+          "at": "2026-09-13T05:40:25.989Z",
+          "afterAction": "reply-readback"
+        },
+        {
+          "file": "051.txt",
+          "at": "2026-09-13T05:40:33.112Z",
+          "afterAction": "return-from-reply"
+        },
+        {
+          "file": "052.txt",
+          "at": "2026-09-13T05:40:39.108Z",
+          "afterAction": "select-original-by-AID-for-edit"
+        },
+        {
+          "file": "053.txt",
+          "at": "2026-09-13T05:40:46.193Z",
+          "afterAction": "edit-own-article"
+        },
+        {
+          "file": "054.txt",
+          "at": "2026-09-13T05:40:53.414Z",
+          "afterAction": "edit-body-position"
+        },
+        {
+          "file": "055.txt",
+          "at": "2026-09-13T05:40:59.565Z",
+          "afterAction": "insert-edit-marker"
+        },
+        {
+          "file": "056.txt",
+          "at": "2026-09-13T05:41:05.229Z",
+          "afterAction": "edit-save-menu"
+        },
+        {
+          "file": "057.txt",
+          "at": "2026-09-13T05:41:11.929Z",
+          "afterAction": "save-article-edit"
+        },
+        {
+          "file": "058.txt",
+          "at": "2026-09-13T05:41:27.195Z",
+          "afterAction": "edit-readback-first-page"
+        },
+        {
+          "file": "059.txt",
+          "at": "2026-09-13T05:41:32.490Z",
+          "afterAction": "edit-record-readback"
+        },
+        {
+          "file": "060.txt",
+          "at": "2026-09-13T05:41:39.258Z",
+          "afterAction": "return-before-cleanup"
+        },
+        {
+          "file": "061.txt",
+          "at": "2026-09-13T05:41:50.236Z",
+          "afterAction": "select-reply-for-cleanup"
+        },
+        {
+          "file": "062.txt",
+          "at": "2026-09-13T05:41:58.742Z",
+          "afterAction": "delete-reply-prompt"
+        },
+        {
+          "file": "063.txt",
+          "at": "2026-09-13T05:42:06.469Z",
+          "afterAction": "cancel-delete-reply"
+        },
+        {
+          "file": "064.txt",
+          "at": "2026-09-13T05:42:13.514Z",
+          "afterAction": "delete-reply-prompt-again"
+        },
+        {
+          "file": "065.txt",
+          "at": "2026-09-13T05:42:19.696Z",
+          "afterAction": "confirm-delete-reply"
+        },
+        {
+          "file": "066.txt",
+          "at": "2026-09-13T05:42:24.557Z",
+          "afterAction": "continue"
+        },
+        {
+          "file": "067.txt",
+          "at": "2026-09-13T05:42:30.026Z",
+          "afterAction": "select-original-for-cleanup"
+        },
+        {
+          "file": "068.txt",
+          "at": "2026-09-13T05:42:38.757Z",
+          "afterAction": "delete-original-prompt"
+        },
+        {
+          "file": "069.txt",
+          "at": "2026-09-13T05:42:49.789Z",
+          "afterAction": "confirm-delete-original"
+        },
+        {
+          "file": "070.txt",
+          "at": "2026-09-13T05:42:58.427Z",
+          "afterAction": "continue"
+        },
+        {
+          "file": "071.txt",
+          "at": "2026-09-13T05:43:14.468Z",
+          "afterAction": "title-search-prompt"
+        },
+        {
+          "file": "072.txt",
+          "at": "2026-09-13T05:43:19.964Z",
+          "afterAction": "title-search-results"
+        },
+        {
+          "file": "073.txt",
+          "at": "2026-09-13T05:43:27.280Z",
+          "afterAction": "read-filtered-designated-article"
+        },
+        {
+          "file": "074.txt",
+          "at": "2026-09-13T05:43:32.494Z",
+          "afterAction": "filtered-push-warning"
+        },
+        {
+          "file": "075.txt",
+          "at": "2026-09-13T05:43:39.811Z",
+          "afterAction": "filtered-boo-input"
+        },
+        {
+          "file": "076.txt",
+          "at": "2026-09-13T05:43:46.420Z",
+          "afterAction": "cancel-empty-filtered-boo"
+        },
+        {
+          "file": "077.txt",
+          "at": "2026-09-13T05:43:53.394Z",
+          "afterAction": "exit-title-search"
+        },
+        {
+          "file": "078.txt",
+          "at": "2026-09-13T05:43:59.797Z",
+          "afterAction": "board-list-push-entry"
+        },
+        {
+          "file": "079.txt",
+          "at": "2026-09-13T05:44:05.883Z",
+          "afterAction": "positive-push-input"
+        },
+        {
+          "file": "080.txt",
+          "at": "2026-09-13T05:44:20.948Z",
+          "afterAction": "cancel-empty-positive-push"
+        },
+        {
+          "file": "081.txt",
+          "at": "2026-09-13T05:44:26.989Z",
+          "afterAction": "author-search-prompt"
+        },
+        {
+          "file": "082.txt",
+          "at": "2026-09-13T05:44:32.237Z",
+          "afterAction": "author-search-results"
+        },
+        {
+          "file": "083.txt",
+          "at": "2026-09-13T05:44:38.767Z",
+          "afterAction": "exit-author-search"
+        },
+        {
+          "file": "084.txt",
+          "at": "2026-09-13T05:45:01.659Z",
+          "afterAction": "push-threshold-prompt"
+        },
+        {
+          "file": "085.txt",
+          "at": "2026-09-13T05:45:07.908Z",
+          "afterAction": "push-threshold-results"
+        },
+        {
+          "file": "086.txt",
+          "at": "2026-09-13T05:45:13.804Z",
+          "afterAction": "filtered-list-page-up"
+        },
+        {
+          "file": "087.txt",
+          "at": "2026-09-13T05:45:19.492Z",
+          "afterAction": "filtered-list-home"
+        },
+        {
+          "file": "088.txt",
+          "at": "2026-09-13T05:45:24.765Z",
+          "afterAction": "filtered-list-end"
+        },
+        {
+          "file": "089.txt",
+          "at": "2026-09-13T05:45:29.862Z",
+          "afterAction": "combined-title-prompt"
+        },
+        {
+          "file": "090.txt",
+          "at": "2026-09-13T05:45:36.534Z",
+          "afterAction": "combined-push-title-results"
+        },
+        {
+          "file": "091.txt",
+          "at": "2026-09-13T05:45:41.871Z",
+          "afterAction": "exit-combined-search"
+        },
+        {
+          "file": "092.txt",
+          "at": "2026-09-13T05:45:46.579Z",
+          "afterAction": "no-results-title-prompt"
+        },
+        {
+          "file": "093.txt",
+          "at": "2026-09-13T05:45:54.500Z",
+          "afterAction": "title-search-no-results"
+        },
+        {
+          "file": "094.txt",
+          "at": "2026-09-13T05:46:06.398Z",
+          "afterAction": "normal-board-home"
+        },
+        {
+          "file": "095.txt",
+          "at": "2026-09-13T05:46:11.897Z",
+          "afterAction": "normal-board-page-down"
+        },
+        {
+          "file": "096.txt",
+          "at": "2026-09-13T05:46:17.618Z",
+          "afterAction": "normal-board-end-cleanup-recheck"
+        },
+        {
+          "file": "097.txt",
+          "at": "2026-09-13T05:46:27.461Z",
+          "afterAction": "verify-designated-article-preserved"
+        },
+        {
+          "file": "098.txt",
+          "at": "2026-09-13T05:46:34.279Z",
+          "afterAction": "final-designated-readback"
+        },
+        {
+          "file": "099.txt",
+          "at": "2026-09-13T05:47:00.319Z",
+          "afterAction": "hot-boards-after-Ctrl-Z"
+        },
+        {
+          "file": "100.txt",
+          "at": "2026-09-13T05:47:07.036Z",
+          "afterAction": "leave-Test"
+        },
+        {
+          "file": "101.txt",
+          "at": "2026-09-13T05:47:12.133Z",
+          "afterAction": "favorites-page-down"
+        },
+        {
+          "file": "102.txt",
+          "at": "2026-09-13T05:47:17.788Z",
+          "afterAction": "favorites-home"
+        },
+        {
+          "file": "103.txt",
+          "at": "2026-09-13T05:47:25.776Z",
+          "afterAction": "return-main-menu"
+        },
+        {
+          "file": "104.txt",
+          "at": "2026-09-13T05:47:33.921Z",
+          "afterAction": "logout-prompt"
+        },
+        {
+          "file": "105.txt",
+          "at": "2026-09-13T05:47:40.867Z",
+          "afterAction": "confirm-logout"
+        }
+      ],
+      "count": 105,
+      "formats": [
+        "text",
+        "reconstructed-ansi",
+        "terminal-line-attributes"
+      ]
+    }
+  ],
+  "createdArticles": [
+    {
+      "aid": "#1gfZPfeb",
+      "board": "Test",
+      "row": 290,
+      "role": "original",
+      "deleted": true
+    },
+    {
+      "aid": "#1gfZSfsx",
+      "board": "Test",
+      "row": 291,
+      "role": "board-reply",
+      "deleted": true
+    }
+  ],
+  "designatedArticle": {
+    "aid": "#1gfWDlNT",
+    "board": "Test",
+    "writtenTo": false,
+    "finalScreen": "kick-and-board/098.txt"
+  },
+  "otherClientObservation": {
+    "keep": "not independently confirmed by user",
+    "kick": "user reported 已斷線"
+  },
+  "limitations": [
+    "No raw WebSocket frames; ANSI is reconstructed, not transport bytes.",
+    "Legacy terminal decoder renders some decorative BBS art incorrectly.",
+    "Keep run contains text only.",
+    "Account IDs and IPv4 masked; replacements can change alignment/attribute offsets.",
+    "Recorded action labels indicate intent, not asserted outcome.",
+    "Main-menu-return / hot-boards-after-Ctrl-Z did not reach hot boards.",
+    "No result title search returned normal board; transient no-results message not captured.",
+    "This capture set is not complete PTT operation coverage."
+  ],
+  "scope": "initial-session-tests",
+  "supplementalRuns": [
+    {
+      "manifest": "nested-replies-1gfWDlNT/manifest.json",
+      "screenCount": 52
+    }
+  ],
+  "includingSupplementsTotalScreens": 164
+}

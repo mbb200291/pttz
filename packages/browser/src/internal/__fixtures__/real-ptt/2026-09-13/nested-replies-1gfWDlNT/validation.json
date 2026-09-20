@@ -1,0 +1,19 @@
+{
+  "validatedAt": "2026-09-13T06:08:46.022Z",
+  "screenCount": 52,
+  "checks": {
+    "all24Lines": true,
+    "allHaveTerminalAttributes": true,
+    "allHaveReconstructedAnsi": true,
+    "sha256Matches": true,
+    "credentialsAbsent": true,
+    "accountVariantsMasked": true,
+    "eightWriteConfirmations": true,
+    "normalLogout1000": true
+  },
+  "regressionTests": {
+    "file": "packages/browser/src/internal/realPttNestedReplies.test.ts",
+    "passed": 18
+  },
+  "limitations": "Public client sends and Web UI were not exercised."
+}
