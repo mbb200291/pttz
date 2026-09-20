@@ -474,5 +474,125 @@
       "articlePushVoters": [],
       "articleBooVoters": []
     }
+  },
+  {
+    "id": "withdraw-preserves-nested-heart-replies",
+    "primaryRule": "EDIT-003.3",
+    "rules": [
+      "EDIT-003.3",
+      "EDIT-003.4",
+      "EDIT-003.5",
+      "EDIT-004.4"
+    ],
+    "articleAuthor": "askz0",
+    "rawPushes": [
+      {
+        "type": "neutral",
+        "author": "askz0",
+        "content": "測試",
+        "time": "09/16 23:21"
+      },
+      {
+        "type": "neutral",
+        "author": "askz0",
+        "content": "喔喔",
+        "time": "09/16 23:22"
+      },
+      {
+        "type": "neutral",
+        "author": "MBB200291",
+        "content": "推1樓",
+        "time": "09/16 23:24"
+      },
+      {
+        "type": "neutral",
+        "author": "MBB200291",
+        "content": "回1樓：♡",
+        "time": "09/16 23:26"
+      },
+      {
+        "type": "neutral",
+        "author": "MBB200291",
+        "content": "回4樓：♥♥♥♥♥",
+        "time": "09/16 23:30"
+      },
+      {
+        "type": "neutral",
+        "author": "MBB200291",
+        "content": "更正我在5樓發言：^1:4=♡♥♡",
+        "time": "09/16 23:31"
+      },
+      {
+        "type": "neutral",
+        "author": "MBB200291",
+        "content": "更正我在5樓發言：^5:5=♡",
+        "time": "09/16 23:35"
+      },
+      {
+        "type": "neutral",
+        "author": "MBB200291",
+        "content": "撤回我在4樓的發言",
+        "time": "09/16 23:43"
+      }
+    ],
+    "expected": {
+      "replies": [
+        {
+          "author": "askz0",
+          "content": "測試\n喔喔",
+          "replyToAuthor": null,
+          "score": 1
+        },
+        {
+          "author": "MBB200291",
+          "content": "♥♡♥♡♥♡",
+          "replyToAuthor": "MBB200291",
+          "score": 0
+        }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    },
+    "expectedReplyDetails": [
+      {
+        "author": "askz0",
+        "content": "測試\n喔喔",
+        "isOP": true,
+        "sourceFloors": [
+          1,
+          2
+        ],
+        "visible": true,
+        "editKinds": []
+      },
+      {
+        "author": "MBB200291",
+        "content": "♥♡♥♡♥♡",
+        "isOP": false,
+        "sourceFloors": [
+          5
+        ],
+        "visible": true,
+        "editKinds": [
+          "original",
+          "replace",
+          "replace"
+        ]
+      },
+      {
+        "author": "MBB200291",
+        "content": " ",
+        "isOP": false,
+        "sourceFloors": [
+          4
+        ],
+        "visible": false,
+        "editKinds": [
+          "original",
+          "withdraw"
+        ]
+      }
+    ]
   }
 ]

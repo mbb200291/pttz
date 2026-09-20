@@ -12,7 +12,10 @@ describe("original body layout", () => {
     render(<RichContent text={text} variant="body" />);
     const body = screen.getByRole("region", { name: "原始正文" });
     expect(body).not.toHaveTextContent("發信站");
-    expect(screen.getByRole("region", { name: "文章資訊" })).toHaveTextContent("61.228.237.120 (臺灣)");
+    expect(screen.getByRole("region", { name: "文章資訊" })).toHaveTextContent("批踢踢實業坊 · 臺灣 · 61.228.237.120");
+    expect(screen.getByRole("region", { name: "文章資訊" })).toHaveClass("flex", "rounded-xl");
+    expect(screen.getByRole("region", { name: "文章資訊" })).not.toHaveClass("border-l-2");
+    expect(screen.getByRole("region", { name: "文章資訊" }).querySelector("dl")).toBeNull();
     expect(screen.getByRole("link", { name: url })).toHaveAttribute("href", url);
     fireEvent.click(screen.getByRole("button", { name: "原始排版" }));
     expect(screen.queryByRole("region", { name: "文章資訊" })).toBeNull();

@@ -502,7 +502,7 @@ function validateFixtureCases(value: unknown): FixtureCase[] {
 }
 
 function stableAggregatedThread(result: AggregatedThread) {
-  const authorById = new Map(result.pushes.map((push) => [push.id, push.author]));
+  const authorById = new Map([...result.pushes, ...result.withdrawnPushes].map((push) => [push.id, push.author]));
   return {
     replies: result.pushes.map((push) => ({
       author: push.author,

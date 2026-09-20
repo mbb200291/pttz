@@ -550,7 +550,7 @@ export function Article({
         article: articleKey,
         replyId: composer.replyId,
         content: payload.body,
-        pushType: payload.pushType,
+        pushType: "neutral",
       });
     }
     return writeFingerprint("replyToArticle", {
@@ -591,7 +591,7 @@ export function Article({
             article: articleKey,
             replyId: composer.replyId,
             content: payload.body,
-            pushType: payload.pushType,
+            pushType: "neutral",
           });
         } else {
           result = await actions.replyToArticle({
@@ -601,6 +601,17 @@ export function Article({
           });
         }
         if (!result.ok) {
+          if (composer?.mode !== "edit-push" && (result.error.outcome === "sent" || result.error.outcome === "uncertain")) {
+            setLockedComposerFingerprints((current) => new Set(current).add(fingerprint));
+            // A read refresh must never retry the write or be treated as proof
+            // that this particular submission was absent. Keep its lock.
+            try {
+              await liveReload();
+            } finally {
+              setComposer(null);
+            }
+            return;
+          }
           setComposerSubmitError(formatWriteError(
             result.error,
             composer?.mode === "edit-push" ? "推文編輯失敗" : "回文送出失敗",
@@ -677,7 +688,7 @@ export function Article({
       if (key === "x" && isLoggedIn) {
         event.preventDefault();
         openReply();
-      } else if (key === "r" && canReplyToBoard) {
+      } else if ((key === "y" || key === "r") && canReplyToBoard) {
         event.preventDefault();
         onReplyToBoard?.(article);
       }

@@ -4,7 +4,8 @@
  * Modal dialog for replying to articles/pushes, or editing own pushes.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { NativeSymbolPalette } from "./NativeSymbolPalette";
 import { uploadToImgur } from "../lib/imgur";
 import { approximatePttBytes } from "../lib/ptt/pttBytes";
 import { replyEditDifference } from "../lib/replyEditDifference";
@@ -66,9 +67,26 @@ export function Composer({
   );
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [symbolsOpen, setSymbolsOpen] = useState(false);
+  const [symbolGroup, setSymbolGroup] = useState(0);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pendingCaret = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    if (pendingCaret.current === null || !textareaRef.current) return;
+    textareaRef.current.focus();
+    textareaRef.current.setSelectionRange(pendingCaret.current, pendingCaret.current);
+    pendingCaret.current = null;
+  }, [body, symbolsOpen]);
+  const insertSymbol = (symbol: string) => {
+    const input = textareaRef.current;
+    if (!input || submitting) return;
+    const start = input.selectionStart, end = input.selectionEnd;
+    pendingCaret.current = start + symbol.length;
+    setBody(body.slice(0, start) + symbol + body.slice(end));
+    setSymbolsOpen(false);
+  };
 
   // Auto-focus textarea on mount, cursor at end
   useEffect(() => {
@@ -83,20 +101,26 @@ export function Composer({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        if (symbolsOpen) {
+          e.preventDefault();
+          setSymbolsOpen(false);
+          textareaRef.current?.focus();
+          return;
+        }
         if (submitting) return;
         onClose();
       }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose, submitting]);
+  }, [onClose, submitting, symbolsOpen]);
 
   const difference = replyEditDifference(initial.body ?? "", body);
   const sectionStart = difference.start;
   const sectionEnd = difference.end;
   const isSectionEdit = mode === "edit-push" && editMode === "區段";
   const submittedContent = isSectionEdit ? difference.replacement : body;
-  const effectivePushType = neutralOnly ? "neutral" : pushType;
+  const effectivePushType = mode === "reply-push" || neutralOnly ? "neutral" : pushType;
   const currentPayload = { body: submittedContent, pushType: effectivePushType, editMode, sectionStart, sectionEnd };
   const remaining = MAX_BYTES - (mode === "edit-push" && editMode === "撤回" ? 0 : approximatePttBytes(submittedContent));
   const isSubmitDisabled =
@@ -194,7 +218,7 @@ export function Composer({
         </div>
 
         {/* Push type selector */}
-        {(mode === "reply" || mode === "reply-push") && (
+        {mode === "reply" && (
           <div>
             <div className="flex gap-2">
               {PUSH_TYPES.map(({ value, label }) => {
@@ -291,9 +315,13 @@ export function Composer({
         )}
 
         {/* Footer */}
+        {symbolsOpen && <NativeSymbolPalette groupIndex={symbolGroup} onGroupChange={setSymbolGroup} onSelect={insertSymbol} disabled={submitting} />}
         <div className="flex items-center justify-between gap-3">
           {/* Image upload */}
-          <div>
+          <div className="flex items-center gap-2">
+            <button type="button" aria-label="表情符號" aria-expanded={symbolsOpen} disabled={submitting}
+              onMouseDown={(event) => event.preventDefault()} onClick={() => setSymbolsOpen((open) => !open)}
+              className="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-400 hover:text-gray-200 text-xl disabled:opacity-40">☺</button>
             <input
               ref={fileInputRef}
               type="file"
@@ -312,7 +340,11 @@ export function Composer({
               className="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-400 hover:text-gray-200 text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               aria-label="新增圖片"
             >
-              {uploading ? "上傳中…" : "🖼"}
+              {uploading ? "上傳中…" : <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="3" />
+                <circle cx="8" cy="8" r="1.5" />
+                <path d="m3 17 5-5 4 4 3-3 6 6" />
+              </svg>}
             </button>
           </div>
 

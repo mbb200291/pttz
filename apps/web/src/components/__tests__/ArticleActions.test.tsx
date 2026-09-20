@@ -63,12 +63,12 @@ describe("Article actions", () => {
     fireEvent.keyDown(document.body, { key: "ArrowLeft" });
     expect(back).toHaveBeenCalledOnce();
   });
-  it("opens board reply with R and push composer with X, guarding active composers", () => {
+  it.each(["r", "y"])("opens board reply with %s and push composer with X, guarding active composers", (replyKey) => {
     const reply = vi.fn();
     render(<Article boardName="Test" articleIndex={99} onBack={() => {}} currentUser="bob"
       mockArticle={article} onReplyToBoard={reply} />);
     const reader = screen.getByLabelText("文章閱讀區，左方向鍵返回");
-    fireEvent.keyDown(reader, { key: "r" });
+    fireEvent.keyDown(reader, { key: replyKey });
     expect(reply).toHaveBeenCalledWith(article);
     reply.mockClear();
     for (const extra of [{ repeat: true }, { isComposing: true }, { altKey: true }, { ctrlKey: true }, { metaKey: true }]) {

@@ -426,6 +426,60 @@ describe("PttzzzClient article reads", () => {
     });
   });
 
+  it("preserves the original nested heart reply separately from its two section edits", async () => {
+    const gateway = new MemoryGateway();
+    gateway.sources = [{ articleKey: indexKey, completeness: "final", revision: 1,
+      rawText: raw("hearts", "body", [
+        "→ askz0: 測試 09/16 23:21",
+        "→ askz0: 喔喔 09/16 23:22",
+        "→ MBB200291: 推1樓 09/16 23:24",
+        "→ MBB200291: 回1樓：♡ 09/16 23:26",
+        "→ MBB200291: 回4樓：♥♥♥♥♥ 09/16 23:30",
+        "→ MBB200291: 更正我在5樓發言：^1:4=♡♥♡ 09/16 23:31",
+        "→ MBB200291: 更正我在5樓發言：^5:5=♡ 09/16 23:35",
+      ].join("\n")) }];
+    const result = await new PttzzzClient(gateway).getArticle({ article: indexKey });
+    expect(result).toMatchObject({ ok: true, value: { replies: [{ children: [{ children: [{
+      content: "♥♡♥♡♥♡",
+      originalVersion: { content: "♥♥♥♥♥", createdAt: "09/16 23:30" },
+      edits: [
+        { kind: "replace", resultContent: "♥♡♥♡♥", createdAt: "09/16 23:31" },
+        { kind: "replace", resultContent: "♥♡♥♡♥♡", createdAt: "09/16 23:35" },
+      ],
+    }] }] }] } });
+  });
+
+  it("keeps withdrawn parents between the root and edited nested replies", async () => {
+    const gateway = new MemoryGateway();
+    gateway.sources = [{ articleKey: indexKey, completeness: "final", revision: 1,
+      rawText: raw("hearts", "body", [
+        "→ askz0: 測試 09/16 23:21", "→ askz0: 喔喔 09/16 23:22",
+        "→ MBB200291: 推1樓 09/16 23:24", "→ MBB200291: 回1樓：♡ 09/16 23:26",
+        "→ MBB200291: 回4樓：♥♥♥♥♥ 09/16 23:30",
+        "→ MBB200291: 更正我在5樓發言：^1:4=♡♥♡ 09/16 23:31",
+        "→ MBB200291: 更正我在5樓發言：^5:5=♡ 09/16 23:35",
+        "→ MBB200291: 撤回我在4樓的發言 09/16 23:43",
+      ].join("\n")) }];
+    const result = await new PttzzzClient(gateway).getArticle({ article: indexKey });
+    expect(result).toMatchObject({ ok: true, value: { replies: [{ replyId: "reply:1", children: [{
+      replyId: "reply:4", visible: false, content: " ", replyTo: "reply:1", depth: 2,
+      children: [{ replyId: "reply:5", content: "♥♡♥♡♥♡", replyTo: "reply:4", depth: 3 }],
+    }] }] } });
+    if (result.ok) expect(result.value.replies).toHaveLength(1);
+  });
+
+  it("keeps a withdrawn root in its original order", async () => {
+    const gateway = new MemoryGateway();
+    gateway.sources = [{ articleKey: indexKey, completeness: "final", revision: 1,
+      rawText: raw("roots", "body", [
+        "→ alice: first. 09/16 23:21", "→ bob: middle. 09/16 23:22",
+        "→ carol: last. 09/16 23:23", "→ bob: 撤回我在2樓的發言 09/16 23:24",
+      ].join("\n")) }];
+    const result = await new PttzzzClient(gateway).getArticle({ article: indexKey });
+    if (!result.ok) throw new Error("read failed");
+    expect(result.value.replies.map((reply) => reply.replyId)).toEqual(["reply:1", "reply:2", "reply:3"]);
+  });
+
   it("publishes one hidden reply for a withdrawn aggregate with blank withdraw content", async () => {
     const gateway = new MemoryGateway();
     gateway.sources = [{

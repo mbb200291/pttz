@@ -37,6 +37,38 @@ function article(board: string, index: number, revision: number, body: string): 
 }
 
 describe("useArticle public event bridge", () => {
+  it("keeps withdrawn placeholders and traverses their children", async () => {
+    const source = article("Test", 10, 1, "body");
+    const child = { replyId: "child", author: "bob", content: "child body", pushType: "neutral" as const,
+      depth: 2, score: 0, votes: { pushCount: 0, booCount: 0, score: 0 }, isOp: false,
+      visible: true, children: [], edits: [], replyTo: "gone" };
+    source.replies = [{ ...child, replyId: "gone", author: "alice", content: " ",
+      depth: 1, replyTo: undefined, visible: false, children: [child] }];
+    getArticle.mockResolvedValue({ ok: true, value: source });
+    const { result } = renderHook(() => useArticle("Test", 10));
+    await waitFor(() => expect(result.current.article).not.toBeNull());
+    expect(result.current.article?.pushes).toMatchObject([
+      { id: "gone", visible: false }, { id: "child", replyTo: "gone", displayReplyTo: "gone" },
+    ]);
+  });
+  it("prepends the original version to operation-only edit history", async () => {
+    const source = article("Test", 10, 1, "body");
+    source.replies = [{ replyId: "reply:5", author: "MBB200291", content: "♥♡♥♡♥♡", pushType: "neutral",
+      depth: 1, score: 0, votes: { pushCount: 0, booCount: 0, score: 0 }, isOp: false, visible: true, children: [],
+      originalVersion: { content: "♥♥♥♥♥", createdAt: "09/16 23:30" },
+      edits: [
+        { kind: "replace", author: "MBB200291", content: "♡♥♡", resultContent: "♥♡♥♡♥", createdAt: "09/16 23:31" },
+        { kind: "replace", author: "MBB200291", content: "♡", resultContent: "♥♡♥♡♥♡", createdAt: "09/16 23:35" },
+      ] }];
+    getArticle.mockResolvedValue({ ok: true, value: source });
+    const { result } = renderHook(() => useArticle("Test", 10));
+    await waitFor(() => expect(result.current.article).not.toBeNull());
+    expect(result.current.article?.pushes[0].editHistory).toMatchObject([
+      { kind: "original", content: "♥♥♥♥♥", time: "09/16 23:30", resultContent: "♥♥♥♥♥" },
+      { kind: "replace", time: "09/16 23:31", resultContent: "♥♡♥♡♥" },
+      { kind: "replace", time: "09/16 23:35", resultContent: "♥♡♥♡♥♡" },
+    ]);
+  });
   beforeEach(() => {
     listeners.clear();
     vi.clearAllMocks();

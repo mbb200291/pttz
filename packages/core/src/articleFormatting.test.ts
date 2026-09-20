@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import { articleTextRuns } from "./articleFormatting.js";
 
 describe("article text formatting", () => {
+  it("preserves all native background colors without requiring foreground", () => {
+    for (let backgroundColor = 40; backgroundColor <= 47; backgroundColor++) {
+      expect(articleTextRuns("字", [{ start: 0, end: 1, backgroundColor } as never])).toEqual([{ text: "字", backgroundColor }]);
+    }
+  });
   it("keeps plain text and emits selected high intensity and foreground runs", () => {
     expect(articleTextRuns("前紅字\n後", [{ start: 1, end: 3, bold: true, color: 31 }])).toEqual([
       { text: "前" }, { text: "紅字", bold: true, color: 31 }, { text: "\n後" },
@@ -14,6 +19,10 @@ describe("article text formatting", () => {
     [{ start: 1, end: 1, bold: true }],
     [{ start: 0, end: 2, bold: true }, { start: 1, end: 3, color: 31 }],
     [{ start: 0, end: 1, color: 99 }],
+    [{ start: 0, end: 1, backgroundColor: 39 }],
+    [{ start: 0, end: 1, backgroundColor: 48 }],
+    [{ start: 0, end: 1, backgroundColor: "41" }],
+    [{ start: 0, end: 1, backgroundColor: 41.5 }],
     [{ start: 0, end: 1, bold: "yes" }],
   ])("rejects malformed formatting %j", (ranges) => {
     expect(() => articleTextRuns("文字正文", ranges as never)).toThrow();
