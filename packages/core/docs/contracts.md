@@ -446,3 +446,21 @@ Gateway 的 connect／login／read method 對可預期失敗 throw `GatewayError
 ## Stability
 
 Package root 的公開型別遵循 semantic versioning；三層 export 邊界、stable `replyId`、partial revision、structured `Result`、write uncertainty 與 browser-only real connection 是設計約束。`@pttzzz/core/internal`、debug raw shape 與 gateway transport 細節不在一般 UI 相容性承諾內。
+## Reply draft planning
+
+`prepareReplyDraft({ article, replyId? })` returns `Result<ReplyDraftPlanner>`.
+The planner exposes synchronous `plan(content): Result<{ total, capacity }>`;
+`total` counts physical pushes, including target prefixes and marker-only bridges.
+An empty normalized draft has zero fragments and cannot be sent.
+
+Preparation is an optional gateway capability. It may inspect and cancel a terminal
+input but must not publish content. A planner can expire after navigation, login,
+disconnect or another preparation; callers must handle an error and prepare again.
+The caller must discard stale asynchronous preparation results after changing targets.
+
+`sendReplyDraft` accepts optional `maxFragments` (positive safe integer). It is
+part of the immutable operation identity. The gateway remeasures capacity and
+rejects an over-budget plan with `too-many-fragments` before the first write.
+There is no fixed rule-level character or fragment limit. The web client chooses 30.
+Preview and sending share normalization and planning; preview is not evidence
+of delivery or a guarantee that the capacity has not changed.

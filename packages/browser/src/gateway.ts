@@ -1,5 +1,5 @@
 import { articleTextRuns } from "@pttzzz/core";
-import type { GatewayReplyDraftInput, ReplyDelivery } from "@pttzzz/core";
+import type { GatewayReplyDraftInput, ReplyDelivery, GatewayPrepareReplyDraftInput, ReplyDraftPlanner } from "@pttzzz/core";
 import {
   GatewayError,
   type ActionReceipt,
@@ -121,6 +121,7 @@ function isDriverArticleBatch(
 export interface BrowserGatewayDriver {
   captureArticleAnchor?(input: DriverArticleQuery, index: number): Promise<string | undefined>;
   sendReplyDraft?(input: GatewayReplyDraftInput, onProgress?: (progress: ReplyDelivery) => void): Promise<ReplyDelivery>;
+  prepareReplyDraft?(input: GatewayPrepareReplyDraftInput): Promise<ReplyDraftPlanner>;
   connect(): Promise<void>;
   login(username: string, password: string, disconnectExisting: boolean): Promise<{ ok: true } | { ok: false; reason: string }>;
   disconnect(): Promise<void>;
@@ -345,6 +346,11 @@ export class BrowserPttGateway implements PttGateway {
       wake?.();
       wake = undefined;
     }
+  }
+
+  async prepareReplyDraft(input: GatewayPrepareReplyDraftInput): Promise<ReplyDraftPlanner> {
+    if (!this.driver.prepareReplyDraft) throw new GatewayError("UNSUPPORTED", "此連線不支援回文計數", false);
+    return this.driver.prepareReplyDraft(input);
   }
 
   async sendReplyDraft(input: GatewayReplyDraftInput, onProgress?: (progress: ReplyDelivery) => void): Promise<ReplyDelivery> {
@@ -693,6 +699,10 @@ function terminalGatewayDriver(driver: GatewayTerminalDriver): BrowserGatewayDri
         beforeIndex = oldestIndex;
       }
       return { items: rows, exhausted };
+    },
+    prepareReplyDraft: (input) => {
+      if (!driver.prepareReplyDraft) throw new GatewayError("UNSUPPORTED", "此連線不支援回文計數", false);
+      return driver.prepareReplyDraft(input);
     },
     sendReplyDraft: (input, onProgress) => {
       if (!driver.sendReplyDraft) throw new GatewayError("REPLY_DRAFT_NOT_SENT", "此連線不支援自動分段", false);

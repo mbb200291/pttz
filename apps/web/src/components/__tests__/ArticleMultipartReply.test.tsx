@@ -7,7 +7,10 @@ import userEvent from "@testing-library/user-event";
 import { Article } from "../Article";
 
 const mocks = vi.hoisted(() => ({ send: vi.fn(), legacy: vi.fn(), reload: vi.fn() }));
-vi.mock("../../hooks/usePttActions", () => ({ usePttActions: () => ({ isLoggedIn: true, sendReplyDraft: mocks.send, replyToArticle: mocks.legacy }) }));
+vi.mock("../../hooks/usePttActions", () => {
+  const prepareReplyDraft = async () => ({ ok: true, value: { plan: () => ({ ok: true, value: { total: 2, capacity: 55 } }) } });
+  return { usePttActions: () => ({ isLoggedIn: true, prepareReplyDraft, sendReplyDraft: mocks.send, replyToArticle: mocks.legacy }) };
+});
 vi.mock("../../hooks/useArticle", () => ({ useArticle: () => ({ article: null, partialArticle: null, cachedArticle: null, loading: false, reloading: false, error: null, reload: mocks.reload }) }));
 const article = { title: "[測試] 分段", author: "op", date: "09/17", board: "Test", body: "正文", articleNotes: [], revisions: [], score: 0, pushes: [] };
 const draft = "很長的回文".repeat(40);

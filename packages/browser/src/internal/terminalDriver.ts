@@ -2,8 +2,8 @@ import Ptt from "./streamingPtt.js";
 import { setTerminalProtocol, terminalProtocol, type TerminalProtocol } from "./terminalProtocol.js";
 import { editorSaveKey } from "./editorPrompt.js";
 import { replaceEditorBody } from "./articleEditor.js";
-import { readPushConfirmation, ReplyDraftQueue, replyPreparationError } from "./multipartReply.js";
-import type { GatewayReplyDraftInput, ReplyDelivery } from "@pttzzz/core";
+import { readPushConfirmation, ReplyDraftQueue, replyPreparationError, createReplyDraftPlanner } from "./multipartReply.js";
+import type { GatewayReplyDraftInput, ReplyDelivery, GatewayPrepareReplyDraftInput, ReplyDraftPlanner } from "@pttzzz/core";
 import { articleTerminalLine, type TerminalLine } from "./terminalLine.js";
 import { formatEditorBody } from "./articleFormatting.js";
 import { ArticleSessionTracker } from "./articleSession.js";
@@ -240,6 +240,7 @@ export interface TerminalDriver {
   readonly usesMutableArticleIndexes?: boolean;
   readArticleAidAtIndex?(board: string, index: number): Promise<string | undefined>;
   sendReplyDraft?(input: GatewayReplyDraftInput, onProgress?: (progress: ReplyDelivery) => void): Promise<ReplyDelivery>;
+  prepareReplyDraft?(input: GatewayPrepareReplyDraftInput): Promise<ReplyDraftPlanner>;
   send: (data: string) => Promise<boolean>;
   login: (
     username: string,
@@ -739,6 +740,7 @@ class PttClientTerminalDriver implements TerminalDriver {
   };
   private articleSessionRawText?: string;
   private articleSessionEpoch = 0;
+  private replyPlanGeneration = 0;
   private status: ConnectionStatus = "connecting";
   private lastScreen = "";
   private readonly statusListeners = new Set<
@@ -1337,6 +1339,33 @@ class PttClientTerminalDriver implements TerminalDriver {
     return this.replyToArticle(`撤回我對${floor}樓的${direction}`, "neutral", boardName);
   }
 
+  async prepareReplyDraft(input: GatewayPrepareReplyDraftInput): Promise<ReplyDraftPlanner> {
+    input = { ...input, article: { ...input.article } };
+    return this.runSerial(async () => {
+      const generation = ++this.replyPlanGeneration;
+      try { await this.waitUntilLoggedIn(); }
+      catch (cause) { throw replyPreparationError({ kind: "connection" }, "PTT unavailable", cause); }
+      const epoch = this.articleSessionEpoch;
+      const acquired = await this.acquireArticleContext(this.resolveReplyArticleKey(input.article), epoch);
+      if (!acquired.ok) throw replyPreparationError({ kind: "article-unavailable" }, "Article unavailable");
+      const valid = () => this.articleSessionEpoch === epoch && this.replyPlanGeneration === generation;
+      const separator = this.pushFormat === "local" ? "" : " ";
+      const layout = await measurePushCapacity(this.bot, valid, separator);
+      return createReplyDraftPlanner(layout, input.floor, separator, valid);
+    });
+  }
+
+  private resolveReplyArticleKey(key: ArticleKey): ArticleKey {
+    if (key.index === undefined) return key;
+    const relative = `${key.board.toLowerCase()}:${key.index}`;
+    const aid = this.articleAidByRelativeIndex.get(relative);
+    if (aid) return { board: key.board, aid };
+    if (this.unresolvedRelativeArticleIndexes.has(relative)) {
+      throw replyPreparationError({ kind: "article-unavailable" }, "請重新載入文章後再試");
+    }
+    return key;
+  }
+
   async sendReplyDraft(input: GatewayReplyDraftInput, onProgress?: (progress: ReplyDelivery) => void): Promise<ReplyDelivery> {
     input = { ...input, article: { ...input.article } };
     return this.runSerial(async () => {
@@ -1346,12 +1375,7 @@ class PttClientTerminalDriver implements TerminalDriver {
       const delivery = await this.replyDrafts.run(input, async () => {
         try { await this.waitUntilLoggedIn(); }
         catch (cause) { throw replyPreparationError({ kind: "connection" }, "PTT login or connection unavailable", cause); }
-        if (key.index !== undefined && !this.replyDraftTargets.has(input.operationId)) {
-          const relative = `${key.board.toLowerCase()}:${key.index}`;
-          const aid = this.articleAidByRelativeIndex.get(relative);
-          if (aid) key = { board: key.board, aid };
-          else if (this.unresolvedRelativeArticleIndexes.has(relative)) throw replyPreparationError({ kind: "article-unavailable" }, "請重新載入文章後再試");
-        }
+        if (!this.replyDraftTargets.has(input.operationId)) key = this.resolveReplyArticleKey(key);
         epoch = this.articleSessionEpoch;
         const acquired = await this.acquireArticleContext(key, epoch);
         if (!acquired.ok) throw replyPreparationError({ kind: "article-unavailable" }, "無法開啟文章");

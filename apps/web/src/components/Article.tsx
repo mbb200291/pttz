@@ -6,6 +6,8 @@
 
 import { useEffect, useLayoutEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useArticle } from "../hooks/useArticle";
+import { useReplyDraftPlanner } from "../hooks/useReplyDraftPlanner";
+import { MAX_REPLY_FRAGMENTS } from "../lib/replyBudget";
 import { replyFailureGuidance } from "../lib/replyFailureGuidance";
 import { PushThread } from "./PushThread";
 import { ArticleRevisions } from "./ArticleRevisions";
@@ -314,6 +316,8 @@ export function Article({
     ? { board: boardName, aid: articleAid }
     : { board: boardName, index: articleIndex }, [articleAid, articleIndex, boardName]);
   const { isLoggedIn } = actions;
+  const replyPlan = useReplyDraftPlanner(composer && composer.mode !== "edit-push" && !replyDelivery
+    ? { article: articleKey, ...(composer.replyId ? { replyId: composer.replyId } : {}) } : null, actions.prepareReplyDraft);
   const isArticleAuthor = Boolean(
     article && currentUser &&
     samePttId(article.author, currentUser),
@@ -587,6 +591,7 @@ export function Article({
           if (previous && previous.delivery.status !== "paused") return;
           const input: ReplyDraftInput = previous?.input ?? {
             operationId: crypto.randomUUID(),
+            maxFragments: MAX_REPLY_FRAGMENTS,
             article: articleKey,
             content: payload.body,
             pushType: composer.mode === "reply-push" || isArticleAuthor ? "neutral" : payload.pushType,
@@ -602,6 +607,7 @@ export function Article({
             if (!result.ok) {
               const last = replyDrafts.current.get(key)!.delivery;
               if (result.error.outcome === "not-sent" && last.confirmed === 0) {
+                replyPlan.retry();
                 replyDrafts.current.delete(key);
                 setReplyDelivery(undefined);
                 const guidance = replyFailureGuidance(result.error.replyIssue);
@@ -699,7 +705,7 @@ export function Article({
         setComposerSubmitting(false);
       }
     })();
-  }, [actions, articleKey, clearWriteLocks, composer, composerFingerprint, isArticleAuthor, liveReload, lockedComposerFingerprints]);
+  }, [actions, articleKey, clearWriteLocks, composer, composerFingerprint, isArticleAuthor, liveReload, lockedComposerFingerprints, replyPlan]);
 
   const initialArticle =
     initialArticleSummary && !articleAid
@@ -1040,6 +1046,8 @@ export function Article({
           neutralOnly={isArticleAuthor && composer.mode === "reply"}
           submitting={composerSubmitting}
           multipartEnabled={Boolean(actions.sendReplyDraft) && composer.mode !== "edit-push"}
+          plannerState={replyPlan.state}
+          onRetryPlan={replyPlan.retry}
           delivery={composer.mode !== "edit-push" ? replyDelivery : undefined}
           contentLocked={composer.mode !== "edit-push" && Boolean(replyDelivery)}
           onRefresh={() => { void liveReload().catch(() => {}); }}

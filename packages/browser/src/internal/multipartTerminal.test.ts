@@ -110,6 +110,7 @@ it.each([
   let rows = board;
   let content = "";
   let input = false;
+  let measuredCapacity = separator ? 55 : 56;
   const bot = {
     state: { connect: true, login: true },
     _state: { connect: true, login: true, position: { boardname: "Test" } },
@@ -124,14 +125,34 @@ it.each([
       else if (command === "y\r") { if (published) writes.push(content); rows = board; }
       else if (input && command.endsWith("\r")) {
         if (command !== "\r") content = command.slice(0, -1);
-        rows = [`→ alice:${separator}${content.padEnd(separator ? 56 : 57)} 確定[y/N]:`];
+        rows = [`→ alice:${separator}${content.padEnd(measuredCapacity + 1)} 確定[y/N]:`];
         input = false;
       }
       else if (input) { content = command; rows = [`→ alice:${separator}${content}`]; }
       return true;
     },
   };
-  const result = await createTerminalDriverForTesting(bot, pushFormat).sendReplyDraft({
+  const driver = createTerminalDriverForTesting(bot, pushFormat);
+  const pendingA = driver.prepareReplyDraft({ article: { board: "Test", index: 360 } });
+  const pendingB = driver.prepareReplyDraft({ article: { board: "Test", index: 360 } });
+  const overlapping = await Promise.all([pendingA, pendingB]);
+  expect(overlapping[0].plan("old")).toMatchObject({ ok: false });
+  expect(overlapping[1].plan("new")).toMatchObject({ ok: true });
+  const prepared = await driver.prepareReplyDraft({ article: { board: "Test", index: 360 } });
+  expect(prepared.plan("a".repeat(70))).toMatchObject({ ok: true, value: { total: 2, capacity: separator ? 55 : 56 } });
+  expect(actions).not.toContain("y\r");
+  expect(writes).toEqual([]);
+  const replacement = await driver.prepareReplyDraft({ article: { board: "Test", index: 360 }, floor: 1 });
+  expect(prepared.plan("test")).toMatchObject({ ok: false });
+  expect(replacement.plan("test")).toMatchObject({ ok: true, value: { total: 1 } });
+  measuredCapacity = separator ? 33 : 34;
+  await expect(driver.sendReplyDraft({ operationId: "narrow-budget", article: { board: "Test", index: 360 },
+    content: "a".repeat(1100), pushType: "neutral", maxFragments: 30 }))
+    .rejects.toMatchObject({ replyIssue: { kind: "too-many-fragments" } });
+  expect(actions).not.toContain("y\r");
+  expect(writes).toEqual([]);
+  measuredCapacity = separator ? 55 : 56;
+  const result = await driver.sendReplyDraft({
     operationId: "board-return", article: { board: "Test", index: 360 }, content: "a".repeat(70), pushType: "neutral",
   });
   expect(result).toMatchObject(published ? { status: "complete", confirmed: 2 } : { status: "uncertain", confirmed: 0 });

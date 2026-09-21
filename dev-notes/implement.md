@@ -132,6 +132,8 @@ Goal 11 長回文欄寬修正：core 共用容量計算扣除正文固定分隔�
 
 Goal 14 全形縮排修正：長回文分段、終端送出與讀回保留內部全形空白；補原文、指定樓層及多種容量回歸。完整驗證的既有白皮書覆蓋缺口記於 Goal 14 實作筆記，未實站送出。
 
+Goal 14 長回文預算：規則尾標同步為反斜線（規則 0.4.0），與網頁版最多 30 則實體推文分開提交。輸入時依實測容量及共用規劃器顯示剩餘則數；末端連續空白不計入，送出前重新測量並阻擋超限。白皮書不設定產品上限。完整 verify 通過：core 448、browser 467、web 382、代理 21、smoke helpers 11；lint 0 errors／9 既有 warnings。本輪未 PTT 實測；細節見 [Goal 14 實作筆記](goal-14-implementation-notes.md)。
+
 - [Goal 9 architecture design](goal-9-core-architecture-design.md)
 - [Goal 9 implementation plan](goal-9-implementation-plan.md)
 - [Goal 9 implementation notes](goal-9-implementation-notes.md)

@@ -2,6 +2,7 @@ import type { ReplyDraftIssue } from "@pttzzz/core";
 
 export function replyFailureGuidance(issue?: ReplyDraftIssue): { message: string; reload: boolean } {
   switch (issue?.kind) {
+    case "too-many-fragments": return { message: `超出 ${issue.total - issue.maxFragments} 則，請縮短內容後再送出。`, reload: false };
     case "too-long": return { message: `超出 ${issue.excessColumns / 2} 個全形字（${issue.excessColumns} 個半形字），請縮短內容後再送出。上限為 500 個全形字。`, reload: false };
     case "unsupported-characters": return { message: `PTT 不支援 ${issue.characters.slice(0, 8).join("、")}${issue.characters.length > 8 ? "等字元" : ""}，請刪除或替換後再送出。`, reload: false };
     case "connection": return { message: "PTT 連線或登入已失效，請先複製草稿，重新登入後再送出。", reload: false };

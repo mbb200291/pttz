@@ -618,7 +618,7 @@ describe("terminal driver module", () => {
     expect(sent.slice(sent.indexOf("X"))).toEqual(["X"]);
   });
 
-  it("writes to a title-search result by its captured AID instead of its relative index", async () => {
+  it.each(["write", "prepare"])("uses captured AID for title-search result during %s", async operation => {
     const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     const filteredRows = [
@@ -639,13 +639,14 @@ describe("terminal driver module", () => {
       "瀏覽 第 1/1 頁 (100%)",
     ];
     const infoRows = ["文章代碼(AID): #canonicalAid (Test)"];
+    let probing = false;
     let mode: "filtered" | "normal" | "article" | "info" | "push-menu" | "push-input" | "confirm" = "filtered";
     const rows = () => mode === "filtered" ? filteredRows
       : mode === "normal" ? normalRows
         : mode === "info" ? infoRows
           : mode === "push-menu" ? ["1.值得推薦 2.給它噓聲 3.只加註解"]
             : mode === "push-input" ? ["→ TEST_USER:"]
-              : mode === "confirm" ? ["→ TEST_USER: 安全回覆    確定[y/N]:"]
+              : mode === "confirm" ? [probing ? `→ TEST_USER: ${"x".padEnd(52)} 確定[y/N]:` : "→ TEST_USER: 安全回覆    確定[y/N]:"]
                 : articleRows;
     const bot = {
       state: { connect: true, login: true },
@@ -665,6 +666,8 @@ describe("terminal driver module", () => {
         else if (value === "X" && mode === "article") mode = "push-menu";
         else if (value === "3" && mode === "push-menu") mode = "push-input";
         else if (value === "安全回覆\r" && mode === "push-input") mode = "confirm";
+        else if (value === "x\r" && mode === "push-input") { probing = true; mode = "confirm"; }
+        else if (value === "n\r" && mode === "confirm") mode = "article";
         else if (value === "y\r" && mode === "confirm") mode = "article";
         return true;
       },
@@ -676,6 +679,15 @@ describe("terminal driver module", () => {
       () => undefined,
     );
     sent.length = 0;
+    if (operation === "prepare") {
+      const planner = await driver.prepareReplyDraft({ article: { board: "Test", index: 1 } });
+      expect(planner.plan("安全回覆")).toMatchObject({ ok: true, value: { capacity: 51, total: 1 } });
+      expect(sent[0]).toBe("X");
+      expect(sent).not.toContain("1\r\r");
+      expect(sent).not.toContain("y\r");
+      expect(sent).toContain("n\r");
+      return;
+    }
     await expect(driver.executeArticleCommand({
       type: "reply-article",
       article: { board: "Test", index: 1 },
@@ -733,6 +745,9 @@ describe("terminal driver module", () => {
 
     await driver.readArticleSource({ board: "Test", index: 1 }, () => undefined);
     sent.length = 0;
+    await expect(driver.prepareReplyDraft({ article: { board: "Test", index: 1 } }))
+      .rejects.toMatchObject({ replyIssue: { kind: "article-unavailable" } });
+    expect(sent).toEqual([]);
     await expect(driver.executeArticleCommand({
       type: "reply-article",
       article: { board: "Test", index: 1 },

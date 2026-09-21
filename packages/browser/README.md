@@ -2,13 +2,15 @@
 
 Official browser gateway and client factory for `@pttzzz/core`.
 
-The current package version is `0.3.0`, targeting rules `0.3.x`. See
+The current package version is `0.3.0`, targeting rules `0.4.x`. See
 [package.json](./package.json) for dependencies and compatibility declarations.
 These declarations do not establish npm publication status.
 
 ## Automatic reply drafts
 
-Drafts are limited to 1,000 half-width units (500 full-width characters), measured with the PTT UAO codec after outer-whitespace and CRLF normalization. Internal newlines count as one unit. Generated target prefixes and markers do not count toward this limit, but do count toward each packet's capacity. Oversized drafts are rejected without publishing any packet or truncating the draft.
+Drafts use the PTT UAO codec after CRLF and outer-whitespace normalization. Trailing spaces and blank lines are removed before both preview and sending; internal whitespace is preserved. There is no fixed character ceiling. Callers may set `maxFragments` to a positive integer; the transport rejects an over-budget plan before publishing any fragment. Prefixes, markers and blank-line bridges all affect the fragment count.
+
+`PttzzzClient.prepareReplyDraft({ article, replyId? })` returns a `ReplyDraftPlanner`. Its synchronous `plan(content)` uses the same splitter and readback validation as sending. Preparing measures the current terminal capacity and cancels without publishing; unsupported or failed preparation never falls back to an assumed width. Planners expire with terminal navigation/session changes or a replacement preparation. Sending always measures again, so a preview is not a capacity guarantee.
 
 `PttzzzClient.sendReplyDraft` accepts an immutable `operationId`, full text,
 article and optional target reply. The browser measures capacity from a cancelled

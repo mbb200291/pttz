@@ -33,8 +33,21 @@ function driver(overrides: Partial<BrowserGatewayDriver> = {}): BrowserGatewayDr
 }
 
 describe("BrowserPttGateway", () => {
+  it("does not guess a planner when the transport lacks preparation", async () => {
+    const client = new PttzzzClient(new BrowserPttGateway(driver()));
+    expect(await client.prepareReplyDraft({ article: articleByIndex })).toMatchObject({ ok: false, error: { code: "UNSUPPORTED", retryable: false } });
+  });
+  it("passes the caller fragment budget through core and gateway", async () => {
+    const send = vi.fn();
+    const queue = new ReplyDraftQueue();
+    const client = new PttzzzClient(new BrowserPttGateway(driver({ sendReplyDraft: input => queue.run(input,
+      async () => ({ author: "alice", capacity: 55 }), send) })));
+    expect(await client.sendReplyDraft({ operationId: "budget", article: articleByIndex,
+      content: Array(31).fill("短句。").join("\n"), pushType: "neutral", maxFragments: 30 }))
+      .toMatchObject({ ok: false, error: { replyIssue: { kind: "too-many-fragments", total: 31 } } });
+    expect(send).not.toHaveBeenCalled();
+  });
   it.each([
-    { content: "中".repeat(501), failure: undefined, issue: { kind: "too-long", excessColumns: 2 } },
     { content: "😀", failure: undefined, issue: { kind: "unsupported-characters", characters: ["😀"] } },
     { content: "第一行\n 第二行", failure: undefined, issue: { kind: "content-layout", reason: "leading-space" } },
     { content: "abc\tdef", failure: undefined, issue: { kind: "content-layout", reason: "control-characters" } },

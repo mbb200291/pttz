@@ -8,8 +8,10 @@ import type {
   RawArticleSource,
   GatewayReplyDraftInput,
   ReplyDelivery,
+  GatewayPrepareReplyDraftInput,
+  ReplyDraftPlanner,
 } from "@pttzzz/core";
-import { encodedReplyBytes, ReplyDraftQueue } from "./multipartReply.js";
+import { encodedReplyBytes, ReplyDraftQueue, createReplyDraftPlanner } from "./multipartReply.js";
 import type { BrowserGatewayDriver } from "../gateway.js";
 import { formatEditorBody } from "./articleFormatting.js";
 import type {
@@ -355,6 +357,7 @@ export function createLegacyFakePttAdapterForUi() {
 
 export class FakePttAdapter {
   private readonly replyDrafts = new ReplyDraftQueue();
+  private replyPlanGeneration = 0;
   private status: ConnectionStatus = "connected";
   private currentUser: string | null = getFakePttCurrentUser();
   private currentArticle: { boardName: string; articleIndex: number } | null = null;
@@ -368,6 +371,7 @@ export class FakePttAdapter {
   }
 
   async login(username: string): Promise<LoginResult> {
+    this.replyPlanGeneration++;
     this.replyDrafts.invalidate();
     const nextUser = username.trim() || DEFAULT_USER;
     this.currentUser = nextUser;
@@ -655,6 +659,7 @@ export class FakePttAdapter {
   }
 
   async disconnect(): Promise<void> {
+    this.replyPlanGeneration++;
     this.replyDrafts.invalidate();
     this.status = "closed";
     this.emitStatus("closed");
@@ -711,6 +716,15 @@ export class FakePttAdapter {
     const entries = await this.listBoardEntries({ kind: "hot" });
     return entries.flatMap((entry) => entry.kind === "board" &&
       entry.board.name.toLowerCase().startsWith(prefix.toLowerCase()) ? [entry.board] : []);
+  }
+
+  async prepareReplyDraft(input: GatewayPrepareReplyDraftInput): Promise<ReplyDraftPlanner> {
+    const author = this.currentUser;
+    if (!author || !articleForKey(readStore(), input.article)) throw new Error("文章或登入已失效");
+    const generation = ++this.replyPlanGeneration;
+    const article = { ...input.article };
+    return createReplyDraftPlanner({ author, capacity: pushContentCapacity(encodedReplyBytes(author)) }, input.floor, " ",
+      () => this.replyPlanGeneration === generation && this.currentUser === author && this.status !== "closed" && Boolean(articleForKey(readStore(), article)));
   }
 
   async sendReplyDraft(input: GatewayReplyDraftInput, onProgress?: (progress: ReplyDelivery) => void): Promise<ReplyDelivery> {
@@ -854,6 +868,7 @@ function fakeGatewayDriver(adapter: FakePttAdapter): BrowserGatewayDriver {
     subscribeStatus: (listener) => adapter.subscribeStatus(listener),
     readArticleSource: (key, emit, signal) => adapter.readArticleSource(key, emit, signal),
     sendReplyDraft: (input, onProgress) => adapter.sendReplyDraft(input, onProgress),
+    prepareReplyDraft: (input) => adapter.prepareReplyDraft(input),
     listBoards: (source) => adapter.listBoardEntries(source),
     searchBoards: (prefix) => adapter.searchBoardsByPrefix(prefix),
     listArticles: async ({ board, beforeIndex, author, keyword }) => {

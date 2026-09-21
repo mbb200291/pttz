@@ -1,4 +1,4 @@
-import type { ActionReceipt, GatewayReplyDraftInput, ReplyDelivery, ReplyDraftIssue } from "@pttzzz/core";
+import type { ActionReceipt, GatewayReplyDraftInput, ReplyDelivery, ReplyDraftIssue, ReplyDraftPlanner } from "@pttzzz/core";
 import { GatewayError } from "@pttzzz/core";
 import { aggregatePushes, parsePushBuffer, pushContentCapacity, stripAnsi } from "@pttzzz/core/internal";
 // @ts-expect-error uao-js is the transport codec and has no declarations.
@@ -8,15 +8,17 @@ export function replyPreparationError(issue: ReplyDraftIssue, message: string, c
   return new GatewayError("REPLY_DRAFT_NOT_SENT", message, true, cause, issue);
 }
 
+export function normalizeReplyDraft(draft: string): string {
+  return draft.replace(/\r\n/g, "\n").trimStart().trimEnd();
+}
+
 function validateDraft(draft: string): string {
-  const content = draft.replace(/\r\n/g, "\n").trim();
+  const content = normalizeReplyDraft(draft);
   const unsupported = [...new Set(Array.from(content).filter(char => {
     try { return uao.decodeSync(uao.encodeSync(char)) !== char; }
     catch { return true; }
   }))];
   if (unsupported.length) throw replyPreparationError({ kind: "unsupported-characters", characters: unsupported }, "包含 PTT 不支援的字元");
-  const columns = encodedReplyBytes(content);
-  if (columns > 1000) throw replyPreparationError({ kind: "too-long", excessColumns: columns - 1000 }, "回文最多 500 全形字（1,000 半形字），請縮短內容後再送出");
   return content;
 }
 
@@ -130,6 +132,21 @@ export function planReplyDraft(draft: string, capacity: number, floor?: number, 
   return pieces;
 }
 
+export function createReplyDraftPlanner(layout: { capacity: number; author: string }, floor?: number,
+  separator: "" | " " = " ", valid: () => boolean = () => true): ReplyDraftPlanner {
+  return { plan(content) {
+    if (!valid()) return { ok: false, error: { code: "REPLY_PLAN_EXPIRED", message: "請重新計算", retryable: true, outcome: "not-sent", replyIssue: { kind: "capacity" } } };
+    try {
+      const normalized = normalizeReplyDraft(content);
+      const total = normalized ? planReplyDraft(normalized, layout.capacity, floor, layout.author, separator).length : 0;
+      return { ok: true, value: { total, capacity: layout.capacity } };
+    } catch (cause) {
+      return { ok: false, error: { code: "REPLY_PLAN_FAILED", message: "無法計算回文", retryable: true, outcome: "not-sent",
+        replyIssue: cause instanceof GatewayError ? cause.replyIssue : { kind: "content-layout" } } };
+    }
+  } };
+}
+
 type State = { generation: number; signature: string; author: string; capacity: number; pieces: string[]; confirmed: number; status: ReplyDelivery["status"] };
 export class ReplyDraftQueue {
   diagnostic?: Readonly<{ operationId: string; index: number; stage: "send"; message: string }>;
@@ -148,7 +165,8 @@ export class ReplyDraftQueue {
     const generation = this.generation;
     const work = this.serial.then(async () => {
       if (!input.operationId || input.operationId.length > 200) throw new Error("傳送識別碼無效");
-      const signature = JSON.stringify([input.article, input.content, input.pushType, input.floor]);
+      if (input.maxFragments !== undefined && (!Number.isSafeInteger(input.maxFragments) || input.maxFragments < 1)) throw new Error("傳送上限無效");
+      const signature = JSON.stringify([input.article, input.content, input.pushType, input.floor, input.maxFragments]);
       let state = this.states.get(input.operationId);
       if (generation !== this.generation || (state && state.generation !== generation)) throw new Error("登入工作階段已變更，請先確認已送出的內容");
       if (state && state.signature !== signature) throw new Error("已開始發送的回文不可變更");
@@ -162,7 +180,11 @@ export class ReplyDraftQueue {
       if (state && state.author.toLowerCase() !== layout.author.toLowerCase()) throw new Error("登入帳號已變更");
       if (state && state.capacity !== layout.capacity) throw new Error("推文容量已變更，請先確認已送出的內容");
       if (!state) {
-        state = { generation, signature, author: layout.author, capacity: layout.capacity, pieces: planReplyDraft(input.content, layout.capacity, input.floor, layout.author, this.separator), confirmed: 0, status: "paused" };
+        const pieces = planReplyDraft(input.content, layout.capacity, input.floor, layout.author, this.separator);
+        if (input.maxFragments !== undefined && pieces.length > input.maxFragments) {
+          throw replyPreparationError({ kind: "too-many-fragments", total: pieces.length, maxFragments: input.maxFragments }, "回文超出傳送則數上限");
+        }
+        state = { generation, signature, author: layout.author, capacity: layout.capacity, pieces, confirmed: 0, status: "paused" };
         this.states.set(input.operationId, state);
       }
       try { onProgress?.(result()); } catch { /* Observer isolation. */ }

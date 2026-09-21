@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Composer } from "../Composer";
 
@@ -17,8 +17,27 @@ const defaultProps = {
 };
 
 describe("Composer", () => {
+  it("blocks unknown capacity and counts normalized physical pieces as the user types", () => {
+    const onSubmit = vi.fn();
+    const { rerender } = render(<Composer {...defaultProps} onSubmit={onSubmit} multipartEnabled initial={{ body: "短句。" }} />);
+    expect(screen.getByRole("button", { name: "送出" })).toBeDisabled();
+    const plannerState = { status: "ready" as const, planner: { plan: (body: string) => ({ ok: true as const,
+      value: { capacity: 55, total: body.trim() ? body.trim().split("\n").length : 0 } }) } };
+    rerender(<Composer {...defaultProps} onSubmit={onSubmit} multipartEnabled plannerState={plannerState} initial={{ body: "短句。" }} />);
+    expect(screen.getByText("剩餘 29 / 30 則")).toBeInTheDocument();
+    const full = Array(30).fill("短句。").join("\n");
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: full + " \u3000\t\n\n" } });
+    expect(screen.getByText("剩餘 0 / 30 則")).toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toHaveValue(full + " \u3000\t\n\n");
+    expect(screen.getByRole("button", { name: "送出" })).toBeEnabled();
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: full + "\n新增。" } });
+    expect(screen.getByText("超出 1 則")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "送出" }));
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
   it.each(["reply", "reply-push"] as const)("allows long multipart %s drafts", (mode) => {
-    render(<Composer {...defaultProps} mode={mode} multipartEnabled initial={{ body: "文".repeat(100) }} />);
+    render(<Composer {...defaultProps} mode={mode} multipartEnabled initial={{ body: "文".repeat(100) }}
+      plannerState={{ status: "ready", planner: { plan: () => ({ ok: true, value: { total: 4, capacity: 55 } }) } }} />);
     expect(screen.getByRole("button", { name: "送出" })).not.toBeDisabled();
   });
   it("locks all content controls on partial delivery and offers continuation", () => {

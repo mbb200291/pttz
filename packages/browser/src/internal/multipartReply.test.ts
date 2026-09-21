@@ -1,11 +1,63 @@
 import { describe, expect, it, vi } from "vitest";
 import indentedDraft from "./__fixtures__/indented-long-reply.txt?raw";
-import { encodedReplyBytes, planReplyDraft, readPushConfirmation, ReplyDraftQueue } from "./multipartReply.js";
+import { createReplyDraftPlanner, encodedReplyBytes, planReplyDraft, readPushConfirmation, ReplyDraftQueue } from "./multipartReply.js";
 import { aggregatePushes, parsePushBuffer } from "@pttzzz/core/internal";
 
 const input = { operationId: "one", article: { board: "Test", aid: "abc" }, content: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefgh", pushType: "neutral" as const };
 const prepare = async () => ({ capacity: 55, author: "alice" });
 describe("multipart reply", () => {
+  it("previews markers, nested prefixes, blank lines and expiration without publishing", () => {
+    let valid = true;
+    const planner = createReplyDraftPlanner({ author: "alice", capacity: 55 }, 1, " ", () => valid);
+    expect(planner.plan("a".repeat(48))).toMatchObject({ ok: true, value: { total: 2 } });
+    expect(planner.plan("a".repeat(47))).toMatchObject({ ok: true, value: { total: 1 } });
+    expect(planner.plan("one\n\nlast \u3000\t\r\n ")).toMatchObject({ ok: true, value: { total: 3 } });
+    expect(planner.plan(" \u3000\t\r\n ")).toMatchObject({ ok: true, value: { total: 0 } });
+    valid = false;
+    expect(planner.plan("one")).toMatchObject({ ok: false, error: { code: "REPLY_PLAN_EXPIRED" } });
+  });
+  it("remeasures a smaller capacity and rejects before the first write", async () => {
+    const content = "a".repeat(1000);
+    expect(createReplyDraftPlanner({ author: "alice", capacity: 55 }).plan(content))
+      .toMatchObject({ ok: true, value: { total: 19 } });
+    const send = vi.fn();
+    await expect(new ReplyDraftQueue().run({ ...input, content, maxFragments: 30 },
+      async () => ({ author: "alice", capacity: 33 }), send))
+      .rejects.toMatchObject({ replyIssue: { kind: "too-many-fragments", total: 31 } });
+    expect(send).not.toHaveBeenCalled();
+  });
+  it("rejects 31 fragments before publishing any piece", async () => {
+    const send = vi.fn(async () => ({ ok: true as const, outcome: "sent" as const }));
+    await expect(new ReplyDraftQueue().run({ ...input, maxFragments: 30,
+      content: Array(31).fill("短句。").join("\n") }, prepare, send))
+      .rejects.toMatchObject({ replyIssue: { kind: "too-many-fragments", total: 31, maxFragments: 30 } });
+    expect(send).not.toHaveBeenCalled();
+  });
+  it.each([0, -1, 1.5, NaN, Infinity])("rejects invalid maxFragments %s before preparation", async maxFragments => {
+    const setup = vi.fn(prepare), send = vi.fn();
+    await expect(new ReplyDraftQueue().run({ ...input, maxFragments }, setup, send)).rejects.toThrow();
+    expect(setup).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  });
+  it("keeps the fragment policy immutable when resuming a paused operation", async () => {
+    const queue = new ReplyDraftQueue();
+    const send = vi.fn(async () => ({ ok: false as const, code: "BUSY", outcome: "not-sent" as const, retryable: true }));
+    expect(await queue.run({ ...input, maxFragments: 30 }, prepare, send)).toMatchObject({ status: "paused", confirmed: 0 });
+    await expect(queue.run({ ...input, maxFragments: 31, resume: true }, prepare, send)).rejects.toThrow("不可變更");
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+  it("sends over 1000 bytes when the physical fragment budget allows it", async () => {
+    const send = vi.fn(async () => ({ ok: true as const, outcome: "sent" as const }));
+    expect(await new ReplyDraftQueue().run({ ...input, maxFragments: 30, content: "a".repeat(1100) }, prepare, send))
+      .toMatchObject({ status: "complete", total: 21 });
+  });
+  it("allows exactly 30 fragments and ignores trailing whitespace", async () => {
+    const send = vi.fn(async () => ({ ok: true as const, outcome: "sent" as const }));
+    expect(await new ReplyDraftQueue().run({ ...input, maxFragments: 30,
+      content: Array(30).fill("短句。").join("\n") + " \u3000\t\r\n\n " }, prepare, send))
+      .toMatchObject({ status: "complete", total: 30 });
+    expect(send).toHaveBeenCalledTimes(30);
+  });
   it("emits the current backslash stop and preserves literal underscore", () => {
     expect(planReplyDraft("短句", 55)).toEqual(["短句\\"]);
     expect(planReplyDraft("literal_", 55)).toEqual(["literal_\\"]);
@@ -36,8 +88,6 @@ describe("multipart reply", () => {
     expect(readPushConfirmation("→ alice: 　　正文　　                  確定[y/N]:", " ")?.content).toBe("　　正文　　");
   });
   it.each([
-    { content: "中".repeat(501), issue: { kind: "too-long", excessColumns: 2 } },
-    { content: "abc".repeat(334), issue: { kind: "too-long", excessColumns: 2 } },
     { content: "測試😀😀🚀", issue: { kind: "unsupported-characters", characters: ["😀", "🚀"] } },
   ])("reports actionable validation without preparing or writing: $issue.kind", async ({ content, issue }) => {
     const setup = vi.fn(prepare);
@@ -97,7 +147,7 @@ describe("multipart reply", () => {
   it.each(["literal|", "literal||"])("preserves literal intermediate pipes: %s", (content) => {
     expect(planReplyDraft(content + "\nnext", 20)).toEqual([content + "|", "next\\"]);
   });
-  it.each(["a".repeat(1000), "中".repeat(500), "中".repeat(250) + "a".repeat(500)])("THREAD-006.1–3: sends 1000 units excluding generated markers and rejects overflow", async (content) => {
+  it.each(["a".repeat(1000), "中".repeat(500), "中".repeat(250) + "a".repeat(500)])("preserves long normalized drafts without a fixed character ceiling", async (content) => {
     const send = vi.fn().mockResolvedValue({ ok: true, outcome: "sent" });
     const queue = new ReplyDraftQueue();
     const result = await queue.run({ ...input, content: " \r\n" + content + "\r\n " }, prepare, send);
@@ -106,11 +156,11 @@ describe("multipart reply", () => {
       `→ alice: ${content} 01/01 12:00`).join("\n")), "op");
     expect(projected.pushes[0].content).toBe(content);
     send.mockClear();
-    await expect(queue.run({ ...input, operationId: "too-long", content: content + "a" }, prepare, send)).rejects.toThrow("500");
-    expect(send).not.toHaveBeenCalled();
+    expect(await queue.run({ ...input, operationId: "longer", content: content + "a" }, prepare, send)).toMatchObject({ status: "complete" });
+    expect(send).toHaveBeenCalled();
   });
-  it("counts internal newlines and spaces toward the limit", () => {
-    expect(() => planReplyDraft("a".repeat(998) + "\n b", 78)).toThrow("500");
+  it("retains rejection of unsafe internal ASCII indentation", () => {
+    expect(() => planReplyDraft("a".repeat(998) + "\n b", 78)).toThrow("空白");
   });
   it("THREAD-006.2: excludes repeated target prefixes from the draft budget", () => {
     const pieces = planReplyDraft("中".repeat(500), 78, 123);

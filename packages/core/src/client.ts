@@ -1,5 +1,5 @@
 import { articleTextRuns } from "./articleFormatting.js";
-import type { ReplyDraftInput, ReplyDelivery } from "./contracts.js";
+import type { ReplyDraftInput, ReplyDelivery, PrepareReplyDraftInput, ReplyDraftPlanner } from "./contracts.js";
 import {
   GatewayError,
   articleKeyId,
@@ -462,6 +462,20 @@ export class PttzzzClient {
     return this.write({ type: "withdraw-article-vote", ...input });
   }
 
+  async prepareReplyDraft(input: PrepareReplyDraftInput): Promise<Result<ReplyDraftPlanner>> {
+    if (!this.gateway.prepareReplyDraft) return fail({ code: "UNSUPPORTED", message: "此連線不支援回文計數", retryable: false });
+    let floor: number | undefined;
+    if (input.replyId) {
+      const target = this.replyTarget(input.article, input.replyId);
+      if (!target.ok) return target;
+      floor = target.value[0];
+    }
+    try { return ok(await this.gateway.prepareReplyDraft({ article: { ...input.article }, floor })); }
+    catch (cause) { return fail({ code: cause instanceof GatewayError ? cause.code : "REPLY_PLAN_FAILED",
+      message: "無法計算回文", retryable: cause instanceof GatewayError ? cause.retryable : true,
+      replyIssue: cause instanceof GatewayError ? cause.replyIssue : { kind: "capacity" } }); }
+  }
+
   async sendReplyDraft(input: ReplyDraftInput, onProgress?: (progress: ReplyDelivery) => void): Promise<Result<ReplyDelivery>> {
     if (!input.operationId || !input.content.trim()) return fail({ code: "INVALID_INPUT", message: "回文不可為空", outcome: "not-sent", retryable: true });
     if (!this.gateway.sendReplyDraft) return fail({ code: "UNSUPPORTED", message: "此連線不支援自動分段", outcome: "not-sent", retryable: false });
@@ -473,7 +487,8 @@ export class PttzzzClient {
     }
     try {
       return ok(await this.gateway.sendReplyDraft({ operationId: input.operationId, article: { ...input.article },
-        content: input.content, pushType: floor === undefined ? input.pushType : "neutral", floor, resume: input.resume }, onProgress));
+        content: input.content, pushType: floor === undefined ? input.pushType : "neutral", floor, resume: input.resume,
+        maxFragments: input.maxFragments }, onProgress));
     } catch (cause) {
       const notSent = cause instanceof GatewayError && cause.code === "REPLY_DRAFT_NOT_SENT";
       return fail({ code: "REPLY_DRAFT_FAILED", message: cause instanceof Error ? cause.message : "無法確認傳送結果", outcome: notSent ? "not-sent" : "uncertain", retryable: notSent,
