@@ -128,9 +128,9 @@ export function detectArticleVote(content: string): "push" | "boo" | null {
 // 同作者不連續但允許合併的最大時間間隔（分鐘）
 const TIME_GAP_MINUTES = 2;
 const CONTINUATION_MARKER_RE = /\|\s*$/u;
-const STOP_MARKER_RE = /_\s*$/u;
+const STOP_MARKER_RE = /\\\s*$/u;
 // Consume exactly one latest-rule marker; preceding symbols remain literal.
-const MERGE_MARKER_RE = /[|_]\s*$/u;
+const MERGE_MARKER_RE = /[|\\]\s*$/u;
 const END_TERMINATOR_RE = /[。.!?！？;；]$/u;
 
 export interface PushAggregationOptions {
@@ -153,7 +153,7 @@ function hasContinuationMarker(content: string): boolean {
 }
 
 function stripContinuationMarker(content: string): string {
-  return content.replace(MERGE_MARKER_RE, "").trimEnd();
+  return content.replace(MERGE_MARKER_RE, "").replace(/[ \t\r\n]+$/g, "");
 }
 
 function isFullPushLine(push: ParsedRawPush): boolean {
@@ -497,11 +497,11 @@ function groupPushes(
 
 const FLOOR_NUMBER_SOURCE = "[0-9零〇一二兩三四五六七八九十百千萬]+";
 const REPLY_PATTERNS: RegExp[] = [
-  new RegExp(`^\\s*回\\s*(${FLOOR_NUMBER_SOURCE})\\s*樓(?=$|[\\s\\u3000：:])(?:[\\s\\u3000]*[：:]?[\\s\\u3000]*)([\\s\\S]*)$`, "iu"),
-  new RegExp(`^\\s*回\\s*(${FLOOR_NUMBER_SOURCE})\\s*[fF](?=$|[\\s\\u3000：:])(?:[\\s\\u3000]*[：:]?[\\s\\u3000]*)([\\s\\S]*)$`, "iu"),
-  new RegExp(`^\\s*reply\\s+to\\s+(${FLOOR_NUMBER_SOURCE})\\s*[fF](?=$|[\\s\\u3000：:])(?:[\\s\\u3000]*[：:]?[\\s\\u3000]*)([\\s\\S]*)$`, "iu"),
-  new RegExp(`^\\s*to\\s*(${FLOOR_NUMBER_SOURCE})\\s*[fF](?=$|[\\s\\u3000：:])(?:[\\s\\u3000]*[：:]?[\\s\\u3000]*)([\\s\\S]*)$`, "iu"),
-  new RegExp(`^\\s*>>\\s*(${FLOOR_NUMBER_SOURCE})\\s*[fF](?=$|[\\s\\u3000：:])(?:[\\s\\u3000]*[：:]?[\\s\\u3000]*)([\\s\\S]*)$`, "iu"),
+  new RegExp(`^\\s*回\\s*(${FLOOR_NUMBER_SOURCE})\\s*樓(?=$|[\\s\\u3000：:])(?:[ \\t\\u3000]*[：:][ \\t]*|[ \\t\\u3000]*)([\\s\\S]*)$`, "iu"),
+  new RegExp(`^\\s*回\\s*(${FLOOR_NUMBER_SOURCE})\\s*[fF](?=$|[\\s\\u3000：:])(?:[ \\t\\u3000]*[：:][ \\t]*|[ \\t\\u3000]*)([\\s\\S]*)$`, "iu"),
+  new RegExp(`^\\s*reply\\s+to\\s+(${FLOOR_NUMBER_SOURCE})\\s*[fF](?=$|[\\s\\u3000：:])(?:[ \\t\\u3000]*[：:][ \\t]*|[ \\t\\u3000]*)([\\s\\S]*)$`, "iu"),
+  new RegExp(`^\\s*to\\s*(${FLOOR_NUMBER_SOURCE})\\s*[fF](?=$|[\\s\\u3000：:])(?:[ \\t\\u3000]*[：:][ \\t]*|[ \\t\\u3000]*)([\\s\\S]*)$`, "iu"),
+  new RegExp(`^\\s*>>\\s*(${FLOOR_NUMBER_SOURCE})\\s*[fF](?=$|[\\s\\u3000：:])(?:[ \\t\\u3000]*[：:][ \\t]*|[ \\t\\u3000]*)([\\s\\S]*)$`, "iu"),
 ];
 
 interface ReplyInfo {
@@ -517,7 +517,7 @@ function detectReply(content: string): ReplyInfo | null {
     if (targetFloor === null) return null;
     return {
       targetFloor,
-      strippedContent: (m[2] ?? "").trimStart(),
+      strippedContent: (m[2] ?? "").replace(/^[ \t]+/u, ""),
     };
   }
 

@@ -6,7 +6,7 @@
     "articleAuthor": "op",
     "rawPushes": [
       { "type": "neutral", "author": "alice", "content": "前段。|", "time": "01/01 12:00" },
-      { "type": "neutral", "author": "alice", "content": "末段_  ", "time": "01/01 12:01", "remainingContentColumns": 0 },
+      { "type": "neutral", "author": "alice", "content": "末段\\  ", "time": "01/01 12:01", "remainingContentColumns": 0 },
       { "type": "neutral", "author": "alice", "content": "另起", "time": "01/01 12:01" }
     ],
     "expected": {
@@ -23,7 +23,7 @@
     "rules": ["MERGE-004.2", "MERGE-003.4"],
     "articleAuthor": "op",
     "rawPushes": [
-      { "type": "neutral", "author": "alice", "content": "保留一個底線__", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "保留一個底線_\\", "time": "01/01 12:00" },
       { "type": "neutral", "author": "alice", "content": "保留直線|||", "time": "01/01 12:00" },
       { "type": "neutral", "author": "alice", "content": "結束|!", "time": "01/01 12:00" }
     ],
@@ -79,9 +79,9 @@
     "articleAuthor": "op",
     "rawPushes": [
       { "type": "neutral", "author": "alice", "content": "前段。|", "time": "01/01 12:00" },
-      { "type": "neutral", "author": "alice", "content": "末段_  ", "time": "01/01 12:01", "remainingContentColumns": 0 },
-      { "type": "neutral", "author": "alice", "content": "另起_", "time": "01/01 12:01" },
-      { "type": "neutral", "author": "alice", "content": "最後_", "time": "01/01 12:01" }
+      { "type": "neutral", "author": "alice", "content": "末段\\  ", "time": "01/01 12:01", "remainingContentColumns": 0 },
+      { "type": "neutral", "author": "alice", "content": "另起\\", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "最後\\", "time": "01/01 12:01" }
     ],
     "expected": {
       "replies": [

@@ -1,5 +1,5 @@
 import { articleTextRuns } from "@pttzzz/core";
-import type { GatewayReplyDraftInput, ReplyDelivery } from "@pttzzz/core";
+import type { GatewayReplyDraftInput, ReplyDelivery, GatewayPrepareReplyDraftInput, ReplyDraftPlanner } from "@pttzzz/core";
 import {
   GatewayError,
   type ActionReceipt,
@@ -119,7 +119,9 @@ function isDriverArticleBatch(
 
 /** Package-private transport seam. Exported from this module only for tests. */
 export interface BrowserGatewayDriver {
+  captureArticleAnchor?(input: DriverArticleQuery, index: number): Promise<string | undefined>;
   sendReplyDraft?(input: GatewayReplyDraftInput, onProgress?: (progress: ReplyDelivery) => void): Promise<ReplyDelivery>;
+  prepareReplyDraft?(input: GatewayPrepareReplyDraftInput): Promise<ReplyDraftPlanner>;
   connect(): Promise<void>;
   login(username: string, password: string, disconnectExisting: boolean): Promise<{ ok: true } | { ok: false; reason: string }>;
   disconnect(): Promise<void>;
@@ -137,7 +139,7 @@ export interface BrowserGatewayDriver {
 
 type CursorValue =
   | { kind: "page"; signature: string; remaining: readonly unknown[]; layout?: "directory" }
-  | { kind: "article-page"; signature: string; beforeIndex: number }
+  | { kind: "article-page"; signature: string; beforeIndex: number; anchor?: string }
   | { kind: "category"; route: readonly number[] };
 
 const positiveLimit = (limit?: number): number => {
@@ -346,6 +348,11 @@ export class BrowserPttGateway implements PttGateway {
     }
   }
 
+  async prepareReplyDraft(input: GatewayPrepareReplyDraftInput): Promise<ReplyDraftPlanner> {
+    if (!this.driver.prepareReplyDraft) throw new GatewayError("UNSUPPORTED", "此連線不支援回文計數", false);
+    return this.driver.prepareReplyDraft(input);
+  }
+
   async sendReplyDraft(input: GatewayReplyDraftInput, onProgress?: (progress: ReplyDelivery) => void): Promise<ReplyDelivery> {
     if (!this.driver.sendReplyDraft) throw new GatewayError("REPLY_DRAFT_NOT_SENT", "此連線不支援自動分段", false);
     return this.driver.sendReplyDraft(input, onProgress);
@@ -534,12 +541,23 @@ export class BrowserPttGateway implements PttGateway {
       "articles", mode, input.board, normalizedAuthor ?? null, keyword ?? null, minimumNativeScore ?? null, limit,
     ]);
     let beforeIndex: number | undefined;
+    const query = { board: input.board, ...(author ? { author } : {}), ...(keyword ? { keyword } : {}),
+      ...(minimumNativeScore === undefined ? {} : { minimumNativeScore }) };
     if (input.cursor) {
       const value = this.cursor(input.cursor);
       if (value.kind !== "article-page" || value.signature !== signature) {
         throw new GatewayError("INVALID_CURSOR", "cursor 與此次文章查詢不相容", false);
       }
       beforeIndex = value.beforeIndex;
+      if (value.anchor !== undefined) {
+        let current: string | undefined;
+        try { current = await this.driver.captureArticleAnchor?.(query, beforeIndex); }
+        catch { /* A missing or unverifiable anchor cannot authorize old offsets. */ }
+        if (current !== value.anchor) {
+          this.cursors.delete(input.cursor);
+          throw new GatewayError("STALE_CURSOR", "文章列表已變更", true);
+        }
+      }
     }
     const result = await gatewayCall(() => this.driver.listArticles!({
       board: input.board,
@@ -553,7 +571,7 @@ export class BrowserPttGateway implements PttGateway {
     let exhausted: boolean;
     if (isDriverArticleBatch(result)) {
       rows = result.items;
-      exhausted = result.exhausted;
+      exhausted = result.exhausted && rows.length <= limit;
     } else {
       rows = result;
       exhausted = rows.length <= limit;
@@ -563,6 +581,7 @@ export class BrowserPttGateway implements PttGateway {
     // explicitly so a short terminal window is not mistaken for EOF.
     const selected = rows.slice(0, limit);
     const last = selected[selected.length - 1];
+    const anchor = last && !exhausted ? await this.driver.captureArticleAnchor?.(query, last.index) : undefined;
     return {
       items: selected.map((row) => ({
         key: { board: input.board, index: row.index },
@@ -574,7 +593,7 @@ export class BrowserPttGateway implements PttGateway {
         ...(row.mark === undefined ? {} : { mark: row.mark }),
       })),
       ...(last && !exhausted
-        ? { nextCursor: this.issue({ kind: "article-page", signature, beforeIndex: last.index }) }
+        ? { nextCursor: this.issue({ kind: "article-page", signature, beforeIndex: last.index, ...(anchor !== undefined ? { anchor } : {}) }) }
         : {}),
     };
   }
@@ -592,7 +611,13 @@ function normalizeWrite(result: ActionResult): DriverWriteResult {
 }
 
 function terminalGatewayDriver(driver: GatewayTerminalDriver): BrowserGatewayDriver {
-  return {
+  const transport: BrowserGatewayDriver = {
+    captureArticleAnchor: async (input, index) => {
+      if (!driver.readArticleAidAtIndex || driver.usesMutableArticleIndexes === false) return undefined;
+      // Re-establish this query's list before interpreting a positional index.
+      await transport.listArticles!({ ...input, beforeIndex: index + 1, limit: 1 });
+      return driver.readArticleAidAtIndex(input.board, index);
+    },
     connect: async () => {
       const current = driver.getStatus();
       if (current === "connected") return;
@@ -675,6 +700,10 @@ function terminalGatewayDriver(driver: GatewayTerminalDriver): BrowserGatewayDri
       }
       return { items: rows, exhausted };
     },
+    prepareReplyDraft: (input) => {
+      if (!driver.prepareReplyDraft) throw new GatewayError("UNSUPPORTED", "此連線不支援回文計數", false);
+      return driver.prepareReplyDraft(input);
+    },
     sendReplyDraft: (input, onProgress) => {
       if (!driver.sendReplyDraft) throw new GatewayError("REPLY_DRAFT_NOT_SENT", "此連線不支援自動分段", false);
       return driver.sendReplyDraft(input, onProgress);
@@ -704,13 +733,14 @@ function terminalGatewayDriver(driver: GatewayTerminalDriver): BrowserGatewayDri
       return normalizeWrite(result);
     },
   };
+  return transport;
 }
 
 /** @internal Test seam; not exported from the package root. */
 export const createTerminalGatewayDriverForTesting = terminalGatewayDriver;
 
-export function createBrowserGateway(): PttGateway {
+export function createBrowserGateway(options: { pushFormat?: "local" | "ptt"; terminalProtocol?: "local" | "ptt" } = {}): PttGateway {
   return new BrowserPttGateway(
-    terminalGatewayDriver(createTerminalDriver() as GatewayTerminalDriver),
+    terminalGatewayDriver(createTerminalDriver(options.pushFormat, options.terminalProtocol) as GatewayTerminalDriver),
   );
 }

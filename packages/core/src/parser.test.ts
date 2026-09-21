@@ -15,6 +15,11 @@ describe("stripAnsi", () => {
 });
 
 describe("parsePushLine", () => {
+  it.each(["", " "])("preserves full-width content spacing with separator %j", separator => {
+    const row = `→ alice:${separator}\u3000\u3000正文\u3000\u3000   04/09 10:01`;
+    expect(parsePushLine(row)?.content).toBe("　　正文　　");
+    expect(parsePushBuffer(row)[0]?.content).toBe("　　正文　　");
+  });
   it("parses a standard push row", () => {
     expect(
       parsePushLine("推 user1: 第一則推文                         04/09 10:01"),
@@ -92,6 +97,17 @@ describe("splitArticleEditableContent", () => {
 });
 
 describe("parsePushBuffer", () => {
+  it("measures local pushes without a space after the colon", () => {
+    const pushes = parsePushBuffer(
+      `→ pttzzz2:${"a".repeat(54)} 09/20 10:43\n→ pttzzz2:x 09/20 10:44`,
+    );
+
+    expect(pushes.map((push) => ({ content: push.content, remaining: push.remainingContentColumns }))).toEqual([
+      { content: "a".repeat(54), remaining: 0 },
+      { content: "x", remaining: 53 },
+    ]);
+  });
+
   it("removes IPv4 addresses from push content and keeps them as metadata", () => {
     const pushes = parsePushBuffer(
       "推 user1: 第一則推文                         111.22.33.44 04/09 10:01",

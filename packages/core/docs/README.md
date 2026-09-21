@@ -1,6 +1,6 @@
 # @pttzzz/core
 
-目前套件版本為 `0.3.0`，宣告支援規則 `0.3.x`。版本資訊以 [package.json](../package.json) 為準；這些資訊不代表套件已發布至 npm。使用本核心建立其他介面，請參閱英文 [UI 開發指南](./DEVELOPMENT_GUIDE.md)；替本核心實作 gateway，請參閱 [gateway 契約](./contracts.md#gateway-author-contract)。
+目前套件版本為 `0.3.0`，宣告支援規則 `0.4.x`。版本資訊以 [package.json](../package.json) 為準；這些資訊不代表套件已發布至 npm。使用本核心建立其他介面，請參閱英文 [UI 開發指南](./DEVELOPMENT_GUIDE.md)；替本核心實作 gateway，請參閱 [gateway 契約](./contracts.md#gateway-author-contract)。
 
 pttzzz 將規則、實作與呈現分成三層，使同一套 PTT 討論語意可以由不同連線方式與使用者介面重複使用。
 

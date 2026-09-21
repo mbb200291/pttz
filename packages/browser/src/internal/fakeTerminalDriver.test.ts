@@ -9,6 +9,26 @@ import { BrowserPttGateway } from "../gateway.js";
 import { PttzzzClient } from "@pttzzz/core";
 
 describe("fake PTT adapter", () => {
+  it("prepares and sends the same normalized nested plan through the public API", async () => {
+    const client = new PttzzzClient(new BrowserPttGateway(createFakeTerminalDriver()));
+    await client.login({ username: "david", password: "fake" });
+    const article = { board: "test", index: 1001 };
+    const before = await client.getArticle({ article });
+    const replyId = before.ok ? before.value.replies[0].replyId : "";
+    const prepared = await client.prepareReplyDraft({ article, replyId });
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) throw new Error("preparation failed");
+    const content = "第一段。\n\n　　第二段。";
+    const draft = content + " \u3000\t\r\n\n ";
+    expect(prepared.value.plan(draft)).toMatchObject({ ok: true, value: { total: 3 } });
+    expect(await client.sendReplyDraft({ operationId: "prepared", article, replyId, content: draft, pushType: "neutral", maxFragments: 30 }))
+      .toMatchObject({ ok: true, value: { total: 3, confirmed: 3, status: "complete" } });
+    const after = await client.getArticle({ article });
+    const flatten = (replies: readonly import("@pttzzz/core").Reply[]): import("@pttzzz/core").Reply[] => replies.flatMap(r => [r, ...flatten(r.children)]);
+    expect(after.ok && flatten(after.value.replies).find(r => r.author === "david")?.content).toBe(content);
+    await client.disconnect();
+    expect(prepared.value.plan(draft)).toMatchObject({ ok: false });
+  });
   it("sends a multipart nested draft and reads it through the real client as one reply", async () => {
     const client = new PttzzzClient(new BrowserPttGateway(createFakeTerminalDriver()));
     await client.login({ username: "david", password: "fake" });

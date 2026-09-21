@@ -146,9 +146,18 @@ function appendCoreArticles(
   previous: ArticleSummary[],
   incoming: readonly ArticleSummary[],
 ): ArticleSummary[] {
+  if (hasReassignedIndexes(previous, incoming)) return sortCoreArticles(incoming);
   const merged = new Map(previous.map((article) => [articleKeyId(article.key), article]));
   for (const article of incoming) merged.set(articleKeyId(article.key), article);
   return sortCoreArticles([...merged.values()]);
+}
+
+function hasReassignedIndexes(previous: readonly ArticleSummary[], incoming: readonly ArticleSummary[]): boolean {
+  const old = new Map(previous.map(article => [articleKeyId(article.key), article]));
+  return incoming.some(article => {
+    const before = old.get(articleKeyId(article.key));
+    return before !== undefined && (before.author !== article.author || before.title !== article.title || before.publishedAt !== article.publishedAt);
+  });
 }
 
 function sortCoreArticles(articles: readonly ArticleSummary[]): ArticleSummary[] {
@@ -172,6 +181,7 @@ function refreshCoreArticles(
   previous: ArticleSummary[],
   incoming: readonly ArticleSummary[],
 ): ArticleSummary[] {
+  if (hasReassignedIndexes(previous, incoming)) return sortCoreArticles(incoming);
   const incomingIds = new Set(incoming.map((article) => articleKeyId(article.key)));
   const incomingIndexes = incoming.flatMap((article) =>
     !article.pinned && typeof article.key.index === "number" ? [article.key.index] : []
@@ -221,7 +231,7 @@ export function useBoard(
         request = client.listArticles({ board: boardName, cursor });
       }
       return request.then((result) => {
-        if (!result.ok) throw new Error(result.error.message);
+        if (!result.ok) throw Object.assign(new Error(result.error.message), { code: result.error.code });
         if (requestGeneration === queryGenerationRef.current) {
           nextCursorRef.current = result.value.nextCursor;
         }
@@ -331,8 +341,17 @@ export function useBoard(
     setError(null);
     const requestGeneration = queryGenerationRef.current;
     fetchArticles(true, requestGeneration)
-      .then((next) => {
+      .then(async (next) => {
         if (!mountedRef.current || requestGeneration !== queryGenerationRef.current) return;
+        if (hasReassignedIndexes(articles, next)) {
+          const latest = sortCoreArticles(await fetchArticles(false, requestGeneration));
+          if (!mountedRef.current || requestGeneration !== queryGenerationRef.current) return;
+          setArticles(latest);
+          if (filter) writeFilteredBoardCache(boardName, filter, latest);
+          else writeBoardCache(boardName, latest);
+          setHasMore(Boolean(nextCursorRef.current));
+          return;
+        }
         if (next.length === 0) {
           setHasMore(false);
           return;
@@ -348,8 +367,19 @@ export function useBoard(
         });
         setHasMore(Boolean(nextCursorRef.current));
       })
-      .catch((err: unknown) => {
+      .catch(async (err: unknown) => {
         if (!mountedRef.current || requestGeneration !== queryGenerationRef.current) return;
+        if (err instanceof Error && "code" in err && err.code === "STALE_CURSOR") {
+          try {
+            const latest = sortCoreArticles(await fetchArticles(false, requestGeneration));
+            if (!mountedRef.current || requestGeneration !== queryGenerationRef.current) return;
+            setArticles(latest);
+            if (filter) writeFilteredBoardCache(boardName, filter, latest);
+            else writeBoardCache(boardName, latest);
+            setHasMore(Boolean(nextCursorRef.current));
+            return;
+          } catch (reloadError) { err = reloadError; }
+        }
         setError(err instanceof Error ? err.message : "無法載入更多文章");
       })
       .finally(() => {

@@ -36,6 +36,8 @@ describe("LoginModal", () => {
     expect(html).not.toContain("中斷其他連線");
     expect(html).not.toContain("預設保留其他已登入的 PTT 連線");
     expect(html).not.toContain('type="checkbox"');
+    expect(html).toContain("帳號密碼會傳到");
+    expect(html).not.toContain("不會上傳任何伺服器");
   });
 
   it("uses the tokenized login dialog surface from the design", async () => {

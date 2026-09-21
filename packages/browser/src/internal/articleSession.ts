@@ -30,7 +30,7 @@ function normalizeTitle(value: string): string {
 }
 
 function normalizeAid(value: string): string {
-  return normalizeCaseInsensitive(value).replace(/^#/u, "");
+  return value.trim().replace(/^#/u, "");
 }
 
 function normalizeKey(key: ArticleKey): ArticleKey {

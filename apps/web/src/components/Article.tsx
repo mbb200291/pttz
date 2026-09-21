@@ -6,6 +6,9 @@
 
 import { useEffect, useLayoutEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useArticle } from "../hooks/useArticle";
+import { useReplyDraftPlanner } from "../hooks/useReplyDraftPlanner";
+import { MAX_REPLY_FRAGMENTS } from "../lib/replyBudget";
+import { replyFailureGuidance } from "../lib/replyFailureGuidance";
 import { PushThread } from "./PushThread";
 import { ArticleRevisions } from "./ArticleRevisions";
 import { RichContent } from "./RichContent";
@@ -297,6 +300,8 @@ export function Article({
   const [composerSubmitting, setComposerSubmitting] = useState(false);
   const composerSubmittingRef = useRef(false);
   const [composerSubmitError, setComposerSubmitError] = useState<string | null>(null);
+  const [composerCanReload, setComposerCanReload] = useState(false);
+  const [composerRecovering, setComposerRecovering] = useState(false);
   // Receipts outlive the modal, but intentionally remain local to this reader.
   const replyDrafts = useRef(new Map<string, { input: ReplyDraftInput; delivery: ReplyDelivery }>());
   const [replyDelivery, setReplyDelivery] = useState<ReplyDelivery>();
@@ -311,6 +316,8 @@ export function Article({
     ? { board: boardName, aid: articleAid }
     : { board: boardName, index: articleIndex }, [articleAid, articleIndex, boardName]);
   const { isLoggedIn } = actions;
+  const replyPlan = useReplyDraftPlanner(composer && composer.mode !== "edit-push" && !replyDelivery
+    ? { article: articleKey, ...(composer.replyId ? { replyId: composer.replyId } : {}) } : null, actions.prepareReplyDraft);
   const isArticleAuthor = Boolean(
     article && currentUser &&
     samePttId(article.author, currentUser),
@@ -574,6 +581,7 @@ export function Article({
     composerSubmittingRef.current = true;
     setComposerSubmitting(true);
     setComposerSubmitError(null);
+    setComposerCanReload(false);
 
     void (async () => {
       try {
@@ -583,6 +591,7 @@ export function Article({
           if (previous && previous.delivery.status !== "paused") return;
           const input: ReplyDraftInput = previous?.input ?? {
             operationId: crypto.randomUUID(),
+            maxFragments: MAX_REPLY_FRAGMENTS,
             article: articleKey,
             content: payload.body,
             pushType: composer.mode === "reply-push" || isArticleAuthor ? "neutral" : payload.pushType,
@@ -598,9 +607,12 @@ export function Article({
             if (!result.ok) {
               const last = replyDrafts.current.get(key)!.delivery;
               if (result.error.outcome === "not-sent" && last.confirmed === 0) {
+                replyPlan.retry();
                 replyDrafts.current.delete(key);
                 setReplyDelivery(undefined);
-                setComposerSubmitError("尚未送出，請檢查內容後再試");
+                const guidance = replyFailureGuidance(result.error.replyIssue);
+                setComposerSubmitError(guidance.message);
+                setComposerCanReload(guidance.reload);
               } else {
                 saveProgress({ ...last, status: result.error.outcome === "not-sent" ? "paused" : "uncertain" });
                 if (result.error.outcome !== "not-sent") void liveReload().catch(() => {});
@@ -693,7 +705,7 @@ export function Article({
         setComposerSubmitting(false);
       }
     })();
-  }, [actions, articleKey, clearWriteLocks, composer, composerFingerprint, isArticleAuthor, liveReload, lockedComposerFingerprints]);
+  }, [actions, articleKey, clearWriteLocks, composer, composerFingerprint, isArticleAuthor, liveReload, lockedComposerFingerprints, replyPlan]);
 
   const initialArticle =
     initialArticleSummary && !articleAid
@@ -1034,11 +1046,25 @@ export function Article({
           neutralOnly={isArticleAuthor && composer.mode === "reply"}
           submitting={composerSubmitting}
           multipartEnabled={Boolean(actions.sendReplyDraft) && composer.mode !== "edit-push"}
+          plannerState={replyPlan.state}
+          onRetryPlan={replyPlan.retry}
           delivery={composer.mode !== "edit-push" ? replyDelivery : undefined}
           contentLocked={composer.mode !== "edit-push" && Boolean(replyDelivery)}
           onRefresh={() => { void liveReload().catch(() => {}); }}
           isSubmitLocked={(payload) => lockedComposerFingerprints.has(composerFingerprint(payload))}
           submitError={composerSubmitError}
+          recovering={composerRecovering}
+          onRecoverSubmit={composerCanReload && composer.mode !== "edit-push" ? async () => {
+            if (composerSubmittingRef.current) return;
+            composerSubmittingRef.current = true;
+            setComposerSubmitting(true);
+            setComposerRecovering(true);
+            try {
+              const loaded = await liveReload();
+              setComposerSubmitError(loaded ? null : "文章尚未載入，請稍後再試。");
+            } catch { setComposerSubmitError("文章載入失敗，請確認連線後再試。"); }
+            finally { composerSubmittingRef.current = false; setComposerSubmitting(false); setComposerRecovering(false); }
+          } : undefined}
           onClose={handleComposerClose}
           onSubmit={handleComposerSubmit}
         />

@@ -16,16 +16,16 @@ describe("three-layer version compatibility", () => {
     const browser = readJson("../../browser/package.json");
     const web = readJson("../../../apps/web/package.json");
 
-    expect(whitepaper).toContain("> 規則版本：0.3.0");
-    expect(fixtures).toMatchObject({ specVersion: "0.3.0" });
-    expect(core).toMatchObject({ version: "0.3.0", pttzzz: { rules: "0.3.x" } });
+    expect(whitepaper).toContain("> 規則版本：0.4.0");
+    expect(fixtures).toMatchObject({ specVersion: "0.4.0" });
+    expect(core).toMatchObject({ version: "0.3.0", pttzzz: { rules: "0.4.x" } });
     expect(browser).toMatchObject({
       version: "0.3.0",
-      pttzzz: { core: "^0.3.0", rules: "0.3.x" },
+      pttzzz: { core: "^0.3.0", rules: "0.4.x" },
     });
     expect(web).toMatchObject({
       version: "0.3.0",
-      pttzzz: { browser: "^0.3.0", core: "^0.3.0", rules: "0.3.x" },
+      pttzzz: { browser: "^0.3.0", core: "^0.3.0", rules: "0.4.x" },
     });
   });
 });

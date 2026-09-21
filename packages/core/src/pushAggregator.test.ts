@@ -13,12 +13,19 @@ import type { ArticleEditRecord, OpEditedReplySegment, RawPush } from "./parser.
 
 const OP = "opUser";
 
+it("uses backslash to stop aggregation but keeps underscore as ordinary text", () => {
+  expect(aggregatePushes([push("alice", "第一則\\"), push("alice", "第二則。")], OP)
+    .pushes.map(p => p.content)).toEqual(["第一則", "第二則。"]);
+  expect(aggregatePushes([push("alice", "first_"), push("alice", "next。")], OP)
+    .pushes.map(p => p.content)).toEqual(["first_\nnext。"]);
+});
+
 describe("opaque replacement marker suffixes", () => {
   it.each(["_", "|", "||", "|!"])("preserves literal %s in a single-fragment replacement", (suffix) => {
     const thread = aggregatePushes([
-      push("alice", "original_"),
+      push("alice", "original\\"),
       push("alice", `更正我在1樓發言：literal${suffix}`),
-      push("alice", "next_"),
+      push("alice", "next\\"),
     ], OP);
     expect(thread.pushes.map((item) => item.content)).toEqual([`literal${suffix}`, "next"]);
     expect(thread.pushes[0].editHistory?.at(-1)?.resultContent).toBe(`literal${suffix}`);
@@ -27,7 +34,7 @@ describe("opaque replacement marker suffixes", () => {
   it("keeps replacement suffixes opaque across merged fragments and later append", () => {
     const thread = aggregatePushes([
       { ...push("alice", "first|"), remainingContentColumns: 0 },
-      push("alice", "second_"),
+      push("alice", "second\\"),
       push("alice", "更正我在1樓發言：changed_"),
       push("alice", "更正我在2樓發言：tail|"),
       push("alice", "補充我在1樓發言：append_"),
@@ -41,7 +48,7 @@ describe("opaque replacement marker suffixes", () => {
 
   it("applies section offsets against the complete literal replacement payload", () => {
     const thread = aggregatePushes([
-      push("alice", "original_"),
+      push("alice", "original\\"),
       push("alice", "更正我在1樓發言：abc_|"),
       push("alice", "更正我在1樓發言：^3:5=XY"),
     ], OP);
@@ -64,17 +71,17 @@ describe("aggregation profile and explicit stop marker", () => {
     expect(aggregatePushes(input, OP, [], [], { nonconsecutiveGapMinutes: 3 }).pushes).toHaveLength(minutes <= 3 ? 2 : 3);
   });
 
-  it.each([false, true])("strips _ and stops forward merge after attaching backward (full=%s)", (full) => {
-    const input = [push("alice", "first。|"), { ...push("alice", "last_  "), isFullWidthLine: full }, push("alice", "separate")];
+  it.each([false, true])("strips backslash and stops forward merge after attaching backward (full=%s)", (full) => {
+    const input = [push("alice", "first。|"), { ...push("alice", "last\\  "), isFullWidthLine: full }, push("alice", "separate")];
     expect(aggregatePushes(input, OP).pushes.map((p) => p.content)).toEqual(["first。\nlast", "separate"]);
   });
 
   it.each([
     ["text。|", "text。", 1], ["text。||", "text。|", 1],
-    ["text_", "text", 2], ["text|!", "text|!", 2],
-    ["text|||", "text||", 1], ["text__", "text_", 2],
-    ["text_|", "text_", 1], ["text|_", "text|", 2],
-    ["text|!_", "text|!", 2], ["text_|!", "text_|!", 2],
+    ["text\\", "text", 2], ["text|!", "text|!", 2],
+    ["text|||", "text||", 1], ["text\\\\", "text\\", 2],
+    ["text_|", "text_", 1], ["text|\\", "text|", 2],
+    ["text|!\\", "text|!", 2], ["text_|!", "text_|!", 2],
   ])("consumes exactly one latest-rule suffix from %s", (content, visible, count) => {
     const result = aggregatePushes([push("alice", `${content}  `), push("alice", "next")], OP).pushes;
     expect(result).toHaveLength(count);

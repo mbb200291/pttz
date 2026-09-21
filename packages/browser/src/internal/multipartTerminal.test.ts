@@ -1,7 +1,42 @@
 import { expect, it, vi } from "vitest";
 import { createTerminalDriverForTesting, measurePushCapacity, submitPushFromCurrentArticle } from "./terminalDriver.js";
 
-function terminal(cancelRows?: string[]) {
+it.each(["中".repeat(27), "　　段落　　", "回1樓：　　段落　　"])("preserves the complete fragment through echo, confirmation and send: %s", async content => {
+  const article = ["作者 alice 看板 Test", "標題 test", "時間 Sun Sep 20 12:00:00 2026", "body", "瀏覽 第 1/1 頁"];
+  let rows = article;
+  const sent: string[] = [];
+  const bot = { getLine: (i: number) => ({ str: rows[i] ?? "" }), send: async (key: string) => {
+    sent.push(key);
+    if (key === "X") rows = [...article, "作者本人, 使用 → 加註方式", "→ alice:"];
+    else if (key === content) rows = [...article, `→ alice:${content} `];
+    else if (key === "\r") rows = [...article, `→ alice:${content}  確定[y/N]:`];
+    else if (key === "y\r") rows = article;
+    return true;
+  } };
+  const result = await submitPushFromCurrentArticle(bot, content, "neutral", undefined,
+    { confirmMs: 20, pollMs: 1 }, () => true, () => true, true);
+  expect(result).toMatchObject({ ok: true, outcome: "sent" });
+  expect(sent).toEqual(["X", content, "\r", "y\r"]);
+});
+
+it("never submits or navigates when a fragment echo is truncated", async () => {
+  const article = ["作者 alice 看板 Test", "標題 test", "時間 Sun Sep 20 12:00:00 2026", "body", "瀏覽 第 1/1 頁"];
+  let rows = article;
+  const sent: string[] = [];
+  const bot = { getLine: (i: number) => ({ str: rows[i] ?? "" }), send: async (key: string) => {
+    sent.push(key);
+    if (key === "X") rows = [...article, "→ alice:"];
+    else if (key === "完整內容") rows = [...article, "→ alice:完整內"];
+    else if (key === "\x03") rows = article;
+    return true;
+  } };
+  const result = await submitPushFromCurrentArticle(bot, "完整內容", "neutral", undefined,
+    { confirmMs: 20, pollMs: 1 }, () => true, () => true, true);
+  expect(result).toMatchObject({ ok: false, outcome: "not-sent", code: "push-input-echo-timeout" });
+  expect(sent).toEqual(["X", "完整內容", "\x03"]);
+});
+
+function terminal(cancelRows?: string[], separator: "" | " " = " ") {
   const article = ["作者  alice 看板 Test", "標題  test", "時間  Thu Sep 17 00:00:00 2026", "───────────────────────────────────────", "body", "瀏覽 第 1/1 頁 (100%) 目前顯示: 第 01~05 行"];
   let rows = article;
   const send = vi.fn(async (value: string) => {
@@ -9,16 +44,30 @@ function terminal(cancelRows?: string[]) {
     else if (value === "3") rows = [...article, "→ alice:"];
     else if (value === "n\r") rows = cancelRows ?? article;
     else if (value === "y\r") rows = article;
-    else if (value.endsWith("\r")) rows = [...article, `→ alice:${value.slice(0, -1).padEnd(53)} 確定[y/N]:`];
+    else if (value.endsWith("\r")) rows = [...article, `→ alice:${separator}${value.slice(0, -1).padEnd(separator ? 53 : 57)} 確定[y/N]:`];
     return true;
   });
   return { send, getLine: (index: number) => ({ str: rows[index] ?? "" }), getLines: async () => rows };
 }
+it("reports a login problem before entering push mode", async () => {
+  const bot = { ...terminal(), state: { connect: true, login: false }, on() { return this; } };
+  const driver = createTerminalDriverForTesting(bot);
+  await expect(driver.sendReplyDraft!({ operationId: "login-expired", article: { board: "Test", index: 1 }, content: "測試", pushType: "neutral" }))
+    .rejects.toMatchObject({ code: "REPLY_DRAFT_NOT_SENT", replyIssue: { kind: "connection" } });
+  expect(bot.send).not.toHaveBeenCalled();
+});
 it("measures capacity only through a cancelled confirmation, never publishing the probe", async () => {
   const bot = terminal();
   await expect(measurePushCapacity(bot)).resolves.toEqual({ capacity: 52, author: "alice" });
   expect(bot.send).toHaveBeenCalledWith("n\r");
   expect(bot.send).not.toHaveBeenCalledWith("y\r");
+});
+it("measures the local no-space prompt without publishing the probe", async () => {
+  const bot = terminal(undefined, "");
+  await expect(measurePushCapacity(bot, () => true, "")).resolves.toEqual({ capacity: 56, author: "alice" });
+  expect(bot.send).toHaveBeenCalledWith("n\r");
+  expect(bot.send).not.toHaveBeenCalledWith("y\r");
+  await expect(measurePushCapacity(terminal(undefined, ""))).rejects.toThrow("無法確認推文容量");
 });
 it("accepts a cancelled probe returning to the same board rather than the reader", async () => {
   const bot = terminal(["【板主:hank2579】 看板《Test》", "[←]離開 [→]閱讀 [Ctrl-P]發表文章", "   編號    日 期 作 者       文 章 標 題", "    360     9/20 alice        □ test article"]);
@@ -48,14 +97,20 @@ it("cancels rather than confirming when the caller rejects changed confirmation 
   expect(bot.send).not.toHaveBeenCalledWith("y\r");
 });
 
-it.each([true, false])("confirms each multipart write by readback after returning to board (published=%s)", async (published) => {
+it.each([
+  { pushFormat: "ptt" as const, separator: " " as const, published: true },
+  { pushFormat: "ptt" as const, separator: " " as const, published: false },
+  { pushFormat: "local" as const, separator: "" as const, published: true },
+  { pushFormat: "local" as const, separator: "" as const, published: false },
+])("confirms $pushFormat multipart writes by readback after returning to board (published=$published)", async ({ pushFormat, separator, published }) => {
   const board = ["看板《Test》", "[←]離開 [→]閱讀 [Ctrl-P]發表文章", "     360    9/20 alice         □ test article"];
   const writes: string[] = [];
   const actions: string[] = [];
-  const article = () => ["作者  alice 看板 Test", "標題  test article", "時間  Thu Sep 17 00:00:00 2026", "───────────────────────────────────────", "body", "--", ...writes.map(content => `→ alice: ${content} 09/20 10:38`), "瀏覽 第 1/1 頁 (100%) 目前顯示: 第 01~10 行"];
+  const article = () => ["作者  alice 看板 Test", "標題  test article", "時間  Thu Sep 17 00:00:00 2026", "───────────────────────────────────────", "body", "--", ...writes.map(content => `→ alice:${separator}${content} 09/20 10:38`), "瀏覽 第 1/1 頁 (100%) 目前顯示: 第 01~10 行"];
   let rows = board;
   let content = "";
   let input = false;
+  let measuredCapacity = separator ? 55 : 56;
   const bot = {
     state: { connect: true, login: true },
     _state: { connect: true, login: true, position: { boardname: "Test" } },
@@ -66,20 +121,41 @@ it.each([true, false])("confirms each multipart write by readback after returnin
       actions.push(command);
       if (command === "360\r\r") rows = article();
       else if (command === "q" || command === "n\r") rows = board;
-      else if (command === "X") { rows = ["→ alice:"]; input = true; }
+      else if (command === "X") { rows = [`→ alice:${separator}`]; input = true; }
       else if (command === "y\r") { if (published) writes.push(content); rows = board; }
       else if (input && command.endsWith("\r")) {
-        content = command.slice(0, -1);
-        rows = [`→ alice:${(" " + content).padEnd(57)} 確定[y/N]:`];
+        if (command !== "\r") content = command.slice(0, -1);
+        rows = [`→ alice:${separator}${content.padEnd(measuredCapacity + 1)} 確定[y/N]:`];
         input = false;
       }
+      else if (input) { content = command; rows = [`→ alice:${separator}${content}`]; }
       return true;
     },
   };
-  const result = await createTerminalDriverForTesting(bot).sendReplyDraft({
+  const driver = createTerminalDriverForTesting(bot, pushFormat);
+  const pendingA = driver.prepareReplyDraft({ article: { board: "Test", index: 360 } });
+  const pendingB = driver.prepareReplyDraft({ article: { board: "Test", index: 360 } });
+  const overlapping = await Promise.all([pendingA, pendingB]);
+  expect(overlapping[0].plan("old")).toMatchObject({ ok: false });
+  expect(overlapping[1].plan("new")).toMatchObject({ ok: true });
+  const prepared = await driver.prepareReplyDraft({ article: { board: "Test", index: 360 } });
+  expect(prepared.plan("a".repeat(70))).toMatchObject({ ok: true, value: { total: 2, capacity: separator ? 55 : 56 } });
+  expect(actions).not.toContain("y\r");
+  expect(writes).toEqual([]);
+  const replacement = await driver.prepareReplyDraft({ article: { board: "Test", index: 360 }, floor: 1 });
+  expect(prepared.plan("test")).toMatchObject({ ok: false });
+  expect(replacement.plan("test")).toMatchObject({ ok: true, value: { total: 1 } });
+  measuredCapacity = separator ? 33 : 34;
+  await expect(driver.sendReplyDraft({ operationId: "narrow-budget", article: { board: "Test", index: 360 },
+    content: "a".repeat(1100), pushType: "neutral", maxFragments: 30 }))
+    .rejects.toMatchObject({ replyIssue: { kind: "too-many-fragments" } });
+  expect(actions).not.toContain("y\r");
+  expect(writes).toEqual([]);
+  measuredCapacity = separator ? 55 : 56;
+  const result = await driver.sendReplyDraft({
     operationId: "board-return", article: { board: "Test", index: 360 }, content: "a".repeat(70), pushType: "neutral",
   });
   expect(result).toMatchObject(published ? { status: "complete", confirmed: 2 } : { status: "uncertain", confirmed: 0 });
-  expect(writes.join("")).toBe(published ? "a".repeat(70) + "_" : "");
+  expect(writes.join("")).toBe(published ? "a".repeat(70) + "\\" : "");
   expect(actions.filter(command => command === "y\r")).toHaveLength(published ? 2 : 1);
 });

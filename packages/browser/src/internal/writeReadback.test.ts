@@ -8,6 +8,11 @@ const original = [
 ].join("\n");
 
 describe("verifyPushWriteDelta", () => {
+  it("does not confirm a write whose full-width indentation was lost", () => {
+    const expected = { author: "alice", content: "　　正文　　", pushType: "neutral" as const };
+    expect(verifyPushWriteDelta("", "→ alice: 正文 09/12 10:00", expected)).toBe(false);
+    expect(verifyPushWriteDelta("", "→ alice: 　　正文　　  09/12 10:00", expected)).toBe(true);
+  });
   it("confirms an exact new raw push from the signed-in author", () => {
     const updated = `${original}\n→ MBB200291: 推1樓                                         09/12 10:01`;
 

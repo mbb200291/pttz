@@ -7,12 +7,23 @@ export type Result<T, E = CoreError> =
 
 export type WriteOutcome = "not-sent" | "sent" | "uncertain";
 
+/** Actionable preparation failures; never evidence that a write was delivered. */
+export type ReplyDraftIssue =
+  | { kind: "too-many-fragments"; total: number; maxFragments: number }
+  | { kind: "too-long"; excessColumns: number }
+  | { kind: "unsupported-characters"; characters: readonly string[] }
+  | { kind: "article-unavailable" }
+  | { kind: "connection" }
+  | { kind: "capacity" }
+  | { kind: "content-layout"; reason?: "leading-space" | "control-characters" };
+
 export interface CoreError {
   code: string;
   message: string;
   retryable: boolean;
   outcome?: WriteOutcome;
   cause?: unknown;
+  replyIssue?: ReplyDraftIssue;
 }
 
 /** Expected failure reported by a transport gateway read or lifecycle method. */
@@ -22,6 +33,7 @@ export class GatewayError extends Error {
     message: string,
     readonly retryable: boolean,
     readonly cause?: unknown,
+    readonly replyIssue?: ReplyDraftIssue,
   ) {
     super(message);
     this.name = "GatewayError";
@@ -254,8 +266,12 @@ export interface ReplyToArticleInput { article: ArticleKey; content: string; pus
 export interface ReplyArticleToBoardInput { article: ArticleKey; content: string; formatting?: readonly ArticleTextStyle[] }
 export interface ReplyToReplyInput { article: ArticleKey; replyId: ReplyId; content: string; pushType: PushType }
 /** Immutable draft identity. Reuse only to resume this exact draft. */
-export interface ReplyDraftInput extends ReplyToArticleInput { operationId: string; replyId?: ReplyId; resume?: boolean }
-export interface GatewayReplyDraftInput extends ReplyToArticleInput { operationId: string; floor?: number; resume?: boolean }
+export interface ReplyDraftInput extends ReplyToArticleInput { operationId: string; replyId?: ReplyId; resume?: boolean; maxFragments?: number }
+export interface GatewayReplyDraftInput extends ReplyToArticleInput { operationId: string; floor?: number; resume?: boolean; maxFragments?: number }
+export interface ReplyDraftEstimate { total: number; capacity: number }
+export interface ReplyDraftPlanner { plan(content: string): Result<ReplyDraftEstimate> }
+export interface PrepareReplyDraftInput { article: ArticleKey; replyId?: ReplyId }
+export interface GatewayPrepareReplyDraftInput { article: ArticleKey; floor?: number }
 export interface ReplyDelivery {
   operationId: string;
   status: "complete" | "paused" | "uncertain";
@@ -334,6 +350,7 @@ export interface PttGateway {
   execute(command: PttCommand): Promise<ActionReceipt>;
   /** Optional transport capability; old gateways retain their single-push API. */
   sendReplyDraft?(input: GatewayReplyDraftInput, onProgress?: (progress: ReplyDelivery) => void): Promise<ReplyDelivery>;
+  prepareReplyDraft?(input: GatewayPrepareReplyDraftInput): Promise<ReplyDraftPlanner>;
   subscribe(listener: (event: GatewayEvent) => void): Unsubscribe;
 }
 

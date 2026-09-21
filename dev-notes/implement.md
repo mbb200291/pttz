@@ -1,5 +1,11 @@
 # pttzzz 實作概況
 
+回文失敗指引：送出前的字數超限、不支援字元、連線及文章狀態問題以可選 `replyIssue` 傳至 UI；保留草稿並提供具體修正方式或唯讀重新載入，不自動重送。
+
+Goal 14 第二階段已實作串流接收、儲存提示分類、分段回顯確認、正文限定編輯與明確 AID 導覽。本機可變編號採 AID 分頁錨點；失效時重新載入列表。本機六段長回文讀回逐字一致，跨頁編輯保留回文；正式站以既有快照回歸，未實站寫入。詳見 [第二階段實作筆記](goal-14-implementation-notes.md#第二階段串流與操作相容性)。
+
+Goal 14 本機環境：Vite `/ptt-ws` 代理支援 loopback Telnet 與正式 PTT WebSocket，以 `dev:local`／`dev:ptt` 切換；`dev` 依設定選擇、預設本機，失敗不轉正式站。帳密僅保存於忽略提交的根目錄 `.env.local`。推文確認與分段依目標採本機無空格、正式站一格空白的格式，讀回解析依原文判斷；代理與格式回歸測試納入 `npm test`。詳見[使用設定](../apps/web/docs/local-ptt.md)與[實作紀錄](goal-14-implementation-notes.md)。
+
 Goal 11 長回文：規則 0.3.0 使用 `|`／`_`、非連續兩分鐘，保留舊 `||`／`|!` 讀取相容。browser 從取消的確認畫面量測容量，以 UAO 編碼規劃並由真正核心預驗證，再逐段核對確認畫面與送達證據；續送只從未送片段開始，unknown 不重送。Web 輸入整份草稿並保留目前文章窗格的進度。編輯內容與原始尾標解析分離，避免字面符號被移除。詳見 [長文設計](goal-11-multipart-reply-design.md)、[規則對齊計畫](goal-11-multipart-rules-update-plan.md) 與 [實作紀錄](goal-11-multipart-reply-implementation-notes.md)。
 
 Goal 11 可驗證文章工作階段：browser 完整讀文後可私下保留經 key、作者、標題與終端 snapshot 核對的文章畫面；推文型命令驗證成功便直接重用，否則沿用既有定位／重開／AID 與身分檢查。搜尋結果的相對編號必須先取得 canonical AID 才可寫入；連線版本在正文與確認前後持續核對，送出後無法證明回到同篇文章時回傳 `uncertain`。session 狀態不進入 `@pttzzz/core` 公開契約。
@@ -123,6 +129,10 @@ Goal 11 後續：Web 文章統計合併為核心校正票數操作列；首頁�
 Goal 11 分頁完整性：browser 較舊頁導航改為等待可觀察進展，停滯是可重試錯誤而非列表終點；browser-private article batch 明確回報 `exhausted`。Web 合併後一律依置頂與文章索引排序，暫時載入錯誤保留游標並提供重試。PTT 列表日期只有月日，UI 以索引呈現權威順序，不推測年份；完整限制見 core contracts 與 [Goal 11 實作紀錄](goal-11-implementation-notes.md)。
 
 Goal 11 長回文欄寬修正：core 共用容量計算扣除正文固定分隔空白；browser 以實測容量核對讀回格式，送出前經實體文字解析與聚合逐字驗證，避免 sender 自填剩餘欄數掩蓋 receiver 差異。實錄七段回文納入離線回歸；本輪未重新連線 PTT。
+
+Goal 14 全形縮排修正：長回文分段、終端送出與讀回保留內部全形空白；補原文、指定樓層及多種容量回歸。完整驗證的既有白皮書覆蓋缺口記於 Goal 14 實作筆記，未實站送出。
+
+Goal 14 長回文預算：規則尾標同步為反斜線（規則 0.4.0），與網頁版最多 30 則實體推文分開提交。輸入時依實測容量及共用規劃器顯示剩餘則數；末端連續空白不計入，送出前重新測量並阻擋超限。白皮書不設定產品上限。完整 verify 通過：core 448、browser 467、web 382、代理 21、smoke helpers 11；lint 0 errors／9 既有 warnings。本輪未 PTT 實測；細節見 [Goal 14 實作筆記](goal-14-implementation-notes.md)。
 
 - [Goal 9 architecture design](goal-9-core-architecture-design.md)
 - [Goal 9 implementation plan](goal-9-implementation-plan.md)

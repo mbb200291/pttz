@@ -10,6 +10,9 @@ import { uploadToImgur } from "../lib/imgur";
 import { approximatePttBytes } from "../lib/ptt/pttBytes";
 import { replyEditDifference } from "../lib/replyEditDifference";
 import type { ReplyDelivery } from "@pttzzz/core";
+import type { DraftPlannerState } from "../hooks/useReplyDraftPlanner";
+import { MAX_REPLY_FRAGMENTS } from "../lib/replyBudget";
+import { replyFailureGuidance } from "../lib/replyFailureGuidance";
 
 export type ComposerMode = "reply" | "reply-push" | "edit-push";
 export type EditPushMode = "補充" | "更正" | "區段" | "撤回";
@@ -47,9 +50,13 @@ export function Composer({
   isSubmitLocked,
   submitError = null,
   multipartEnabled = false,
+  plannerState,
+  onRetryPlan,
   contentLocked = false,
   delivery,
   onRefresh,
+  onRecoverSubmit,
+  recovering = false,
   onClose,
   onSubmit,
 }: {
@@ -61,9 +68,13 @@ export function Composer({
   isSubmitLocked?: (payload: ComposerPayload) => boolean;
   submitError?: string | null;
   multipartEnabled?: boolean;
+  plannerState?: DraftPlannerState;
+  onRetryPlan?: () => void;
   contentLocked?: boolean;
   delivery?: ReplyDelivery;
   onRefresh?: () => void;
+  onRecoverSubmit?: () => void;
+  recovering?: boolean;
   onClose: () => void;
   onSubmit: (payload: ComposerPayload) => void;
 }): JSX.Element {
@@ -80,6 +91,10 @@ export function Composer({
   const [symbolGroup, setSymbolGroup] = useState(0);
   const editingLocked = submitting || contentLocked;
   const multipart = multipartEnabled && mode !== "edit-push";
+  const estimate = multipart && plannerState?.status === "ready" ? plannerState.planner.plan(body) : undefined;
+  const plannedTotal = estimate?.ok ? estimate.value.total : undefined;
+  const resuming = Boolean(delivery && delivery.total > 0 && delivery.status === "paused");
+  const budgetBlocked = multipart && !resuming && (plannedTotal === undefined || plannedTotal > MAX_REPLY_FRAGMENTS);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -136,6 +151,7 @@ export function Composer({
   const remaining = MAX_BYTES - (mode === "edit-push" && editMode === "撤回" ? 0 : approximatePttBytes(submittedContent));
   const isSubmitDisabled =
     submitting ||
+    budgetBlocked ||
     uploading ||
     delivery?.status === "uncertain" ||
     delivery?.status === "complete" ||
@@ -319,13 +335,24 @@ export function Composer({
         </div>
 
         {/* Upload error */}
+        {multipart && !delivery && <div className="min-h-6 text-xs text-gray-400" aria-live="polite">
+          {plannedTotal !== undefined
+            ? plannedTotal > MAX_REPLY_FRAGMENTS ? `超出 ${plannedTotal - MAX_REPLY_FRAGMENTS} 則` : `剩餘 ${MAX_REPLY_FRAGMENTS - plannedTotal} / ${MAX_REPLY_FRAGMENTS} 則`
+            : plannerState?.status === "error" || estimate?.ok === false
+              ? <>{plannerState?.status === "error" && plannerState.error.code === "UNSUPPORTED" ? "此連線不支援回文計數"
+                : estimate?.ok === false && estimate.error.code !== "REPLY_PLAN_EXPIRED"
+                ? replyFailureGuidance(estimate.error.replyIssue).message : "未能計算"}
+                {onRetryPlan && (plannerState?.status !== "error" || plannerState.error.retryable) && <button type="button" onClick={onRetryPlan} className="ml-3 text-sky-400">重新計算</button>}</>
+              : "計算中…"}
+        </div>}
         {uploadError && (
           <p className="text-red-400 text-xs">{uploadError}</p>
         )}
         {submitError && (
-          <p role="alert" className="text-red-400 text-xs">
-            {submitError}
-          </p>
+          <div className="text-xs">
+            <p role="alert" className="text-red-400">{submitError}</p>
+            {onRecoverSubmit && <button type="button" disabled={submitting} onClick={onRecoverSubmit} className="min-h-12 text-sky-400 disabled:opacity-50">{recovering ? "載入中…" : "重新載入文章"}</button>}
+          </div>
         )}
 
         {/* Footer */}
@@ -374,7 +401,7 @@ export function Composer({
             disabled={isSubmitDisabled}
             className="px-6 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium text-white transition-colors"
           >
-            {submitting ? "送出中…" : delivery?.status === "paused" ? "繼續送出" : "送出"}
+            {submitting && !recovering ? "送出中…" : delivery?.status === "paused" ? "繼續送出" : "送出"}
           </button>
         </div>
       </div>

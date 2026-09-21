@@ -5,13 +5,13 @@
   "pttzzz": {
     "browser": "^0.3.0",
     "core": "^0.3.0",
-    "rules": "0.3.x"
+    "rules": "0.4.x"
   },
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "test": "vitest run src",
+    "test": "vitest run src && vitest run --config vitest.dev.config.ts",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -2,7 +2,7 @@
   "name": "@pttzzz/core",
   "version": "0.3.0",
   "pttzzz": {
-    "rules": "0.3.x"
+    "rules": "0.4.x"
   },
   "description": "PTTzzz platform-neutral client, contracts, and reply aggregation core",
   "license": "MIT",

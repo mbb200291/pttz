@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createRequire } from "node:module";
 import { describe, expect, it, vi } from "vitest";
+import { editableTerminal } from "./__testHelpers__/editableTerminal.js";
 
 function readRealPttFixture(name: string): string {
   const local = resolve(process.cwd(), "src/internal/__fixtures__/real-ptt/2026-08-31_2026-09-01", name);
@@ -65,6 +66,27 @@ function buildBoardLine(params: {
 }
 
 describe("terminal driver module", () => {
+  it("confirms an echoed category number before waiting for the title", async () => {
+    const mod = await import("./terminalDriver.js");
+    const menu = "種類：1.問題 2.建議 3.討論 (1-3或不選)";
+    let rows = ["看板《Test》", buildBoardLine({ index: 1, date: "9/20", author: "alice", title: "old" })];
+    let titleEntered = false;
+    const bot = { getLine: (i: number) => ({ str: rows[i] ?? "" }),
+      state: { connect: true, login: true }, on() { return this; },
+      send: async (key: string) => {
+        if (key === "\x10") rows = [menu];
+        else if (key === "3") rows = [menu + "3"];
+        else if (key === "\r" && rows[0] === menu + "3") rows = ["標題:"];
+        else if (key === "title\r" && rows[0] === "標題:") { titleEntered = true; rows = ["文章編輯 Ctrl-X 插入模式"]; }
+        else if (key === "\x18") rows = ["[S]儲存 (A)放棄 (E)繼續"];
+        else if (key === "s\r") rows = ["文章已發表"];
+        return true;
+      },
+    };
+    const result = await mod.createTerminalDriverForTesting(bot).postArticle("Test", "討論", "title", "body");
+    expect(result).toMatchObject({ ok: true, outcome: "sent" });
+    expect(titleEntered).toBe(true);
+  });
   it.each(["edit", "reply"] as const)("rejects formatted whitespace before %s navigation", async (kind) => {
     const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
@@ -596,7 +618,7 @@ describe("terminal driver module", () => {
     expect(sent.slice(sent.indexOf("X"))).toEqual(["X"]);
   });
 
-  it("writes to a title-search result by its captured AID instead of its relative index", async () => {
+  it.each(["write", "prepare"])("uses captured AID for title-search result during %s", async operation => {
     const mod = await import("./terminalDriver.js");
     const sent: string[] = [];
     const filteredRows = [
@@ -617,13 +639,14 @@ describe("terminal driver module", () => {
       "瀏覽 第 1/1 頁 (100%)",
     ];
     const infoRows = ["文章代碼(AID): #canonicalAid (Test)"];
+    let probing = false;
     let mode: "filtered" | "normal" | "article" | "info" | "push-menu" | "push-input" | "confirm" = "filtered";
     const rows = () => mode === "filtered" ? filteredRows
       : mode === "normal" ? normalRows
         : mode === "info" ? infoRows
           : mode === "push-menu" ? ["1.值得推薦 2.給它噓聲 3.只加註解"]
             : mode === "push-input" ? ["→ TEST_USER:"]
-              : mode === "confirm" ? ["→ TEST_USER: 安全回覆    確定[y/N]:"]
+              : mode === "confirm" ? [probing ? `→ TEST_USER: ${"x".padEnd(52)} 確定[y/N]:` : "→ TEST_USER: 安全回覆    確定[y/N]:"]
                 : articleRows;
     const bot = {
       state: { connect: true, login: true },
@@ -643,6 +666,8 @@ describe("terminal driver module", () => {
         else if (value === "X" && mode === "article") mode = "push-menu";
         else if (value === "3" && mode === "push-menu") mode = "push-input";
         else if (value === "安全回覆\r" && mode === "push-input") mode = "confirm";
+        else if (value === "x\r" && mode === "push-input") { probing = true; mode = "confirm"; }
+        else if (value === "n\r" && mode === "confirm") mode = "article";
         else if (value === "y\r" && mode === "confirm") mode = "article";
         return true;
       },
@@ -654,6 +679,15 @@ describe("terminal driver module", () => {
       () => undefined,
     );
     sent.length = 0;
+    if (operation === "prepare") {
+      const planner = await driver.prepareReplyDraft({ article: { board: "Test", index: 1 } });
+      expect(planner.plan("安全回覆")).toMatchObject({ ok: true, value: { capacity: 51, total: 1 } });
+      expect(sent[0]).toBe("X");
+      expect(sent).not.toContain("1\r\r");
+      expect(sent).not.toContain("y\r");
+      expect(sent).toContain("n\r");
+      return;
+    }
     await expect(driver.executeArticleCommand({
       type: "reply-article",
       article: { board: "Test", index: 1 },
@@ -711,6 +745,9 @@ describe("terminal driver module", () => {
 
     await driver.readArticleSource({ board: "Test", index: 1 }, () => undefined);
     sent.length = 0;
+    await expect(driver.prepareReplyDraft({ article: { board: "Test", index: 1 } }))
+      .rejects.toMatchObject({ replyIssue: { kind: "article-unavailable" } });
+    expect(sent).toEqual([]);
     await expect(driver.executeArticleCommand({
       type: "reply-article",
       article: { board: "Test", index: 1 },
@@ -1300,7 +1337,7 @@ describe("terminal driver module", () => {
         else if (command === "3") { rows = ["→ TEST_USER:"]; input = true; }
         else if (command === "y\r") rows = articleRows;
         else if (input && command.endsWith("\r")) {
-          rows = [`→ TEST_USER:${command.slice(0, -1).padEnd(53)} 確定[y/N]:`];
+          rows = [`→ TEST_USER: ${command.slice(0, -1).padEnd(53)} 確定[y/N]:`];
           input = false;
         }
         return true;
@@ -1316,6 +1353,14 @@ describe("terminal driver module", () => {
     expect(sent.indexOf("42\r\r")).toBeGreaterThanOrEqual(0);
     expect(sent.indexOf("X")).toBeGreaterThan(sent.indexOf("42\r\r"));
     expect(sent.filter((command) => command === "y\r")).toHaveLength(1);
+  });
+
+  it("does not reuse an official-site terminal for the local push format", async () => {
+    const mod = await import("./terminalDriver.js");
+    const official = mod.createTerminalDriver("ptt");
+    const local = mod.createTerminalDriver("local");
+    expect(local).not.toBe(official);
+    expect(mod.createTerminalDriver("local")).toBe(local);
   });
 
   it("invalidates an exact-snapshot mismatch and uses the existing locate-and-reopen checks", async () => {
@@ -5081,6 +5126,43 @@ describe("terminal driver module", () => {
     ]);
   });
 
+  it("does not guess an extra Enter from a stale board during AID navigation", async () => {
+    const mod = await import("./terminalDriver.js");
+    const board = ["看板《Test》", "[←]離開 [→]閱讀 [Ctrl-P]發表文章", buildBoardLine({ index: 1, date: "9/20", author: "alice", title: "test" })];
+    const article = ["作者 alice 看板 Test", "標題 test", "時間 Sun Sep 20 12:00:00 2026", "───────────────────────────────────────", "body", "瀏覽 第 1/1 頁 (100%) 目前顯示: 第 01~05 行"];
+    let rows = board;
+    let selected = false;
+    const sent: string[] = [];
+    const bot = {
+      getLine: (i: number) => ({ str: rows[i] ?? "" }),
+      getLines: async () => rows,
+      send: async (key: string) => {
+        sent.push(key);
+        if (key === "#1ghuYNTC\r") selected = true;
+        else if (key === "\r" && selected) rows = article;
+        else if (key === "q") rows = board;
+        return true;
+      },
+    };
+    expect(await mod.fetchArticleByAidFromBotManually(bot, "Test", "1ghuYNTC")).toBeNull();
+    expect(sent).not.toContain("\r");
+  });
+
+  it("does not reuse Q identity after returning to a board with a same-title article", async () => {
+    const { readOpenedArticleAid } = await import("./terminalDriver.js");
+    const article = ["作者 alice 看板 Test", "標題 test", "時間 Sun Sep 20 12:00:00 2026", "body", "瀏覽 第 1/1 頁"];
+    const board = ["看板《Test》", "[←]離開 [→]閱讀 [Ctrl-P]發表文章", buildBoardLine({ index: 1, date: "9/20", author: "alice", title: "test" })];
+    let rows = article;
+    const bot = { getLine: (i: number) => ({ str: rows[i] ?? "" }), send: async (key: string) => {
+      if (key === "Q") rows = ["文章代碼(AID): #1ghuYNTC (Test)", "請按任意鍵繼續"];
+      else if (key === "q") rows = board;
+      else if (key === "\r") rows = article;
+      return true;
+    } };
+    expect(await readOpenedArticleAid(bot)).toBeNull();
+    expect(rows).toEqual(board);
+  });
+
   it("includes a dev debug dump with raw line and parsed push summaries", async () => {
     const mod = await import("./terminalDriver.js");
 
@@ -5620,6 +5702,7 @@ describe("terminal driver module", () => {
     const mod = await import("./terminalDriver.js");
 
     expect(mod.isArticleEditorScreen("文章編輯  離開[Ctrl-X]  插入模式")).toBe(true);
+    expect(mod.isArticleEditorScreen("編輯文章 (^Z/F1)說明 (^X/^Q)離開 ║插入│aipr║ 1:1")).toBe(true);
     expect(mod.isArticleEditorScreen("文章發表綱領")).toBe(false);
     expect(mod.isArticleEditSavePrompt("確定要儲存檔案嗎? [Y/n]")).toBe(true);
     expect(mod.isArticleDeletePrompt("確定要刪除嗎(Y/N)?")).toBe(true);
@@ -5634,6 +5717,37 @@ describe("terminal driver module", () => {
     ).toBe(false);
   });
 
+  it("refuses destructive body-only edits when the editor includes article headers", async () => {
+    const mod = await import("./terminalDriver.js");
+    const article = ["作者 alice 看板 Test", "標題 test", "時間 Sun Sep 20 12:00:00 2026", "───────────────────────────────────────", "old body", "瀏覽 第 1/1 頁"];
+    const board = ["看板《Test》", buildBoardLine({ index: 1, date: "9/20", author: "alice", title: "test" })];
+    let rows = board;
+    const sent: string[] = [];
+    const bot = { getLine: (i: number) => ({ str: rows[i] ?? "" }), getLines: async () => article,
+      send: async (key: string) => {
+        sent.push(key);
+        if (key === "1\r\r") rows = article;
+        else if (key === "q" || key === "a\r") rows = board;
+        else if (key === "E") rows = [...article.slice(0, -1), "編輯文章 (^X/^Q)離開 ║插入│"];
+        else if (key === "\x18") rows = ["【 檔案處理 】", "[S]儲存 (A)放棄 (E)繼續", "確定要儲存檔案嗎？"];
+        return true;
+      },
+    };
+    const result = await mod.submitArticleEditFromBot(bot, { boardName: "Test", articleIndex: 1, expectedAuthor: "alice", expectedTitle: "test", body: "replacement" });
+    expect(result).toMatchObject({ ok: false, outcome: "not-sent" });
+    expect(sent.some(key => key.includes("\x19") || key.includes("replacement"))).toBe(false);
+    expect(sent).toContain("a\r");
+  });
+
+  it.each([
+    "[S]儲存 (T)改標題 (A)放棄 (E)繼續編輯",
+    "[S/V]儲存 (U)上傳資料 (A)放棄 (E)繼續編輯",
+  ])("recognizes the captured editor save menu: %s", async (menu) => {
+    const mod = await import("./terminalDriver.js");
+    expect(mod.isArticleEditSavePrompt(menu)).toBe(true);
+    expect(mod.isArticleEditSavePrompt(`作者 alice 看板 Test\n標題 示範\n${menu}\n瀏覽 第 1/1 頁`)).toBe(false);
+  });
+
   it("recognizes the captured Test-board delete confirmation", async () => {
     const mod = await import("./terminalDriver.js");
     const fixture = readRealPttFixture("delete.txt");
@@ -5642,9 +5756,13 @@ describe("terminal driver module", () => {
     expect(fixtureSection(fixture, "verified")).toContain("(本文已被刪除) [TEST_USER]");
   });
 
-  it.each([false, true])("edits the expected article without adding a custom summary (formatted=%s)", async (formatted) => {
+  it.each([
+    [false, "確定要儲存檔案嗎? [Y/n]", "y\r"],
+    [true, "確定要儲存檔案嗎? [Y/n]", "y\r"],
+    [false, "[S]儲存 (T)改標題 (A)放棄 (E)繼續編輯", "s\r"],
+    [true, "[S/V]儲存 (U)上傳資料 (A)放棄 (E)繼續編輯", "s\r"],
+  ] as const)("edits the expected article without adding a custom summary (formatted=%s, prompt=%s)", async (formatted, savePrompt, saveKey) => {
     const mod = await import("./terminalDriver.js");
-    const sent: string[] = [];
     const articleRows = [
       "作者 alice 看板 Test",
       "標題 [測試] 原標題",
@@ -5658,37 +5776,8 @@ describe("terminal driver module", () => {
       "※ PTTzzz 編輯摘要：中間修正",
       "※ 編輯: alice, 07/16/2026 10:00:00",
     ];
-    let screenRows = [
-      "看板《Test》",
-      buildBoardLine({ index: 123, author: "alice", title: "[測試] 原標題" }),
-    ];
-
-    const bot = {
-      enterBoardByName: async () => true,
-      getLines: async () => articleRows,
-      getLine: (index: number) => ({ str: screenRows[index] ?? "" }),
-      send: async (command: string) => {
-        sent.push(command);
-        if (command === "123\r\r") screenRows = articleRows;
-        else if (command === "q") {
-          screenRows = [
-            "看板《Test》",
-            buildBoardLine({ index: 123, author: "alice", title: "[測試] 原標題" }),
-          ];
-        } else if (command === "E") {
-          screenRows = ["文章編輯  離開[Ctrl-X]  插入模式"];
-        } else if (command === "\x18") {
-          screenRows = ["確定要儲存檔案嗎? [Y/n]"];
-        } else if (command === "y\r") {
-          screenRows = [
-            "文章已更新",
-            "作者 alice 看板 Test",
-            "標題 [測試] 原標題",
-          ];
-        }
-        return true;
-      },
-    };
+    const bot = editableTerminal(articleRows, savePrompt, saveKey);
+    const { sent } = bot;
 
     const result = await mod.submitArticleEditFromBot(bot, {
       boardName: "Test",
@@ -5703,57 +5792,26 @@ describe("terminal driver module", () => {
     expect(sent).toContain("E");
     expect(sent).toContain(formatted ? "\x15[0;1;31m更新\x15[0m正文\r" : "更新正文\r");
     expect(sent).toContain("\x1b,");
-    expect(sent).toContain("舊簽名\r");
-    expect(sent).toContain("※ PTTzzz 編輯摘要：第一次修正\r");
-    expect(sent.indexOf("※ PTTzzz 編輯摘要：第一次修正\r")).toBeLessThan(
-      sent.indexOf("※ 編輯: alice, 07/15/2026 10:00:00\r"),
-    );
-    expect(sent.indexOf("※ 編輯: alice, 07/15/2026 10:00:00\r")).toBeLessThan(
-      sent.indexOf("※ PTTzzz 編輯摘要：中間修正\r"),
-    );
-    expect(sent.indexOf("※ PTTzzz 編輯摘要：中間修正\r")).toBeLessThan(
-      sent.indexOf("※ 編輯: alice, 07/16/2026 10:00:00\r"),
-    );
-    expect(sent.filter((command) => command === "※ PTTzzz 編輯摘要：第一次修正\r")).toHaveLength(1);
-    expect(sent.filter((command) => command === "※ PTTzzz 編輯摘要：中間修正\r")).toHaveLength(1);
+    expect(bot.file().slice(0, 4)).toEqual(articleRows.slice(0, 4));
+    expect(bot.file().slice(5)).toEqual(articleRows.slice(5));
+    expect(sent).not.toContain("舊簽名\r");
     expect(sent).not.toContain("※ PTTzzz 編輯摘要：第二次修正\r");
-    expect(sent).toContain("y\r");
+    expect(sent).toContain(saveKey);
   });
 
   it("locates and reopens an editable article by AID", async () => {
     const mod = await import("./terminalDriver.js");
-    const sent: string[] = [];
     const articleRows = [
       "作者 alice 看板 Test",
       "標題 [測試] AID 編輯",
       "時間 Thu Jul 16 10:00:00 2026",
       "───────────────────────────────────────",
       "舊正文",
+      "--",
+      "※ 發信站: Test",
     ];
-    let screenRows = ["看板《Test》"];
-    let inInfo = false;
-    const bot = {
-      enterBoardByName: async () => true,
-      getLines: async () => articleRows,
-      getLine: (index: number) => ({ str: screenRows[index] ?? "" }),
-      send: async (command: string) => {
-        sent.push(command);
-        if (command === "#1AbCd\r") screenRows = articleRows;
-        else if (command === "Q") {
-          inInfo = true;
-          screenRows = ["文章代碼(AID): #1AbCd (Test)"];
-        } else if (command === "q" && inInfo) {
-          inInfo = false;
-          screenRows = articleRows;
-        } else if (command === "q") screenRows = ["看板《Test》"];
-        else if (command === "E") screenRows = ["文章編輯  離開[Ctrl-X]  插入模式"];
-        else if (command === "\x18") screenRows = ["確定要儲存檔案嗎? [Y/n]"];
-        else if (command === "y\r") screenRows = [
-          "文章已更新", "作者 alice 看板 Test", "標題 [測試] AID 編輯",
-        ];
-        return true;
-      },
-    };
+    const bot = editableTerminal(articleRows, "確定要儲存檔案嗎? [Y/n]", "y\r");
+    const { sent } = bot;
     await expect(mod.submitArticleEditFromBot(bot, {
       boardName: "Test",
       articleIndex: 0,
@@ -5762,7 +5820,8 @@ describe("terminal driver module", () => {
       expectedTitle: "[測試] AID 編輯",
       body: "新正文",
     })).resolves.toEqual({ ok: true, outcome: "sent" });
-    expect(sent.filter((command) => command === "#1AbCd\r")).toHaveLength(2);
+    expect(sent.filter((command) => command === "#1AbCd\r")).toHaveLength(3);
+    expect(bot.file()[4]).toBe("新正文");
     expect(sent).not.toContain("※ PTTzzz 編輯摘要：AID 修正\r");
   });
 

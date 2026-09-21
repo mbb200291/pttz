@@ -1,12 +1,31 @@
 [
   {
+    "id": "nested-fullwidth-indentation-and-blank-line",
+    "primaryRule": "THREAD-001.3",
+    "rules": ["THREAD-001.3", "MERGE-002.2", "MERGE-003.2"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "root", "content": "目標。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "回1樓：　　首段。|", "time": "01/01 12:00", "remainingContentColumns": 20 },
+      { "type": "neutral", "author": "alice", "content": "回1樓：|", "time": "01/01 12:00", "remainingContentColumns": 30 },
+      { "type": "neutral", "author": "alice", "content": "回1樓：　　末段　　\\", "time": "01/01 12:00", "remainingContentColumns": 20 }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "root", "content": "目標。", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "　　首段。\n\n　　末段　　", "replyToAuthor": "root", "score": 0 }
+      ],
+      "nativeArticleScore": 0, "articlePushVoters": [], "articleBooVoters": []
+    }
+  },
+  {
     "id": "multipart-receive-full-width-packets-preserve-characters",
-    "primaryRule": "THREAD-006.4",
-    "rules": ["THREAD-006.4", "MERGE-002.1"],
+    "primaryRule": "THREAD-006.3",
+    "rules": ["THREAD-006.3", "MERGE-002.1"],
     "articleAuthor": "op",
     "rawPushes": [
       { "type": "neutral", "author": "alice", "content": "這段中文完整保留", "time": "01/01 12:00", "remainingContentColumns": 0 },
-      { "type": "neutral", "author": "alice", "content": "並接續下一段_", "time": "01/01 12:00", "remainingContentColumns": 20 }
+      { "type": "neutral", "author": "alice", "content": "並接續下一段\\", "time": "01/01 12:00", "remainingContentColumns": 20 }
     ],
     "expected": {
       "replies": [
@@ -17,13 +36,13 @@
   },
   {
     "id": "multipart-receive-short-reply-stop-and-existing-punctuation",
-    "primaryRule": "THREAD-006.5",
-    "rules": ["THREAD-006.5", "MERGE-004.1", "MERGE-004.2"],
+    "primaryRule": "THREAD-006.4",
+    "rules": ["THREAD-006.4", "MERGE-004.1", "MERGE-004.2"],
     "articleAuthor": "op",
     "rawPushes": [
-      { "type": "neutral", "author": "alice", "content": "hello_", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "hello\\", "time": "01/01 12:00" },
       { "type": "neutral", "author": "alice", "content": "world。", "time": "01/01 12:00" },
-      { "type": "neutral", "author": "alice", "content": "separate_", "time": "01/01 12:00" }
+      { "type": "neutral", "author": "alice", "content": "separate\\", "time": "01/01 12:00" }
     ],
     "expected": {
       "replies": [
@@ -36,12 +55,12 @@
   },
   {
     "id": "multipart-receive-punctuation-newline-forced-continuation",
-    "primaryRule": "THREAD-006.6",
-    "rules": ["THREAD-006.6", "MERGE-003.1", "MERGE-003.2"],
+    "primaryRule": "THREAD-006.5",
+    "rules": ["THREAD-006.5", "MERGE-003.1", "MERGE-003.2"],
     "articleAuthor": "op",
     "rawPushes": [
       { "type": "neutral", "author": "alice", "content": "hello。|", "time": "01/01 12:00", "remainingContentColumns": 20 },
-      { "type": "neutral", "author": "alice", "content": "world_", "time": "01/01 12:00" }
+      { "type": "neutral", "author": "alice", "content": "world\\", "time": "01/01 12:00" }
     ],
     "expected": {
       "replies": [
@@ -52,15 +71,15 @@
   },
   {
     "id": "multipart-receive-full-line-bridge-blank-line-and-nested-target",
-    "primaryRule": "THREAD-006.7",
-    "rules": ["THREAD-006.7", "MERGE-002.1", "MERGE-002.2", "THREAD-003.2"],
+    "primaryRule": "THREAD-006.6",
+    "rules": ["THREAD-006.6", "MERGE-002.1", "MERGE-002.2", "THREAD-003.2"],
     "articleAuthor": "op",
     "rawPushes": [
       { "type": "neutral", "author": "root", "content": "root。", "time": "01/01 12:00" },
       { "type": "neutral", "author": "alice", "content": "回1樓：滿行正文", "time": "01/01 12:00", "remainingContentColumns": 0 },
       { "type": "neutral", "author": "alice", "content": "回1樓：|", "time": "01/01 12:00", "remainingContentColumns": 50 },
       { "type": "neutral", "author": "alice", "content": "回1樓：|", "time": "01/01 12:00", "remainingContentColumns": 50 },
-      { "type": "neutral", "author": "alice", "content": "回1樓：下一段_", "time": "01/01 12:00", "remainingContentColumns": 40 }
+      { "type": "neutral", "author": "alice", "content": "回1樓：下一段\\", "time": "01/01 12:00", "remainingContentColumns": 40 }
     ],
     "expected": {
       "replies": [
@@ -72,15 +91,15 @@
   },
   {
     "id": "multipart-receive-is-not-atomic-control-and-late-interleaving-split",
-    "primaryRule": "THREAD-006.8",
-    "rules": ["THREAD-006.8", "MERGE-001.3", "MERGE-001.4"],
+    "primaryRule": "THREAD-006.7",
+    "rules": ["THREAD-006.7", "MERGE-001.3", "MERGE-001.4"],
     "articleAuthor": "op",
     "rawPushes": [
       { "type": "neutral", "author": "alice", "content": "前段。|", "time": "01/01 12:00" },
       { "type": "neutral", "author": "alice", "content": "推", "time": "01/01 12:00" },
       { "type": "neutral", "author": "alice", "content": "控制事件後。|", "time": "01/01 12:00" },
       { "type": "neutral", "author": "bob", "content": "插話。", "time": "01/01 12:01" },
-      { "type": "neutral", "author": "alice", "content": "延遲片段_", "time": "01/01 12:03" }
+      { "type": "neutral", "author": "alice", "content": "延遲片段\\", "time": "01/01 12:03" }
     ],
     "expected": {
       "replies": [

@@ -1,10 +1,103 @@
 import { describe, expect, it, vi } from "vitest";
-import { encodedReplyBytes, planReplyDraft, readPushConfirmation, ReplyDraftQueue } from "./multipartReply.js";
+import indentedDraft from "./__fixtures__/indented-long-reply.txt?raw";
+import { createReplyDraftPlanner, encodedReplyBytes, planReplyDraft, readPushConfirmation, ReplyDraftQueue } from "./multipartReply.js";
 import { aggregatePushes, parsePushBuffer } from "@pttzzz/core/internal";
 
 const input = { operationId: "one", article: { board: "Test", aid: "abc" }, content: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefgh", pushType: "neutral" as const };
 const prepare = async () => ({ capacity: 55, author: "alice" });
 describe("multipart reply", () => {
+  it("previews markers, nested prefixes, blank lines and expiration without publishing", () => {
+    let valid = true;
+    const planner = createReplyDraftPlanner({ author: "alice", capacity: 55 }, 1, " ", () => valid);
+    expect(planner.plan("a".repeat(48))).toMatchObject({ ok: true, value: { total: 2 } });
+    expect(planner.plan("a".repeat(47))).toMatchObject({ ok: true, value: { total: 1 } });
+    expect(planner.plan("one\n\nlast \u3000\t\r\n ")).toMatchObject({ ok: true, value: { total: 3 } });
+    expect(planner.plan(" \u3000\t\r\n ")).toMatchObject({ ok: true, value: { total: 0 } });
+    valid = false;
+    expect(planner.plan("one")).toMatchObject({ ok: false, error: { code: "REPLY_PLAN_EXPIRED" } });
+  });
+  it("remeasures a smaller capacity and rejects before the first write", async () => {
+    const content = "a".repeat(1000);
+    expect(createReplyDraftPlanner({ author: "alice", capacity: 55 }).plan(content))
+      .toMatchObject({ ok: true, value: { total: 19 } });
+    const send = vi.fn();
+    await expect(new ReplyDraftQueue().run({ ...input, content, maxFragments: 30 },
+      async () => ({ author: "alice", capacity: 33 }), send))
+      .rejects.toMatchObject({ replyIssue: { kind: "too-many-fragments", total: 31 } });
+    expect(send).not.toHaveBeenCalled();
+  });
+  it("rejects 31 fragments before publishing any piece", async () => {
+    const send = vi.fn(async () => ({ ok: true as const, outcome: "sent" as const }));
+    await expect(new ReplyDraftQueue().run({ ...input, maxFragments: 30,
+      content: Array(31).fill("短句。").join("\n") }, prepare, send))
+      .rejects.toMatchObject({ replyIssue: { kind: "too-many-fragments", total: 31, maxFragments: 30 } });
+    expect(send).not.toHaveBeenCalled();
+  });
+  it.each([0, -1, 1.5, NaN, Infinity])("rejects invalid maxFragments %s before preparation", async maxFragments => {
+    const setup = vi.fn(prepare), send = vi.fn();
+    await expect(new ReplyDraftQueue().run({ ...input, maxFragments }, setup, send)).rejects.toThrow();
+    expect(setup).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  });
+  it("keeps the fragment policy immutable when resuming a paused operation", async () => {
+    const queue = new ReplyDraftQueue();
+    const send = vi.fn(async () => ({ ok: false as const, code: "BUSY", outcome: "not-sent" as const, retryable: true }));
+    expect(await queue.run({ ...input, maxFragments: 30 }, prepare, send)).toMatchObject({ status: "paused", confirmed: 0 });
+    await expect(queue.run({ ...input, maxFragments: 31, resume: true }, prepare, send)).rejects.toThrow("不可變更");
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+  it("sends over 1000 bytes when the physical fragment budget allows it", async () => {
+    const send = vi.fn(async () => ({ ok: true as const, outcome: "sent" as const }));
+    expect(await new ReplyDraftQueue().run({ ...input, maxFragments: 30, content: "a".repeat(1100) }, prepare, send))
+      .toMatchObject({ status: "complete", total: 21 });
+  });
+  it("allows exactly 30 fragments and ignores trailing whitespace", async () => {
+    const send = vi.fn(async () => ({ ok: true as const, outcome: "sent" as const }));
+    expect(await new ReplyDraftQueue().run({ ...input, maxFragments: 30,
+      content: Array(30).fill("短句。").join("\n") + " \u3000\t\r\n\n " }, prepare, send))
+      .toMatchObject({ status: "complete", total: 30 });
+    expect(send).toHaveBeenCalledTimes(30);
+  });
+  it("emits the current backslash stop and preserves literal underscore", () => {
+    expect(planReplyDraft("短句", 55)).toEqual(["短句\\"]);
+    expect(planReplyDraft("literal_", 55)).toEqual(["literal_\\"]);
+    expect(planReplyDraft("literal\\", 55)).toEqual(["literal\\\\"]);
+  });
+  it.each([33, 34, 53, 54].flatMap(capacity => [undefined, 1].map(floor => ({ capacity, floor }))))("round-trips the indented long reply at $capacity columns, target $floor", async ({ capacity, floor }) => {
+    const content = indentedDraft.trim();
+    const separator = capacity % 2 ? " " : "";
+    const queue = new ReplyDraftQueue(separator);
+    const wire: string[] = [];
+    const result = await queue.run({ ...input, content, floor }, async () => ({ author: "pttzzz1", capacity }), async piece => {
+      expect(encodedReplyBytes(piece)).toBeLessThanOrEqual(capacity);
+      const authorField = capacity < 40 ? "pttzzz1     " : "pttzzz1";
+      wire.push(`→ ${authorField}:${separator}${piece} ${capacity < 40 ? "192.0.2.1 " : ""}01/01 12:00`);
+      return { ok: true, outcome: "sent" };
+    });
+    expect(result.status).toBe("complete");
+    const raw = (floor ? "→ target: 目標。 01/01 12:00\n" : "") + wire.join("\n");
+    const replies = aggregatePushes(parsePushBuffer(raw), "op").pushes.filter(p => p.author === "pttzzz1");
+    expect(replies).toHaveLength(1);
+    expect(replies[0].content).toBe(content);
+    if (floor) expect(replies[0].replyTo).not.toBeNull();
+  });
+  it("preserves full-width spaces next to a hidden marker", () => {
+    const content = "開始。\n　　\n　　結束。";
+    expect(() => planReplyDraft(content, 55, 1, "alice")).not.toThrow();
+    expect(readPushConfirmation("→ alice:　　正文　　   確定[y/N]:", " ")?.content).toBeUndefined();
+    expect(readPushConfirmation("→ alice: 　　正文　　                  確定[y/N]:", " ")?.content).toBe("　　正文　　");
+  });
+  it.each([
+    { content: "測試😀😀🚀", issue: { kind: "unsupported-characters", characters: ["😀", "🚀"] } },
+  ])("reports actionable validation without preparing or writing: $issue.kind", async ({ content, issue }) => {
+    const setup = vi.fn(prepare);
+    const send = vi.fn();
+    await expect(new ReplyDraftQueue().run({ ...input, content }, setup, send)).rejects.toMatchObject({
+      code: "REPLY_DRAFT_NOT_SENT", replyIssue: issue,
+    });
+    expect(setup).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  });
   it("rejects an unsupported sender/receiver layout before publishing any fragment", async () => {
     const send = vi.fn().mockResolvedValue({ ok: true, outcome: "sent" });
     await expect(new ReplyDraftQueue().run(input, async () => ({ author: "alice", capacity: 20 }), send)).rejects.toThrow("容量");
@@ -49,12 +142,12 @@ describe("multipart reply", () => {
     ]);
   });
   it("normalizes CRLF and outer whitespace while preserving internal blank lines", () => {
-    expect(planReplyDraft(" \r\nfirst\r\n\r\nlast\r\n ", 20)).toEqual(["first", "|", "last_"]);
+    expect(planReplyDraft(" \r\nfirst\r\n\r\nlast\r\n ", 20)).toEqual(["first", "|", "last\\"]);
   });
   it.each(["literal|", "literal||"])("preserves literal intermediate pipes: %s", (content) => {
-    expect(planReplyDraft(content + "\nnext", 20)).toEqual([content + "|", "next_"]);
+    expect(planReplyDraft(content + "\nnext", 20)).toEqual([content + "|", "next\\"]);
   });
-  it.each(["a".repeat(1000), "中".repeat(500), "中".repeat(250) + "a".repeat(500)])("THREAD-006.1–3: sends 1000 units excluding generated markers and rejects overflow", async (content) => {
+  it.each(["a".repeat(1000), "中".repeat(500), "中".repeat(250) + "a".repeat(500)])("preserves long normalized drafts without a fixed character ceiling", async (content) => {
     const send = vi.fn().mockResolvedValue({ ok: true, outcome: "sent" });
     const queue = new ReplyDraftQueue();
     const result = await queue.run({ ...input, content: " \r\n" + content + "\r\n " }, prepare, send);
@@ -63,11 +156,11 @@ describe("multipart reply", () => {
       `→ alice: ${content} 01/01 12:00`).join("\n")), "op");
     expect(projected.pushes[0].content).toBe(content);
     send.mockClear();
-    await expect(queue.run({ ...input, operationId: "too-long", content: content + "a" }, prepare, send)).rejects.toThrow("500");
-    expect(send).not.toHaveBeenCalled();
+    expect(await queue.run({ ...input, operationId: "longer", content: content + "a" }, prepare, send)).toMatchObject({ status: "complete" });
+    expect(send).toHaveBeenCalled();
   });
-  it("counts internal newlines and spaces toward the limit", () => {
-    expect(() => planReplyDraft("a".repeat(998) + "\n b", 78)).toThrow("500");
+  it("retains rejection of unsafe internal ASCII indentation", () => {
+    expect(() => planReplyDraft("a".repeat(998) + "\n b", 78)).toThrow("空白");
   });
   it("THREAD-006.2: excludes repeated target prefixes from the draft budget", () => {
     const pieces = planReplyDraft("中".repeat(500), 78, 123);
@@ -97,7 +190,7 @@ describe("multipart reply", () => {
       const pieces = planReplyDraft("甲乙♥♡✈abc".repeat(20), capacity, 12);
       expect(pieces.every((piece) => encodedReplyBytes(piece) <= capacity)).toBe(true);
       expect(pieces.every((piece) => !piece.endsWith("||") && !piece.endsWith("|!"))).toBe(true);
-      expect(pieces.at(-1)?.endsWith("_")).toBe(true);
+      expect(pieces.at(-1)?.endsWith("\\")).toBe(true);
     }
   });
   it("serializes duplicate submissions and isolates throwing progress observers", async () => {
@@ -112,6 +205,7 @@ describe("multipart reply", () => {
     const queue = new ReplyDraftQueue();
     const send = vi.fn().mockRejectedValue(new Error("closed"));
     expect(await queue.run(input, prepare, send)).toMatchObject({ confirmed: 0, status: "uncertain" });
+    expect(queue.diagnostic).toMatchObject({ operationId: "one", index: 0, stage: "send", message: "closed" });
     await queue.run(input, prepare, send);
     expect(send).toHaveBeenCalledTimes(1);
   });
@@ -134,6 +228,31 @@ describe("multipart reply", () => {
     expect(readPushConfirmation(`→ MBB200291:${" 短句  測試。".padEnd(46)} 確定[y/N]:`))
       .toMatchObject({ author: "MBB200291", content: "短句  測試。" });
   });
+  it("plans local no-separator replies using the measured 54-column field", () => {
+    const confirmation = readPushConfirmation(`→ pttzzz2:${"x".padEnd(55)} 確定[y/N]:`);
+    expect(confirmation).toEqual({ author: "pttzzz2", content: "x", capacity: 54 });
+    const pieces = planReplyDraft("中".repeat(40), confirmation!.capacity, undefined, confirmation!.author, "");
+    expect(pieces.every((piece) => encodedReplyBytes(piece) <= 54)).toBe(true);
+    const projected = aggregatePushes(parsePushBuffer(pieces.map((piece) =>
+      `→ pttzzz2:${piece} 09/20 10:43`).join("\n")), "op");
+    expect(projected.pushes.map((push) => push.content)).toEqual(["中".repeat(40)]);
+  });
+  it("delivers a local multipart reply and reads it back as one discussion", async () => {
+    const send = vi.fn().mockResolvedValue({ ok: true, outcome: "sent" });
+    const draft = "甲乙".repeat(36);
+    const receipt = await new ReplyDraftQueue("").run(
+      { ...input, operationId: "local", content: draft },
+      async () => ({ author: "pttzzz2", capacity: 54 }),
+      send,
+    );
+    expect(receipt).toMatchObject({ status: "complete", confirmed: 3 });
+    const raw = send.mock.calls.map(([piece]) => `→ pttzzz2:${piece} 09/20 10:43`).join("\n");
+    expect(aggregatePushes(parsePushBuffer(raw), "op").pushes.map((push) => push.content)).toEqual([draft]);
+  });
+  it("rejects the opposite target's confirmation format before sending", () => {
+    expect(readPushConfirmation(`→ pttzzz2:${"x".padEnd(55)} 確定[y/N]:`, " ")).toBeNull();
+    expect(readPushConfirmation(`→ pttzzz2: ${"x".padEnd(54)} 確定[y/N]:`, "")).toBeNull();
+  });
   it("does not plan a full-width character beyond the live field boundary", () => {
     const layout = readPushConfirmation("→ MBB200291: x                                                    確定[y/N]:  ")!;
     const pieces = planReplyDraft("這是一段長回文測試，用來確認中文和English123混合時，接續正文。", layout.capacity);
@@ -141,20 +260,20 @@ describe("multipart reply", () => {
     expect(pieces.every(piece => encodedReplyBytes(piece) <= 51)).toBe(true);
   });
   it("terminates a short reply without adding redundant marks to punctuation", () => {
-    expect(planReplyDraft("hello", 20)).toEqual(["hello_"]);
+    expect(planReplyDraft("hello", 20)).toEqual(["hello\\"]);
     for (const mark of [".", "。", "!", "?", "！", "？", ";", "；"]) {
       expect(planReplyDraft(`hello${mark}`, 20)).toEqual([`hello${mark}`]);
     }
   });
   it("uses minimal continuation markers and closes the last line", () => {
-    expect(planReplyDraft("第一行\n第二行", 20)).toEqual(["第一行", "第二行_"]);
-    expect(planReplyDraft("第一行。\n第二行", 20)).toEqual(["第一行。|", "第二行_"]);
-    expect(planReplyDraft("a".repeat(20) + "\nlast", 20)).toEqual(["a".repeat(20), "|", "last_"]);
-    expect(planReplyDraft("first\n\nlast", 20)).toEqual(["first", "|", "last_"]);
+    expect(planReplyDraft("第一行\n第二行", 20)).toEqual(["第一行", "第二行\\"]);
+    expect(planReplyDraft("第一行。\n第二行", 20)).toEqual(["第一行。|", "第二行\\"]);
+    expect(planReplyDraft("a".repeat(20) + "\nlast", 20)).toEqual(["a".repeat(20), "|", "last\\"]);
+    expect(planReplyDraft("first\n\nlast", 20)).toEqual(["first", "|", "last\\"]);
   });
   it.each(["a".repeat(90), "a".repeat(20), "中♥♡✈".repeat(20), "a".repeat(19) + "\nnext", "first\n\nlast", "句號。\nnext", "literal_", "literal|", "literal|!"])('round-trips %s with the actual aggregator', (content) => {
     const pieces = planReplyDraft(content, 20);
-    expect(pieces.at(-1)).toMatch(/[_!]$/u);
+    expect(pieces.at(-1)).toMatch(/[\\!]$/u);
     const thread = aggregatePushes(pieces.map((content) => ({ author: "alice", content, type: "neutral" as const,
       time: "09/16 23:21", remainingContentColumns: 20 - encodedReplyBytes(content) })), "op");
     expect(thread.pushes).toHaveLength(1);

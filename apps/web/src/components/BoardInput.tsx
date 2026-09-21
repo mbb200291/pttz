@@ -347,7 +347,7 @@ export function BoardInput({
                 background: "oklch(0.72 0.16 155)",
               }}
             />
-            wss://ws.ptt.cc/bbs
+            {import.meta.env.VITE_PTT_CONNECTION_LABEL ?? '正式 PTT（ws.ptt.cc）'}
           </div>
           <h1
             style={{
