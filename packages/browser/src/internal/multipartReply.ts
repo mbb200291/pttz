@@ -1,8 +1,24 @@
-import type { ActionReceipt, GatewayReplyDraftInput, ReplyDelivery } from "@pttzzz/core";
+import type { ActionReceipt, GatewayReplyDraftInput, ReplyDelivery, ReplyDraftIssue } from "@pttzzz/core";
 import { GatewayError } from "@pttzzz/core";
 import { aggregatePushes, parsePushBuffer, pushContentCapacity, stripAnsi } from "@pttzzz/core/internal";
 // @ts-expect-error uao-js is the transport codec and has no declarations.
 import uao from "uao-js";
+
+export function replyPreparationError(issue: ReplyDraftIssue, message: string, cause?: unknown): GatewayError {
+  return new GatewayError("REPLY_DRAFT_NOT_SENT", message, true, cause, issue);
+}
+
+function validateDraft(draft: string): string {
+  const content = draft.replace(/\r\n/g, "\n").trim();
+  const unsupported = [...new Set(Array.from(content).filter(char => {
+    try { return uao.decodeSync(uao.encodeSync(char)) !== char; }
+    catch { return true; }
+  }))];
+  if (unsupported.length) throw replyPreparationError({ kind: "unsupported-characters", characters: unsupported }, "包含 PTT 不支援的字元");
+  const columns = encodedReplyBytes(content);
+  if (columns > 1000) throw replyPreparationError({ kind: "too-long", excessColumns: columns - 1000 }, "回文最多 500 全形字（1,000 半形字），請縮短內容後再送出");
+  return content;
+}
 
 export function encodedReplyBytes(value: string): number {
   const encoded = uao.encodeSync(value) as string;
@@ -39,18 +55,17 @@ function resolveReadbackLayout(author: string, capacity: number, separator: "" |
       }
     }
   }
-  throw new Error("推文容量與讀回格式不一致，請重新載入文章後再試");
+  throw replyPreparationError({ kind: "capacity" }, "推文容量與讀回格式不一致，請重新載入文章後再試");
 }
 
 export function planReplyDraft(draft: string, capacity: number, floor?: number, author?: string, separator: "" | " " = " "): string[] {
   if (!Number.isInteger(capacity) || capacity < 8 || capacity > 78) throw new Error("無法確認推文容量");
   const layout = author === undefined ? undefined : resolveReadbackLayout(author, capacity, separator);
   if (floor !== undefined && (!Number.isInteger(floor) || floor < 1)) throw new Error("回覆樓號無效");
-  const content = draft.replace(/\r\n/g, "\n").trim();
+  const content = validateDraft(draft);
   // UAO encodes half-width characters in one byte and full-width in two.
   // LF counts as one unit; generated prefixes and markers are not in content.
-  if (encodedReplyBytes(content) > 1000) throw new Error("回文最多 500 全形字（1,000 半形字），請縮短內容後再送出");
-  if (!content || /[\x00-\x09\x0b-\x1f\x7f]/u.test(content)) throw new Error("回文包含無法送出的控制字元");
+  if (!content || /[\x00-\x09\x0b-\x1f\x7f]/u.test(content)) throw replyPreparationError({ kind: "content-layout", reason: "control-characters" }, "回文包含無法送出的控制字元");
   encodedReplyBytes(content.replace(/\n/g, ""));
   const prefix = floor === undefined ? "" : `回${floor}樓：`;
   const room = capacity - encodedReplyBytes(prefix);
@@ -94,7 +109,7 @@ export function planReplyDraft(draft: string, capacity: number, floor?: number, 
       if (endLine && !endDraft && capacity - encodedReplyBytes(piece) < 2) pieces.push(prefix + "|");
     } while (cursor < chars.length);
   }
-  if (pieces.some((piece) => piece.trim() !== piece)) throw new Error("分段開頭的空白無法保留，請調整內容後再試");
+  if (pieces.some((piece) => piece.trim() !== piece)) throw replyPreparationError({ kind: "content-layout", reason: "leading-space" }, "分段開頭的空白無法保留，請調整內容後再試");
   // Production planning must cross the parser boundary too. Supplying sender-
   // computed remaining columns here would conceal receiver layout regressions.
   // Layout-free callers can split abstract capacities; the delivery queue always
@@ -110,7 +125,7 @@ export function planReplyDraft(draft: string, capacity: number, floor?: number, 
   }));
   const projected = aggregatePushes([...target, ...parsed], "op").pushes.filter((reply) => reply.author === (author ?? "sender"));
   if (projected.length !== 1 || projected[0].content !== content || (floor !== undefined && projected[0].replyTo === null)) {
-    throw new Error("此內容無法安全分段，請調整換行或段落後再試");
+    throw replyPreparationError({ kind: "content-layout" }, "此內容無法安全分段，請調整換行或段落後再試");
   }
   return pieces;
 }
@@ -141,6 +156,7 @@ export class ReplyDraftQueue {
       const result = (): ReplyDelivery => ({ operationId: input.operationId, status: state!.status,
         confirmed: state!.confirmed, total: state!.pieces.length });
       if (state && (state.status === "complete" || state.status === "uncertain")) return result();
+      if (!state) validateDraft(input.content);
       const layout = await prepare();
       if (generation !== this.generation) throw new Error("登入工作階段已變更");
       if (state && state.author.toLowerCase() !== layout.author.toLowerCase()) throw new Error("登入帳號已變更");
@@ -176,7 +192,8 @@ export class ReplyDraftQueue {
     // Every awaited write above is caught and returned as an uncertain delivery.
     // Exceptions escaping here are preflight/resume failures, never a write retry.
     return work.catch((cause: unknown) => {
-      throw new GatewayError("REPLY_DRAFT_NOT_SENT", cause instanceof Error ? cause.message : "無法準備回文", true, cause);
+      throw new GatewayError("REPLY_DRAFT_NOT_SENT", cause instanceof Error ? cause.message : "無法準備回文", true, cause,
+        cause instanceof GatewayError ? cause.replyIssue : undefined);
     });
   }
 }

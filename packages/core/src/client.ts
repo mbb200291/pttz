@@ -476,7 +476,8 @@ export class PttzzzClient {
         content: input.content, pushType: floor === undefined ? input.pushType : "neutral", floor, resume: input.resume }, onProgress));
     } catch (cause) {
       const notSent = cause instanceof GatewayError && cause.code === "REPLY_DRAFT_NOT_SENT";
-      return fail({ code: "REPLY_DRAFT_FAILED", message: cause instanceof Error ? cause.message : "無法確認傳送結果", outcome: notSent ? "not-sent" : "uncertain", retryable: notSent });
+      return fail({ code: "REPLY_DRAFT_FAILED", message: cause instanceof Error ? cause.message : "無法確認傳送結果", outcome: notSent ? "not-sent" : "uncertain", retryable: notSent,
+        ...(notSent && cause.replyIssue ? { replyIssue: cause.replyIssue } : {}) });
     }
   }
 

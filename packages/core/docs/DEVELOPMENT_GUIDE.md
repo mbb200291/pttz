@@ -145,6 +145,15 @@ Do not interpret a read refresh as evidence that a write was absent. Old gateway
 without this capability return an unsupported result without falling back to an
 unsafe one-shot write. Existing single-write methods retain their contracts.
 
+For a confirmed `not-sent` result, optional `error.replyIssue` provides actionable
+preparation details: `too-long` includes `excessColumns` (two half-width columns
+equal one full-width character), `unsupported-characters` lists characters to
+replace, and `connection`, `article-unavailable`, `capacity`, or `content-layout`
+identify the relevant recovery step. Preserve the draft and render UI-owned copy;
+do not display raw transport messages or infer a category by matching their text.
+An absent issue means unknown, not invalid content. This additive field does not
+change delivery outcomes or authorize resending uncertain/partially sent drafts.
+
 The reference composer retains drafts while its Article component remains mounted,
 including closing/reopening the modal. Navigation or reload does not provide
 durable recovery. Browser receipts also live in memory and become unusable across

@@ -5,6 +5,19 @@ import { aggregatePushes, parsePushBuffer } from "@pttzzz/core/internal";
 const input = { operationId: "one", article: { board: "Test", aid: "abc" }, content: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefgh", pushType: "neutral" as const };
 const prepare = async () => ({ capacity: 55, author: "alice" });
 describe("multipart reply", () => {
+  it.each([
+    { content: "中".repeat(501), issue: { kind: "too-long", excessColumns: 2 } },
+    { content: "abc".repeat(334), issue: { kind: "too-long", excessColumns: 2 } },
+    { content: "測試😀😀🚀", issue: { kind: "unsupported-characters", characters: ["😀", "🚀"] } },
+  ])("reports actionable validation without preparing or writing: $issue.kind", async ({ content, issue }) => {
+    const setup = vi.fn(prepare);
+    const send = vi.fn();
+    await expect(new ReplyDraftQueue().run({ ...input, content }, setup, send)).rejects.toMatchObject({
+      code: "REPLY_DRAFT_NOT_SENT", replyIssue: issue,
+    });
+    expect(setup).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  });
   it("rejects an unsupported sender/receiver layout before publishing any fragment", async () => {
     const send = vi.fn().mockResolvedValue({ ok: true, outcome: "sent" });
     await expect(new ReplyDraftQueue().run(input, async () => ({ author: "alice", capacity: 20 }), send)).rejects.toThrow("容量");

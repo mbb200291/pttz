@@ -1,5 +1,7 @@
 # pttzzz 實作概況
 
+回文失敗指引：送出前的字數超限、不支援字元、連線及文章狀態問題以可選 `replyIssue` 傳至 UI；保留草稿並提供具體修正方式或唯讀重新載入，不自動重送。
+
 Goal 14 第二階段已實作串流接收、儲存提示分類、分段回顯確認、正文限定編輯與明確 AID 導覽。本機可變編號採 AID 分頁錨點；失效時重新載入列表。本機六段長回文讀回逐字一致，跨頁編輯保留回文；正式站以既有快照回歸，未實站寫入。詳見 [第二階段實作筆記](goal-14-implementation-notes.md#第二階段串流與操作相容性)。
 
 Goal 14 本機環境：Vite `/ptt-ws` 代理支援 loopback Telnet 與正式 PTT WebSocket，以 `dev:local`／`dev:ptt` 切換；`dev` 依設定選擇、預設本機，失敗不轉正式站。帳密僅保存於忽略提交的根目錄 `.env.local`。推文確認與分段依目標採本機無空格、正式站一格空白的格式，讀回解析依原文判斷；代理與格式回歸測試納入 `npm test`。詳見[使用設定](../apps/web/docs/local-ptt.md)與[實作紀錄](goal-14-implementation-notes.md)。

@@ -50,6 +50,8 @@ export function Composer({
   contentLocked = false,
   delivery,
   onRefresh,
+  onRecoverSubmit,
+  recovering = false,
   onClose,
   onSubmit,
 }: {
@@ -64,6 +66,8 @@ export function Composer({
   contentLocked?: boolean;
   delivery?: ReplyDelivery;
   onRefresh?: () => void;
+  onRecoverSubmit?: () => void;
+  recovering?: boolean;
   onClose: () => void;
   onSubmit: (payload: ComposerPayload) => void;
 }): JSX.Element {
@@ -323,9 +327,10 @@ export function Composer({
           <p className="text-red-400 text-xs">{uploadError}</p>
         )}
         {submitError && (
-          <p role="alert" className="text-red-400 text-xs">
-            {submitError}
-          </p>
+          <div className="text-xs">
+            <p role="alert" className="text-red-400">{submitError}</p>
+            {onRecoverSubmit && <button type="button" disabled={submitting} onClick={onRecoverSubmit} className="min-h-12 text-sky-400 disabled:opacity-50">{recovering ? "載入中…" : "重新載入文章"}</button>}
+          </div>
         )}
 
         {/* Footer */}
@@ -374,7 +379,7 @@ export function Composer({
             disabled={isSubmitDisabled}
             className="px-6 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium text-white transition-colors"
           >
-            {submitting ? "送出中…" : delivery?.status === "paused" ? "繼續送出" : "送出"}
+            {submitting && !recovering ? "送出中…" : delivery?.status === "paused" ? "繼續送出" : "送出"}
           </button>
         </div>
       </div>

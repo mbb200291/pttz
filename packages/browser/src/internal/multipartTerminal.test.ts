@@ -50,6 +50,13 @@ function terminal(cancelRows?: string[], separator: "" | " " = " ") {
   });
   return { send, getLine: (index: number) => ({ str: rows[index] ?? "" }), getLines: async () => rows };
 }
+it("reports a login problem before entering push mode", async () => {
+  const bot = { ...terminal(), state: { connect: true, login: false }, on() { return this; } };
+  const driver = createTerminalDriverForTesting(bot);
+  await expect(driver.sendReplyDraft!({ operationId: "login-expired", article: { board: "Test", index: 1 }, content: "測試", pushType: "neutral" }))
+    .rejects.toMatchObject({ code: "REPLY_DRAFT_NOT_SENT", replyIssue: { kind: "connection" } });
+  expect(bot.send).not.toHaveBeenCalled();
+});
 it("measures capacity only through a cancelled confirmation, never publishing the probe", async () => {
   const bot = terminal();
   await expect(measurePushCapacity(bot)).resolves.toEqual({ capacity: 52, author: "alice" });

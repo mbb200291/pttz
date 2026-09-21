@@ -7,12 +7,22 @@ export type Result<T, E = CoreError> =
 
 export type WriteOutcome = "not-sent" | "sent" | "uncertain";
 
+/** Actionable preparation failures; never evidence that a write was delivered. */
+export type ReplyDraftIssue =
+  | { kind: "too-long"; excessColumns: number }
+  | { kind: "unsupported-characters"; characters: readonly string[] }
+  | { kind: "article-unavailable" }
+  | { kind: "connection" }
+  | { kind: "capacity" }
+  | { kind: "content-layout"; reason?: "leading-space" | "control-characters" };
+
 export interface CoreError {
   code: string;
   message: string;
   retryable: boolean;
   outcome?: WriteOutcome;
   cause?: unknown;
+  replyIssue?: ReplyDraftIssue;
 }
 
 /** Expected failure reported by a transport gateway read or lifecycle method. */
@@ -22,6 +32,7 @@ export class GatewayError extends Error {
     message: string,
     readonly retryable: boolean,
     readonly cause?: unknown,
+    readonly replyIssue?: ReplyDraftIssue,
   ) {
     super(message);
     this.name = "GatewayError";

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { GatewayError, type ArticleKey, type PttCommand } from "@pttzzz/core";
+import { GatewayError, PttzzzClient, type ArticleKey, type PttCommand } from "@pttzzz/core";
+import { ReplyDraftQueue, replyPreparationError } from "./internal/multipartReply.js";
 import {
   BrowserPttGateway,
   createTerminalGatewayDriverForTesting,
@@ -32,6 +33,24 @@ function driver(overrides: Partial<BrowserGatewayDriver> = {}): BrowserGatewayDr
 }
 
 describe("BrowserPttGateway", () => {
+  it.each([
+    { content: "中".repeat(501), failure: undefined, issue: { kind: "too-long", excessColumns: 2 } },
+    { content: "😀", failure: undefined, issue: { kind: "unsupported-characters", characters: ["😀"] } },
+    { content: "第一行\n 第二行", failure: undefined, issue: { kind: "content-layout", reason: "leading-space" } },
+    { content: "abc\tdef", failure: undefined, issue: { kind: "content-layout", reason: "control-characters" } },
+    { content: "測試", failure: "connection" as const, issue: { kind: "connection" } },
+    { content: "測試", failure: "article-unavailable" as const, issue: { kind: "article-unavailable" } },
+  ])("retains preparation guidance across queue, gateway and core: $issue.kind", async ({ content, failure, issue }) => {
+    const queue = new ReplyDraftQueue();
+    const send = vi.fn();
+    const gateway = new BrowserPttGateway(driver({ sendReplyDraft: input => queue.run(input, async () => {
+      if (failure) throw replyPreparationError({ kind: failure }, "private diagnostic");
+      return { author: "alice", capacity: 55 };
+    }, send) }));
+    const result = await new PttzzzClient(gateway).sendReplyDraft({ operationId: "guidance", article: articleByIndex, content, pushType: "neutral" });
+    expect(result).toMatchObject({ ok: false, error: { outcome: "not-sent", replyIssue: issue } });
+    expect(send).not.toHaveBeenCalled();
+  });
   it("keeps a cursor for unread rows even when the terminal window reaches the bottom", async () => {
     const gateway = new BrowserPttGateway(driver({ listArticles: async () => ({ items: [
       { index: 2, author: "alice", title: "two", date: "9/21" },

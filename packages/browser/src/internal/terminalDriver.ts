@@ -2,7 +2,7 @@ import Ptt from "./streamingPtt.js";
 import { setTerminalProtocol, terminalProtocol, type TerminalProtocol } from "./terminalProtocol.js";
 import { editorSaveKey } from "./editorPrompt.js";
 import { replaceEditorBody } from "./articleEditor.js";
-import { readPushConfirmation, ReplyDraftQueue } from "./multipartReply.js";
+import { readPushConfirmation, ReplyDraftQueue, replyPreparationError } from "./multipartReply.js";
 import type { GatewayReplyDraftInput, ReplyDelivery } from "@pttzzz/core";
 import { articleTerminalLine, type TerminalLine } from "./terminalLine.js";
 import { formatEditorBody } from "./articleFormatting.js";
@@ -1344,19 +1344,20 @@ class PttClientTerminalDriver implements TerminalDriver {
       let epoch = this.articleSessionEpoch;
       let sender = "";
       const delivery = await this.replyDrafts.run(input, async () => {
-        await this.waitUntilLoggedIn();
+        try { await this.waitUntilLoggedIn(); }
+        catch (cause) { throw replyPreparationError({ kind: "connection" }, "PTT login or connection unavailable", cause); }
         if (key.index !== undefined && !this.replyDraftTargets.has(input.operationId)) {
           const relative = `${key.board.toLowerCase()}:${key.index}`;
           const aid = this.articleAidByRelativeIndex.get(relative);
           if (aid) key = { board: key.board, aid };
-          else if (this.unresolvedRelativeArticleIndexes.has(relative)) throw new Error("請重新載入文章後再試");
+          else if (this.unresolvedRelativeArticleIndexes.has(relative)) throw replyPreparationError({ kind: "article-unavailable" }, "請重新載入文章後再試");
         }
         epoch = this.articleSessionEpoch;
         const acquired = await this.acquireArticleContext(key, epoch);
-        if (!acquired.ok) throw new Error("無法開啟文章");
+        if (!acquired.ok) throw replyPreparationError({ kind: "article-unavailable" }, "無法開啟文章");
         if (key.index !== undefined && terminalProtocol(this.bot) === "local") {
           const evidence = await readOpenedArticleAid(this.bot);
-          if (!evidence || evidence.board.toLowerCase() !== key.board.toLowerCase()) throw new Error("無法確認文章代碼");
+          if (!evidence || evidence.board.toLowerCase() !== key.board.toLowerCase()) throw replyPreparationError({ kind: "article-unavailable" }, "無法確認文章代碼");
           key = { board: key.board, aid: evidence.aid };
         }
         const previous = this.replyDraftTargets.get(input.operationId);
@@ -3514,7 +3515,7 @@ export async function measurePushCapacity(bot: WriteBot, valid: () => boolean = 
     return false;
   });
   if (!measured || result.ok || result.code !== "push-preflight-cancelled" || !valid()) {
-    throw new Error("無法確認推文容量，請重新載入文章後再試");
+    throw replyPreparationError({ kind: "capacity" }, "無法確認推文容量，請重新載入文章後再試");
   }
   const confirmation = measured as { capacity: number; author: string };
   return { capacity: confirmation.capacity, author: confirmation.author };

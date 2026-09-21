@@ -16,6 +16,61 @@ afterEach(cleanup);
 beforeEach(() => { vi.clearAllMocks(); mocks.reload.mockResolvedValue(true); });
 
 describe("multipart article replies", () => {
+  it("keeps recovery read-only and preserves content when article reload fails", async () => {
+    mocks.send.mockResolvedValue({ ok: false, error: { code: "REPLY_DRAFT_FAILED", outcome: "not-sent", retryable: true, replyIssue: { kind: "article-unavailable" } } });
+    let finish!: (value: boolean) => void;
+    mocks.reload.mockImplementation(() => new Promise<boolean>(resolve => { finish = resolve; }));
+    render(<Article boardName="Test" articleIndex={99} onBack={() => {}} currentUser="bob" mockArticle={article} />);
+    open();
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "保留內容" } });
+    await userEvent.click(screen.getByRole("button", { name: "送出" }));
+    await userEvent.click(screen.getByRole("button", { name: "重新載入文章" }));
+    expect(screen.getByRole("button", { name: "載入中…" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "送出中…" })).toBeNull();
+    await act(async () => finish(false));
+    expect(screen.getByRole("alert")).toHaveTextContent(/文章尚未載入/);
+    expect(screen.getByRole("textbox")).toHaveValue("保留內容");
+    expect(mocks.send).toHaveBeenCalledOnce();
+  });
+  it.each([
+    [{ kind: "capacity" }, /推文輸入欄位.*重新載入/],
+    [{ kind: "content-layout", reason: "leading-space" }, /段落.*空白.*移除/],
+    [{ kind: "content-layout", reason: "control-characters" }, /Tab.*移除/],
+    [{ kind: "too-long", excessColumns: 3 }, /超出 1.5 個全形字.*3 個半形字/],
+    [{ kind: "unsupported-characters", characters: ["😀", "🚀"] }, /😀.*🚀.*替換/],
+    [{ kind: "article-unavailable" }, /文章.*重新載入/],
+    [{ kind: "connection" }, /連線.*重新登入/],
+    [undefined, /無法開始送出.*重新載入/],
+  ])("preserves the draft and shows recovery for %j", async (replyIssue, message) => {
+    mocks.send.mockResolvedValue({ ok: false, error: { code: "REPLY_DRAFT_FAILED", outcome: "not-sent", retryable: true, message: "private diagnostics", replyIssue } });
+    render(<Article boardName="Test" articleIndex={99} onBack={() => {}} currentUser="bob" mockArticle={article} />);
+    open();
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "內容" } });
+    await userEvent.click(screen.getByRole("button", { name: "送出" }));
+    expect(screen.getByRole("alert")).toHaveTextContent(message as RegExp);
+    expect(screen.getByRole("textbox")).toHaveValue("內容");
+    expect(screen.queryByText("private diagnostics")).toBeNull();
+    expect(mocks.send).toHaveBeenCalledOnce();
+    if (!replyIssue || ["article-unavailable", "capacity"].includes((replyIssue as { kind: string }).kind)) {
+      await userEvent.click(screen.getByRole("button", { name: "重新載入文章" }));
+      expect(mocks.reload).toHaveBeenCalledOnce();
+      expect(screen.getByRole("textbox")).toHaveValue("內容");
+      expect(mocks.send).toHaveBeenCalledOnce();
+    }
+  });
+  it("keeps the draft and retry action when read recovery rejects", async () => {
+    mocks.send.mockResolvedValue({ ok: false, error: { code: "REPLY_DRAFT_FAILED", outcome: "not-sent", retryable: true, replyIssue: { kind: "capacity" } } });
+    mocks.reload.mockRejectedValue(new Error("private connection error"));
+    render(<Article boardName="Test" articleIndex={99} onBack={() => {}} currentUser="bob" mockArticle={article} />);
+    open();
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "保留草稿" } });
+    await userEvent.click(screen.getByRole("button", { name: "送出" }));
+    await userEvent.click(screen.getByRole("button", { name: "重新載入文章" }));
+    expect(screen.getByRole("alert")).toHaveTextContent(/文章載入失敗/);
+    expect(screen.getByRole("button", { name: "重新載入文章" })).toBeEnabled();
+    expect(screen.getByRole("textbox")).toHaveValue("保留草稿");
+    expect(mocks.send).toHaveBeenCalledOnce();
+  });
   it("renders intermediate progress while the send remains pending", async () => {
     let reportProgress!: (delivery: ReplyDelivery) => void;
     let finishSend!: (result: Result<ReplyDelivery>) => void;
