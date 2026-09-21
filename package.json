@@ -10,6 +10,8 @@
   "scripts": {
     "dev": "npm run dev -w @pttzzz/web-example",
     "dev:threads": "npm run dev -w @pttzzz/threads-example --",
+    "dev:local": "npm run dev -w @pttzzz/web-example -- --mode ptt-local",
+    "dev:ptt": "npm run dev -w @pttzzz/web-example -- --mode ptt-live",
     "build": "npm run build:packages && npm run build -w @pttzzz/web-example && npm run build -w @pttzzz/threads-example",
     "build:packages": "npm run build -w @pttzzz/core && npm run build -w @pttzzz/browser",
     "lint": "eslint .",

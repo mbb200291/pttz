@@ -1,5 +1,100 @@
 [
   {
+    "id": "merge-new-stop-marker-closes-full-line",
+    "primaryRule": "MERGE-004.1",
+    "rules": ["MERGE-003.1", "MERGE-004.1", "MERGE-004.2", "MERGE-002.5"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "前段。|", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "末段\\  ", "time": "01/01 12:01", "remainingContentColumns": 0 },
+      { "type": "neutral", "author": "alice", "content": "另起", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "alice", "content": "前段。\n末段", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "另起", "replyToAuthor": null, "score": 0 }
+      ],
+      "nativeArticleScore": 0, "articlePushVoters": [], "articleBooVoters": []
+    }
+  },
+  {
+    "id": "merge-new-stop-marker-hidden-single-suffix",
+    "primaryRule": "MERGE-004.2",
+    "rules": ["MERGE-004.2", "MERGE-003.4"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "保留一個底線_\\", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "保留直線|||", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "結束|!", "time": "01/01 12:00" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "alice", "content": "保留一個底線_", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "保留直線||\n結束|!", "replyToAuthor": null, "score": 0 }
+      ],
+      "nativeArticleScore": 0, "articlePushVoters": [], "articleBooVoters": []
+    }
+  },
+  {
+    "id": "merge-two-minute-inclusive-boundary",
+    "primaryRule": "MERGE-001.3",
+    "rules": ["MERGE-001.3", "MERGE-003.1"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "前段。|", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "bob", "content": "插話。", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "後段", "time": "01/01 12:02" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "alice", "content": "前段。\n後段", "replyToAuthor": null, "score": 0 },
+        { "author": "bob", "content": "插話。", "replyToAuthor": null, "score": 0 }
+      ],
+      "nativeArticleScore": 0, "articlePushVoters": [], "articleBooVoters": []
+    }
+  },
+  {
+    "id": "merge-three-minute-boundary-splits-even-forced",
+    "primaryRule": "MERGE-003.3",
+    "rules": ["MERGE-001.3", "MERGE-003.3"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "前段。|", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "bob", "content": "插話。", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "後段", "time": "01/01 12:03" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "alice", "content": "前段。", "replyToAuthor": null, "score": 0 },
+        { "author": "bob", "content": "插話。", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "後段", "replyToAuthor": null, "score": 0 }
+      ],
+      "nativeArticleScore": 0, "articlePushVoters": [], "articleBooVoters": []
+    }
+  },
+  {
+    "id": "merge-stop-marker-closes-forced-continuation",
+    "primaryRule": "MERGE-003.4",
+    "rules": ["MERGE-003.1", "MERGE-003.4", "MERGE-002.5"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "alice", "content": "前段。|", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "末段\\  ", "time": "01/01 12:01", "remainingContentColumns": 0 },
+      { "type": "neutral", "author": "alice", "content": "另起\\", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "最後\\", "time": "01/01 12:01" }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "alice", "content": "前段。\n末段", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "另起", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "最後", "replyToAuthor": null, "score": 0 }
+      ],
+      "nativeArticleScore": 0,
+      "articlePushVoters": [],
+      "articleBooVoters": []
+    }
+  },
+  {
     "id": "aggregation-five-minute-interleaving",
     "primaryRule": "MERGE-001.3",
     "rules": ["MERGE-001.1", "MERGE-001.3", "RAW-001.3"],
@@ -11,8 +106,9 @@
     ],
     "expected": {
       "replies": [
-        { "author": "alice", "content": "前半段\n後半段", "replyToAuthor": null, "score": 0 },
-        { "author": "bob", "content": "插話。", "replyToAuthor": null, "score": 0 }
+        { "author": "alice", "content": "前半段", "replyToAuthor": null, "score": 0 },
+        { "author": "bob", "content": "插話。", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "後半段", "replyToAuthor": null, "score": 0 }
       ],
       "nativeArticleScore": 0,
       "articlePushVoters": [],
@@ -37,8 +133,9 @@
         "rawPushCount": 3,
         "expected": {
           "replies": [
-            { "author": "alice", "content": "前半段\n後半段", "replyToAuthor": null, "score": 0 },
-            { "author": "bob", "content": "插話。", "replyToAuthor": null, "score": 0 }
+            { "author": "alice", "content": "前半段", "replyToAuthor": null, "score": 0 },
+            { "author": "bob", "content": "插話。", "replyToAuthor": null, "score": 0 },
+            { "author": "alice", "content": "後半段", "replyToAuthor": null, "score": 0 }
           ],
           "nativeArticleScore": 0,
           "articlePushVoters": [],
@@ -56,7 +153,7 @@
     "rawPushes": [
       { "type": "neutral", "author": "root-a", "content": "A。", "time": "01/01 12:00" },
       { "type": "neutral", "author": "root-b", "content": "B。", "time": "01/01 12:01" },
-      { "type": "neutral", "author": "alice", "content": "回1樓：前段||", "time": "01/01 12:02" },
+      { "type": "neutral", "author": "alice", "content": "回1樓：前段|", "time": "01/01 12:02" },
       { "type": "neutral", "author": "alice", "content": "回2樓：不同目標", "time": "01/01 12:03" }
     ],
     "expected": {
@@ -78,7 +175,7 @@
     "articleAuthor": "op",
     "rawPushes": [
       { "type": "neutral", "author": "root", "content": "根。", "time": "01/01 12:00" },
-      { "type": "neutral", "author": "alice", "content": "回1樓：前段。||", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "回1樓：前段。|", "time": "01/01 12:01" },
       { "type": "neutral", "author": "alice", "content": "回1樓：六分鐘後", "time": "01/01 12:07" }
     ],
     "expected": {
@@ -120,10 +217,10 @@
     "rawPushes": [
       { "type": "neutral", "author": "root-a", "content": "A。", "time": "01/01 12:00" },
       { "type": "neutral", "author": "root-b", "content": "B。", "time": "01/01 12:00" },
-      { "type": "neutral", "author": "alice", "content": "回1樓：句號。||", "time": "01/01 12:01" },
+      { "type": "neutral", "author": "alice", "content": "回1樓：句號。|", "time": "01/01 12:01" },
       { "type": "neutral", "author": "alice", "content": "回1樓：同目標續接", "time": "01/01 12:03" },
       { "type": "neutral", "author": "bob", "content": "回1樓：不同作者", "time": "01/01 12:04" },
-      { "type": "neutral", "author": "alice", "content": "回2樓：不同目標||", "time": "01/01 12:04" },
+      { "type": "neutral", "author": "alice", "content": "回2樓：不同目標|", "time": "01/01 12:04" },
       { "type": "neutral", "author": "eve", "content": "中間事件。", "time": "01/01 12:05" },
       { "type": "neutral", "author": "alice", "content": "回2樓：超過五分鐘", "time": "01/01 12:10" }
     ],
@@ -249,7 +346,7 @@
     "rules": ["MERGE-001.5", "MERGE-003.1"],
     "articleAuthor": "op",
     "rawPushes": [
-      { "type": "neutral", "author": "alice", "content": "完整一句。||", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "完整一句。|", "time": "01/01 12:00" },
       { "type": "neutral", "author": "alice", "content": "仍然續接", "time": "01/01 12:01" }
     ],
     "expected": {
@@ -265,7 +362,7 @@
     "rules": ["MERGE-003.1", "MERGE-003.2"],
     "articleAuthor": "op",
     "rawPushes": [
-      { "type": "neutral", "author": "alice", "content": "前段||", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "前段|", "time": "01/01 12:00" },
       { "type": "neutral", "author": "alice", "content": "後段", "time": "01/01 12:01" }
     ],
     "expected": {

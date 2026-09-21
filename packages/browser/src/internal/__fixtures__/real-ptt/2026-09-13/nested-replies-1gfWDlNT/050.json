@@ -1,0 +1,1028 @@
+{
+  "cursor": {
+    "x": 21,
+    "y": 14
+  },
+  "lines": [
+    {
+      "str": "【主功能表】                     批踢踢實業坊                      看板《Test》",
+      "attr": {
+        "0": {
+          "fg": 7,
+          "bg": 4,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "33": {
+          "fg": 3,
+          "bg": 4,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "45": {
+          "fg": 7,
+          "bg": 4,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "53": {
+          "fg": 7,
+          "bg": 4,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "79": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "                             卍 佛說盂蘭盆經 卍 (節錄四)(完)",
+      "attr": {
+        "0": {
+          "fg": 3,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "48": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "「善男子，若有比丘、比丘尼、國王、太子、王子、大臣、宰相、三公、百官、萬民庶人",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "行孝慈者，皆應為所生現在父母、過去七世父母，於七月十五日，佛歡喜日、僧自恣日，",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "2": {
+          "fg": 5,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "6": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "16": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "42": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "46": {
+          "fg": 3,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "58": {
+          "fg": 3,
+          "bg": 5,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "76": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "以百味飲食，安盂蘭盆中，施十方自恣僧，乞願便使現在父母，壽命百年、無病、無一切",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "14": {
+          "fg": 3,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "20": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "26": {
+          "fg": 3,
+          "bg": 5,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "36": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "46": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "54": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "苦惱之患，乃至七世父母離餓鬼苦，得生天人中，福樂無極。」",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "14": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "22": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "24": {
+          "fg": 2,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "28": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "佛告諸善男子、善女人：「是佛弟子修孝順者，應念念中常憶父母，供養乃至七世父母。",
+      "attr": {
+        "0": {
+          "fg": 3,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "2": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "26": {
+          "fg": 3,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "28": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "34": {
+          "fg": 5,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "38": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "54": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "58": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "68": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "76": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "年年七月十五日，常以孝順慈憶所生父母，乃至七世父母，為作盂蘭盆，施佛及僧，以報",
+      "attr": {
+        "0": {
+          "fg": 3,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "14": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "20": {
+          "fg": 5,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "24": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "28": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "50": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "56": {
+          "fg": 3,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "62": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "64": {
+          "fg": 3,
+          "bg": 5,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "72": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "父母長養、慈愛之恩。若一切佛弟子應當奉持是法。」",
+      "attr": {
+        "0": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "18": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "26": {
+          "fg": 3,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "28": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "爾時，目連比丘、四輩弟子，聞佛所說，歡喜奉行。        【西晉月氏三藏竺法護譯】",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "28": {
+          "fg": 3,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "30": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": " 想對 法界眾生 善男子、善女人言：迴向法界",
+      "attr": {
+        "0": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "41": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "───────── 上方為使用者心情點播留言區，不代表本站立場 ────────",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "                      (A)nnounce     【 精華公佈欄 】",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "23": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "24": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "                    ●(F)avorite     【 我 的 最愛 】",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "23": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "24": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "                      (C)lass        【 分組討論區 】",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "23": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "24": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "                      (M)ail         【 私人信件區 】",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "23": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "24": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "                      (T)alk         【 休閒聊天區 】",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "23": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "24": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "                      (U)ser         【 個人設定區 】",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "23": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "24": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "                      (X)yz          【 系統資訊區 】",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "23": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "24": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "                      (P)lay         【 娛樂與休閒 】",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "23": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "24": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "                      (N)amelist     【 編特別名單 】",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "23": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "24": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "                      (G)oodbye         離開，再見…",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "23": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "24": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "9/13周日 14:04 [ 雙魚時 ]    線上22170人,我是TEST_USER,呼叫器開啟       (h)說明",
+      "attr": {
+        "0": {
+          "fg": 4,
+          "bg": 6,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "14": {
+          "fg": 3,
+          "bg": 5,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "28": {
+          "fg": 0,
+          "bg": 7,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "33": {
+          "fg": 1,
+          "bg": 7,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "38": {
+          "fg": 0,
+          "bg": 7,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "45": {
+          "fg": 1,
+          "bg": 7,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "54": {
+          "fg": 0,
+          "bg": 7,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "61": {
+          "fg": 4,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "72": {
+          "fg": 1,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "75": {
+          "fg": 0,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "79": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    }
+  ]
+}

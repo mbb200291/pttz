@@ -1,0 +1,2423 @@
+{
+  "cursor": {
+    "x": 21,
+    "y": 15
+  },
+  "lines": [
+    {
+      "str": "【主功能表】                     批踢踢實業坊                                  ",
+      "attr": {
+        "0": {
+          "fg": 7,
+          "bg": 4,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "33": {
+          "fg": 3,
+          "bg": 4,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "45": {
+          "fg": 7,
+          "bg": 4,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "79": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "h  ▂▃▄▅¢g▇¢« ﹨   \\                        ▁▂¢b  ﹨    ﹨    \\           ",
+      "attr": {
+        "0": {
+          "fg": 4,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "12": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "16": {
+          "fg": 0,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "18": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "23": {
+          "fg": 6,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "48": {
+          "fg": 1,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "53": {
+          "fg": 0,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "56": {
+          "fg": 6,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "62": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "80": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "   ▆▅¢g¢©   ▍                 ﹨     ¢c▄▆        ¢©                    \\   ",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "3": {
+          "fg": 0,
+          "bg": 4,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "8": {
+          "fg": 4,
+          "bg": 4,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "9": {
+          "fg": 4,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "10": {
+          "fg": 0,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "14": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "33": {
+          "fg": 6,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "40": {
+          "fg": 0,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "41": {
+          "fg": 1,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "46": {
+          "fg": 1,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "54": {
+          "fg": 1,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "55": {
+          "fg": 0,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "76": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "80": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "   ¢d▅¢g¢g▇¢i¢©             \\        ¢¨        ¡k    ¢e                       ",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "3": {
+          "fg": 0,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "4": {
+          "fg": 4,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "8": {
+          "fg": 4,
+          "bg": 4,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "10": {
+          "fg": 4,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "14": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "16": {
+          "fg": 0,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "30": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "39": {
+          "fg": 0,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "40": {
+          "fg": 1,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "41": {
+          "fg": 1,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "49": {
+          "fg": null,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "50": {
+          "fg": 1,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "56": {
+          "fg": 1,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "80": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "t¡¿ ¢e¢d▉▄¢f¢p  ¢@     ¢B          ¢¨  ¡l▊¢ª ▎¢e¢f\\      ¢@   ﹨   ﹨       ",
+      "attr": {
+        "0": {
+          "fg": 4,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "1": {
+          "fg": 0,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "2": {
+          "fg": 0,
+          "bg": 4,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "4": {
+          "fg": 0,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "5": {
+          "fg": 4,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "7": {
+          "fg": 0,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "8": {
+          "fg": 4,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "13": {
+          "fg": 0,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "14": {
+          "fg": 4,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "15": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "18": {
+          "fg": 6,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "19": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "25": {
+          "fg": 6,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "26": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "37": {
+          "fg": 0,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "38": {
+          "fg": 1,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "39": {
+          "fg": 1,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "42": {
+          "fg": null,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "43": {
+          "fg": 1,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "45": {
+          "fg": 1,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "46": {
+          "fg": 1,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "47": {
+          "fg": 1,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "48": {
+          "fg": null,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "51": {
+          "fg": 0,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "52": {
+          "fg": 0,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "53": {
+          "fg": 0,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "54": {
+          "fg": null,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "58": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "61": {
+          "fg": 6,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "62": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "66": {
+          "fg": 6,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "80": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": " ¢n▌ ¢e▉¢e¢e¢o                    ▊  /▊¢c¢d¢j¢e¢n\"▎  ▍                    ",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "1": {
+          "fg": 0,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "2": {
+          "fg": 0,
+          "bg": 4,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "3": {
+          "fg": 4,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "6": {
+          "fg": 0,
+          "bg": 4,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "7": {
+          "fg": 4,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "10": {
+          "fg": 0,
+          "bg": 4,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "11": {
+          "fg": 4,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "13": {
+          "fg": 0,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "14": {
+          "fg": 4,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "15": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "36": {
+          "fg": 0,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "40": {
+          "fg": null,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "41": {
+          "fg": 1,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "43": {
+          "fg": 1,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "44": {
+          "fg": 0,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "45": {
+          "fg": 0,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "46": {
+          "fg": null,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "47": {
+          "fg": 1,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "48": {
+          "fg": 1,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "49": {
+          "fg": null,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "50": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "51": {
+          "fg": null,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "52": {
+          "fg": 6,
+          "bg": 7,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "53": {
+          "fg": 7,
+          "bg": 7,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "54": {
+          "fg": null,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "58": {
+          "fg": 1,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "80": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "  ◥¢d¢f ¡閒g◥¢k               ＼  ▉ │¢f¢d¢g|£o │ |  ▏▎                   ",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "2": {
+          "fg": 4,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "4": {
+          "fg": 0,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "5": {
+          "fg": 0,
+          "bg": 4,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "7": {
+          "fg": 0,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "8": {
+          "fg": 0,
+          "bg": 4,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "10": {
+          "fg": 0,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "12": {
+          "fg": 0,
+          "bg": 4,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "13": {
+          "fg": 4,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "15": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "16": {
+          "fg": 4,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "32": {
+          "fg": 6,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "36": {
+          "fg": 0,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "39": {
+          "fg": null,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "41": {
+          "fg": 1,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "42": {
+          "fg": 0,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "43": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "44": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "45": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "46": {
+          "fg": null,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "47": {
+          "fg": 1,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "48": {
+          "fg": 0,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "49": {
+          "fg": null,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "51": {
+          "fg": 6,
+          "bg": 7,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "54": {
+          "fg": 1,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "55": {
+          "fg": 1,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "57": {
+          "fg": null,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "59": {
+          "fg": 1,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "80": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "x              ▏        ﹨              ▋¢n  ▏  £o \\▎| ▍     ﹨        ＼  ",
+      "attr": {
+        "0": {
+          "fg": 4,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "15": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "25": {
+          "fg": 6,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "38": {
+          "fg": 6,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "41": {
+          "fg": 1,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "43": {
+          "fg": null,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "44": {
+          "fg": 6,
+          "bg": 7,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "47": {
+          "fg": 7,
+          "bg": 7,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "52": {
+          "fg": 7,
+          "bg": 7,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": true,
+          "inverse": false
+        },
+        "54": {
+          "fg": 1,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "55": {
+          "fg": null,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "57": {
+          "fg": 1,
+          "bg": 1,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "59": {
+          "fg": 1,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "66": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "80": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "  打      趕  ¢x¡ï   ﹨        ﹨    ▊ ¢©  \\ |﹨╭    |\\  ▎          \\        ",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "2": {
+          "fg": 1,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "10": {
+          "fg": 2,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "14": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "15": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": true,
+          "inverse": false
+        },
+        "17": {
+          "fg": 0,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "21": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "37": {
+          "fg": 0,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "40": {
+          "fg": 1,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "41": {
+          "fg": 1,
+          "bg": 1,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "43": {
+          "fg": 1,
+          "bg": 7,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "44": {
+          "fg": 6,
+          "bg": 7,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "46": {
+          "fg": 7,
+          "bg": 7,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "49": {
+          "fg": 1,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "56": {
+          "fg": null,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "59": {
+          "fg": 1,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "71": {
+          "fg": 6,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "80": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "  在¡L心  不¡L±I. \\                        ¢e ; ¢@    ¢d   ▏  \\                ",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "2": {
+          "fg": 1,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "4": {
+          "fg": 0,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "5": {
+          "fg": 5,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "10": {
+          "fg": 2,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "12": {
+          "fg": 0,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "13": {
+          "fg": 0,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "15": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "16": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": true,
+          "inverse": false
+        },
+        "18": {
+          "fg": 6,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "39": {
+          "fg": 6,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "43": {
+          "fg": 1,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "44": {
+          "fg": 1,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "46": {
+          "fg": 7,
+          "bg": 7,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": true,
+          "inverse": false
+        },
+        "48": {
+          "fg": 7,
+          "bg": 7,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "49": {
+          "fg": 0,
+          "bg": 7,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "54": {
+          "fg": null,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "55": {
+          "fg": 1,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "56": {
+          "fg": 1,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "59": {
+          "fg": 1,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "63": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "80": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "9   ¡L頭  走¡L¹æ '        \\       ¢B   ¢哄i¢哈e¢c▃▅ ¢d¡j¡¶       ﹨      ﹨   ",
+      "attr": {
+        "0": {
+          "fg": 4,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "4": {
+          "fg": 0,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "5": {
+          "fg": 5,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "10": {
+          "fg": 2,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "12": {
+          "fg": 0,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "13": {
+          "fg": 0,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "15": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "34": {
+          "fg": 6,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "35": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "39": {
+          "fg": 1,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "40": {
+          "fg": 1,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "42": {
+          "fg": 1,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "44": {
+          "fg": 1,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "46": {
+          "fg": 1,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "47": {
+          "fg": 0,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "48": {
+          "fg": 1,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "49": {
+          "fg": 3,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "53": {
+          "fg": 3,
+          "bg": 3,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "55": {
+          "fg": 3,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "56": {
+          "fg": 1,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "57": {
+          "fg": 1,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "58": {
+          "fg": 0,
+          "bg": 1,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "59": {
+          "fg": 0,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "67": {
+          "fg": 6,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "80": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "───────── 上方為使用者心情點播留言區，不代表本站立場 ────────",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "                      (A)nnounce     【 精華公佈欄 】",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "23": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "24": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "                      (F)avorite     【 我 的 最愛 】",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "23": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "24": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "                    ●(C)lass        【 分組討論區 】",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "23": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "24": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "                      (M)ail         【 私人信件區 】",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "23": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "24": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "                      (T)alk         【 休閒聊天區 】",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "23": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "24": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "                      (U)ser         【 個人設定區 】",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "23": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "24": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "                      (X)yz          【 系統資訊區 】",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "23": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "24": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "                      (P)lay         【 娛樂與休閒 】",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "23": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "24": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "                      (N)amelist     【 編特別名單 】",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "23": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "24": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "                      (G)oodbye         離開，再見…",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "23": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "24": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "9/13周日 13:56 [ 天秤時 ]    線上22340人,我是TEST_USER,呼叫器開啟       (h)說明",
+      "attr": {
+        "0": {
+          "fg": 4,
+          "bg": 6,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "14": {
+          "fg": 3,
+          "bg": 5,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "28": {
+          "fg": 0,
+          "bg": 7,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "33": {
+          "fg": 1,
+          "bg": 7,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "38": {
+          "fg": 0,
+          "bg": 7,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "45": {
+          "fg": 1,
+          "bg": 7,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "54": {
+          "fg": 0,
+          "bg": 7,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "61": {
+          "fg": 4,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "72": {
+          "fg": 1,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "75": {
+          "fg": 0,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "79": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,489 @@
+[
+  {
+    "name": "baseline-article",
+    "screen": "014.txt",
+    "rawCount": 2,
+    "expected": [
+      {
+        "id": "reply:1",
+        "sourceFloors": [
+          1
+        ],
+        "replyTo": null,
+        "content": "測試",
+        "score": 0,
+        "pushVoters": [],
+        "booVoters": []
+      },
+      {
+        "id": "reply:2",
+        "sourceFloors": [
+          2
+        ],
+        "replyTo": null,
+        "content": "123",
+        "score": 0,
+        "pushVoters": [],
+        "booVoters": []
+      }
+    ]
+  },
+  {
+    "name": "reply-level-1-readback",
+    "screen": "019.txt",
+    "rawCount": 3,
+    "expected": [
+      {
+        "id": "reply:1",
+        "sourceFloors": [
+          1
+        ],
+        "replyTo": null,
+        "content": "測試",
+        "score": 0,
+        "pushVoters": [],
+        "booVoters": []
+      },
+      {
+        "id": "reply:2",
+        "sourceFloors": [
+          2
+        ],
+        "replyTo": null,
+        "content": "123",
+        "score": 0,
+        "pushVoters": [],
+        "booVoters": []
+      },
+      {
+        "id": "reply:3",
+        "sourceFloors": [
+          3
+        ],
+        "replyTo": "reply:2",
+        "content": "pttzzz-R1357 第一層回覆測試。",
+        "score": 0,
+        "pushVoters": [],
+        "booVoters": []
+      }
+    ],
+    "sentContent": "回2樓：pttzzz-R1357 第一層回覆測試。"
+  },
+  {
+    "name": "reply-level-2-readback",
+    "screen": "023.txt",
+    "rawCount": 4,
+    "expected": [
+      {
+        "id": "reply:1",
+        "sourceFloors": [
+          1
+        ],
+        "replyTo": null,
+        "content": "測試",
+        "score": 0,
+        "pushVoters": [],
+        "booVoters": []
+      },
+      {
+        "id": "reply:2",
+        "sourceFloors": [
+          2
+        ],
+        "replyTo": null,
+        "content": "123",
+        "score": 0,
+        "pushVoters": [],
+        "booVoters": []
+      },
+      {
+        "id": "reply:3",
+        "sourceFloors": [
+          3
+        ],
+        "replyTo": "reply:2",
+        "content": "pttzzz-R1357 第一層回覆測試。",
+        "score": 0,
+        "pushVoters": [],
+        "booVoters": []
+      },
+      {
+        "id": "reply:4",
+        "sourceFloors": [
+          4
+        ],
+        "replyTo": "reply:3",
+        "content": "pttzzz-R1357 第二層巢狀測試。",
+        "score": 0,
+        "pushVoters": [],
+        "booVoters": []
+      }
+    ],
+    "sentContent": "回3樓：pttzzz-R1357 第二層巢狀測試。"
+  },
+  {
+    "name": "vote-parent-push-readback",
+    "screen": "027.txt",
+    "rawCount": 5,
+    "expected": [
+      {
+        "id": "reply:1",
+        "sourceFloors": [
+          1
+        ],
+        "replyTo": null,
+        "content": "測試",
+        "score": 0,
+        "pushVoters": [],
+        "booVoters": []
+      },
+      {
+        "id": "reply:2",
+        "sourceFloors": [
+          2
+        ],
+        "replyTo": null,
+        "content": "123",
+        "score": 1,
+        "pushVoters": [
+          "TEST_USER"
+        ],
+        "booVoters": []
+      },
+      {
+        "id": "reply:3",
+        "sourceFloors": [
+          3
+        ],
+        "replyTo": "reply:2",
+        "content": "pttzzz-R1357 第一層回覆測試。",
+        "score": 0,
+        "pushVoters": [],
+        "booVoters": []
+      },
+      {
+        "id": "reply:4",
+        "sourceFloors": [
+          4
+        ],
+        "replyTo": "reply:3",
+        "content": "pttzzz-R1357 第二層巢狀測試。",
+        "score": 0,
+        "pushVoters": [],
+        "booVoters": []
+      }
+    ],
+    "sentContent": "推2樓"
+  },
+  {
+    "name": "vote-parent-boo-readback",
+    "screen": "031.txt",
+    "rawCount": 6,
+    "expected": [
+      {
+        "id": "reply:1",
+        "sourceFloors": [
+          1
+        ],
+        "replyTo": null,
+        "content": "測試",
+        "score": 0,
+        "pushVoters": [],
+        "booVoters": []
+      },
+      {
+        "id": "reply:2",
+        "sourceFloors": [
+          2
+        ],
+        "replyTo": null,
+        "content": "123",
+        "score": -1,
+        "pushVoters": [],
+        "booVoters": [
+          "TEST_USER"
+        ]
+      },
+      {
+        "id": "reply:3",
+        "sourceFloors": [
+          3
+        ],
+        "replyTo": "reply:2",
+        "content": "pttzzz-R1357 第一層回覆測試。",
+        "score": 0,
+        "pushVoters": [],
+        "booVoters": []
+      },
+      {
+        "id": "reply:4",
+        "sourceFloors": [
+          4
+        ],
+        "replyTo": "reply:3",
+        "content": "pttzzz-R1357 第二層巢狀測試。",
+        "score": 0,
+        "pushVoters": [],
+        "booVoters": []
+      }
+    ],
+    "sentContent": "噓2樓"
+  },
+  {
+    "name": "vote-nested-push-readback",
+    "screen": "035.txt",
+    "rawCount": 7,
+    "expected": [
+      {
+        "id": "reply:1",
+        "sourceFloors": [
+          1
+        ],
+        "replyTo": null,
+        "content": "測試",
+        "score": 0,
+        "pushVoters": [],
+        "booVoters": []
+      },
+      {
+        "id": "reply:2",
+        "sourceFloors": [
+          2
+        ],
+        "replyTo": null,
+        "content": "123",
+        "score": -1,
+        "pushVoters": [],
+        "booVoters": [
+          "TEST_USER"
+        ]
+      },
+      {
+        "id": "reply:3",
+        "sourceFloors": [
+          3
+        ],
+        "replyTo": "reply:2",
+        "content": "pttzzz-R1357 第一層回覆測試。",
+        "score": 1,
+        "pushVoters": [
+          "TEST_USER"
+        ],
+        "booVoters": []
+      },
+      {
+        "id": "reply:4",
+        "sourceFloors": [
+          4
+        ],
+        "replyTo": "reply:3",
+        "content": "pttzzz-R1357 第二層巢狀測試。",
+        "score": 0,
+        "pushVoters": [],
+        "booVoters": []
+      }
+    ],
+    "sentContent": "推3樓"
+  },
+  {
+    "name": "vote-nested-boo-readback",
+    "screen": "039.txt",
+    "rawCount": 8,
+    "expected": [
+      {
+        "id": "reply:1",
+        "sourceFloors": [
+          1
+        ],
+        "replyTo": null,
+        "content": "測試",
+        "score": 0,
+        "pushVoters": [],
+        "booVoters": []
+      },
+      {
+        "id": "reply:2",
+        "sourceFloors": [
+          2
+        ],
+        "replyTo": null,
+        "content": "123",
+        "score": -1,
+        "pushVoters": [],
+        "booVoters": [
+          "TEST_USER"
+        ]
+      },
+      {
+        "id": "reply:3",
+        "sourceFloors": [
+          3
+        ],
+        "replyTo": "reply:2",
+        "content": "pttzzz-R1357 第一層回覆測試。",
+        "score": -1,
+        "pushVoters": [],
+        "booVoters": [
+          "TEST_USER"
+        ]
+      },
+      {
+        "id": "reply:4",
+        "sourceFloors": [
+          4
+        ],
+        "replyTo": "reply:3",
+        "content": "pttzzz-R1357 第二層巢狀測試。",
+        "score": 0,
+        "pushVoters": [],
+        "booVoters": []
+      }
+    ],
+    "sentContent": "噓3樓"
+  },
+  {
+    "name": "composite-push-readback",
+    "screen": "043.txt",
+    "rawCount": 9,
+    "expected": [
+      {
+        "id": "reply:1",
+        "sourceFloors": [
+          1
+        ],
+        "replyTo": null,
+        "content": "測試",
+        "score": 0,
+        "pushVoters": [],
+        "booVoters": []
+      },
+      {
+        "id": "reply:2",
+        "sourceFloors": [
+          2
+        ],
+        "replyTo": null,
+        "content": "123",
+        "score": 1,
+        "pushVoters": [
+          "TEST_USER"
+        ],
+        "booVoters": []
+      },
+      {
+        "id": "reply:3",
+        "sourceFloors": [
+          3
+        ],
+        "replyTo": "reply:2",
+        "content": "pttzzz-R1357 第一層回覆測試。",
+        "score": -1,
+        "pushVoters": [],
+        "booVoters": [
+          "TEST_USER"
+        ]
+      },
+      {
+        "id": "reply:4",
+        "sourceFloors": [
+          4
+        ],
+        "replyTo": "reply:3",
+        "content": "pttzzz-R1357 第二層巢狀測試。",
+        "score": 0,
+        "pushVoters": [],
+        "booVoters": []
+      },
+      {
+        "id": "reply:9",
+        "sourceFloors": [
+          9
+        ],
+        "replyTo": "reply:2",
+        "content": "pttzzz-R1357 帶文字推回文測試。",
+        "score": 0,
+        "pushVoters": [],
+        "booVoters": []
+      }
+    ],
+    "sentContent": "推2樓：pttzzz-R1357 帶文字推回文測試。"
+  },
+  {
+    "name": "composite-boo-readback",
+    "screen": "047.txt",
+    "rawCount": 10,
+    "expected": [
+      {
+        "id": "reply:1",
+        "sourceFloors": [
+          1
+        ],
+        "replyTo": null,
+        "content": "測試",
+        "score": 0,
+        "pushVoters": [],
+        "booVoters": []
+      },
+      {
+        "id": "reply:2",
+        "sourceFloors": [
+          2
+        ],
+        "replyTo": null,
+        "content": "123",
+        "score": 1,
+        "pushVoters": [
+          "TEST_USER"
+        ],
+        "booVoters": []
+      },
+      {
+        "id": "reply:3",
+        "sourceFloors": [
+          3
+        ],
+        "replyTo": "reply:2",
+        "content": "pttzzz-R1357 第一層回覆測試。",
+        "score": -1,
+        "pushVoters": [],
+        "booVoters": [
+          "TEST_USER"
+        ]
+      },
+      {
+        "id": "reply:4",
+        "sourceFloors": [
+          4
+        ],
+        "replyTo": "reply:3",
+        "content": "pttzzz-R1357 第二層巢狀測試。",
+        "score": 0,
+        "pushVoters": [],
+        "booVoters": []
+      },
+      {
+        "id": "reply:9",
+        "sourceFloors": [
+          9
+        ],
+        "replyTo": "reply:2",
+        "content": "pttzzz-R1357 帶文字推回文測試。",
+        "score": 0,
+        "pushVoters": [],
+        "booVoters": []
+      },
+      {
+        "id": "reply:10",
+        "sourceFloors": [
+          10
+        ],
+        "replyTo": "reply:3",
+        "content": "pttzzz-R1357 帶文字噓回文測試。",
+        "score": 0,
+        "pushVoters": [],
+        "booVoters": []
+      }
+    ],
+    "sentContent": "噓3樓：pttzzz-R1357 帶文字噓回文測試。"
+  }
+]

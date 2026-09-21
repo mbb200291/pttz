@@ -1,0 +1,596 @@
+{
+  "cursor": {
+    "x": 79,
+    "y": 23
+  },
+  "lines": [
+    {
+      "str": " 作者  askz0 (askz0)                                               看板  Test ",
+      "attr": {
+        "0": {
+          "fg": 4,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "6": {
+          "fg": null,
+          "bg": 4,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "66": {
+          "fg": 4,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "72": {
+          "fg": null,
+          "bg": 4,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "78": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": " 標題  test test                                                              ",
+      "attr": {
+        "0": {
+          "fg": 4,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "6": {
+          "fg": null,
+          "bg": 4,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "78": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": " 時間  Sun Sep 13 09:59:09 2026                                               ",
+      "attr": {
+        "0": {
+          "fg": 4,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "6": {
+          "fg": null,
+          "bg": 4,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "78": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "───────────────────────────────────────",
+      "attr": {
+        "0": {
+          "fg": 6,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "78": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "內文",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "-----",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "Sent from JPTT on my iPhone",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "--",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "※ 發信站: 批踢踢實業坊(ptt.cc), 來自: 000.000.000.000 (臺灣)",
+      "attr": {
+        "0": {
+          "fg": 2,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "59": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "※ 文章網址: https://www.ptt.cc/bbs/Test/M.1789264751.A.5DD.html",
+      "attr": {
+        "0": {
+          "fg": 2,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "64": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "→ askz0: 測試                                                     09/13 10:01",
+      "attr": {
+        "0": {
+          "fg": 1,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "3": {
+          "fg": 3,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "8": {
+          "fg": 3,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "67": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "推 mod980: 123                                                     09/13 10:18",
+      "attr": {
+        "0": {
+          "fg": 7,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "3": {
+          "fg": 3,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "9": {
+          "fg": 3,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "67": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "  瀏覽 第 1/1 頁 (100%)  目前顯示: 第 01~14 行  (y)回應(X%)推文(h)說明(←)離開 ",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": 4,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "24": {
+          "fg": 0,
+          "bg": 7,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "46": {
+          "fg": null,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "48": {
+          "fg": 1,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "51": {
+          "fg": 0,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "55": {
+          "fg": 1,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "59": {
+          "fg": 0,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "63": {
+          "fg": 1,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "66": {
+          "fg": 0,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "70": {
+          "fg": 1,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "74": {
+          "fg": 0,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "79": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    }
+  ]
+}

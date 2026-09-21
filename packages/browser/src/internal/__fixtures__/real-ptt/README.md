@@ -1,20 +1,13 @@
 # Real PTT terminal transcripts
 
-These transcripts were captured from `wss://ws.ptt.cc/bbs` on 2026-08-31/2026-09-01
-through the browser terminal driver. Account identifiers, IP addresses and article
-URLs are replaced with fixed-width placeholders. No password or credential is
-stored here.
+Additional capture set: [2026-09-13](2026-09-13/README.md) contains 112 terminal
+snapshots covering both duplicate-login choices, Test-board create/push/reply/edit/
+delete with cleanup, search and paging, and logout. It includes action timestamps
+and reconstructed terminal attributes, with explicit coverage and encoding limits.
+The same day's [nested reply follow-up](2026-09-13/nested-replies-1gfWDlNT/README.md)
+adds 52 snapshots, eight authorized writes to the designated article, and 18 offline
+regression tests for nesting, reply votes, vote changes and composite replies.
 
-The fixtures document terminal states that are difficult to reproduce with
-hand-written mocks:
+Earlier capture set: [2026-08-31_2026-09-01](2026-08-31_2026-09-01/README.md) contains the five original text transcripts. The batch spans both dates; individual file capture dates were not recorded, so the files remain grouped together.
 
-- `login.txt`: duplicate-session prompt, successful continuation and main menu.
-- `favorites.txt`: PTT reopening My Favorites at the remembered last page, then
-  the same list after Home rewinds it to item 1.
-- `filtered-write.txt`: a title-search `系列《Test》` article and the warning/input
-  state that exposed writes being attempted from special-list mode.
-- `post.txt`: Test board list plus the real category/title compose prompt.
-- `delete.txt`: deletion prompt, progress screen and verified deleted row.
-
-Keep these as transport fixtures: assertions should target stable labels, row
-numbers, commands and transitions rather than changing timestamps or popularity.
+See [test coverage](TEST-COVERAGE.md) for fixture consumers and remaining gaps.

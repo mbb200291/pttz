@@ -34,6 +34,8 @@ export interface VoteCount {
 export interface PushEditRecord {
   time: string;    // display timestamp
   content: string; // content at that version
+  kind?: "original" | "append" | "replace" | "withdraw";
+  resultContent?: string;
 }
 
 export interface PushEditData {
@@ -217,7 +219,7 @@ function EditHistoryPanel({
       <ol style={{ listStyle: "none", margin: 0, padding: 0 }}>
         {editData.history.map((record, i) => {
           const isLast = i === editData.history.length - 1;
-          const isFirst = i === 0;
+          const isOriginal = record.kind === "original";
           return (
             <li key={i} style={{
               position: "relative",
@@ -255,7 +257,7 @@ function EditHistoryPanel({
                     目前版本
                   </span>
                 )}
-                {isFirst && !isLast && (
+                {isOriginal && !isLast && (
                   <span style={{
                     fontSize: 10,
                     fontWeight: 600,
@@ -267,7 +269,7 @@ function EditHistoryPanel({
                     原始
                   </span>
                 )}
-                {isFirst && isLast && (
+                {isOriginal && isLast && (
                   <span style={{
                     fontSize: 10,
                     fontWeight: 600,
@@ -286,7 +288,7 @@ function EditHistoryPanel({
                 color: "var(--text)",
                 lineHeight: 1.6,
               }}>
-                {record.content}
+                {record.resultContent ?? record.content}
               </p>
             </li>
           );
@@ -337,14 +339,15 @@ function PushItem({
   const visualDepth = Math.min(depth, 3);
   const indent = visualDepth * 12;
   const ipLabel =
-    push.ipAddresses.length === 0 ? null : push.ipAddresses.join(", ");
+    push.visible === false || push.ipAddresses.length === 0 ? null : push.ipAddresses.join(", ");
   const isEditNode = push.type === "edit";
+  const withdrawn = push.visible === false;
   const displayVoteState = voteState ?? getPushVoteState(push, currentUser);
 
-  const cardBorder = isEditNode
+  const cardBorder = withdrawn ? "1px dashed var(--border)" : isEditNode
     ? "1px solid var(--accent-border)"
     : "1px solid var(--border)";
-  const cardBackground = depth === 0 ? "var(--surface)" : "var(--surface-2)";
+  const cardBackground = withdrawn ? "transparent" : depth === 0 ? "var(--surface)" : "var(--surface-2)";
 
   const canEdit = Boolean(
     onEdit &&
@@ -353,7 +356,7 @@ function PushItem({
     !isEditNode,
   );
 
-  const actionCluster = !isEditNode && (
+  const actionCluster = !isEditNode && !withdrawn && (
     <div style={{
       display: "flex",
       alignItems: "center",
@@ -398,7 +401,7 @@ function PushItem({
         </button>
       )}
 
-      {editData && editData.history.length > 1 && (
+      {editData && editData.history.some((record) => record.kind !== "original") && (
         <button
           type="button"
           onClick={toggleHistory}
@@ -480,19 +483,19 @@ function PushItem({
               </span>
             )}
 
-            <PushBadge type={push.type} />
+            {!withdrawn && <PushBadge type={push.type} />}
           </div>
 
           {/* Content */}
           <div style={{
             fontSize: 13.5,
             lineHeight: 1.5,
-            color: isEditNode ? "var(--edit-fg)" : "var(--text)",
+            color: withdrawn ? "var(--text-muted)" : isEditNode ? "var(--edit-fg)" : "var(--text)",
             paddingLeft: 26,
             fontStyle: isEditNode ? "italic" : undefined,
             wordBreak: "break-word",
           }}>
-            <RichContent text={push.content} variant="inline" />
+            {withdrawn ? "此回覆已撤回" : <RichContent text={push.content} variant="inline" />}
           </div>
         </div>
 
@@ -518,7 +521,7 @@ function PushItem({
           {actionCluster}
         </div>
 
-        {showHistory && editData && (
+        {!withdrawn && showHistory && editData && (
           <div style={{ flexBasis: "100%" }}>
             <EditHistoryPanel editData={editData} onClose={toggleHistory} />
           </div>
@@ -604,7 +607,7 @@ export function PushThread({
   const showRefreshing = refreshing || localRefreshing;
 
   const visiblePushes = useMemo(
-    () => pushes.filter((push) => push.visible !== false),
+    () => pushes,
     [pushes],
   );
 
@@ -799,10 +802,10 @@ export function PushThread({
             {scoreLabel}
           </span>
           <span style={{ fontSize: 12, color: "var(--text-dim)" }}>
-            ({topLevel.length} 則第一層回覆)
+            ({topLevel.filter((push) => push.visible !== false).length} 則討論)
           </span>
           <span style={{ fontSize: 12, color: "var(--text-dim)" }}>
-            已顯示 {visibleTopLevel.length} / {sortedTopLevel.length} 則第一層回覆
+            已顯示 {visibleTopLevel.filter((push) => push.visible !== false).length} / {sortedTopLevel.filter((push) => push.visible !== false).length} 則
           </span>
         </div>
 

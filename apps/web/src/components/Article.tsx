@@ -4,11 +4,16 @@
  * 完整資料回來後切換到完整版（含推文討論串）。
  */
 
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useArticle } from "../hooks/useArticle";
+import { useReplyDraftPlanner } from "../hooks/useReplyDraftPlanner";
+import { MAX_REPLY_FRAGMENTS } from "../lib/replyBudget";
+import { replyFailureGuidance } from "../lib/replyFailureGuidance";
 import { PushThread } from "./PushThread";
 import { ArticleRevisions } from "./ArticleRevisions";
 import { RichContent } from "./RichContent";
+import { canUseShortcut, type NavigationKeyEvent } from "../lib/keyboardNavigation";
+import { useBodyNavigation } from "../hooks/useBodyNavigation";
 import type { ArticleData, PartialArticleData } from "../hooks/useArticle";
 import type { ArticleEditRecord, ArticleSummary } from "../lib/ptt/uiArticle";
 import {
@@ -20,7 +25,7 @@ import type { VoteCount, PushEditData } from "./PushThread";
 import { Composer } from "./Composer";
 import type { ComposerMode, ComposerInitial } from "./Composer";
 import { usePttActions } from "../hooks/usePttActions";
-import type { ArticleKey } from "@pttzzz/core";
+import type { ArticleKey, ReplyDelivery, ReplyDraftInput } from "@pttzzz/core";
 import { Monogram } from "./Monogram";
 import { ScoreOrb } from "./ScoreOrb";
 import { canRetryWrite, formatWriteError, writeFingerprint } from "../lib/writeResult";
@@ -162,56 +167,7 @@ function ArticleHeader({
 }
 
 function ArticleBody({ body }: { body: string }) {
-  const clean = body.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "").trim();
-  return <RichContent text={clean} variant="body" />;
-}
-
-function LightweightArticleBody({ body }: { body: string }) {
-  const clean = body.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "").trim();
-  if (!clean) {
-    return <div className="mb-8 py-4 text-sm text-gray-500">文章內容載入中…</div>;
-  }
-  return (
-    <pre className="mb-8 whitespace-pre-wrap break-words font-mono text-sm leading-relaxed text-gray-200">
-      {clean}
-    </pre>
-  );
-}
-
-function LightweightPushList({
-  pushes,
-}: {
-  pushes: NonNullable<PartialArticleData["pushes"]>;
-}) {
-  const visiblePushes = pushes.filter((push) => push.visible !== false);
-  if (visiblePushes.length === 0) return null;
-
-  return (
-    <section className="mt-10 border-t border-gray-700 pt-6">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <span className="text-sm font-semibold tracking-wide text-gray-300">
-          回文
-        </span>
-        <span className="text-xs text-gray-500">已載入 {visiblePushes.length} 則</span>
-      </div>
-      <div className="space-y-2">
-        {visiblePushes.map((push) => (
-          <div
-            key={push.id}
-            className="rounded-xl border border-gray-800 bg-gray-900/70 px-3 py-2"
-          >
-            <div className="mb-1 flex items-center gap-2 text-xs text-gray-500">
-              <span className="font-medium text-sky-300">{push.author}</span>
-              {push.time ? <span>{push.time}</span> : null}
-            </div>
-            <pre className="whitespace-pre-wrap break-words font-mono text-sm leading-6 text-gray-200">
-              {push.content}
-            </pre>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
+  return <RichContent text={body} variant="body" />;
 }
 
 function getViewerPushVote(push: AggregatedPush, currentUser?: string): -1 | 0 | 1 {
@@ -245,28 +201,6 @@ function transitionVoteState(
         (next === -1 ? 1 : 0),
     },
   };
-}
-
-function PartialArticleView({ partial }: { partial: PartialArticleData }) {
-  const pushes = partial.pushes ?? [];
-  const articleNotes = partial.articleNotes ?? [];
-
-  return (
-    <>
-      <ArticleHeader
-        title={partial.title}
-        author={partial.author}
-        board={partial.board}
-        date={partial.date}
-      />
-      <LightweightArticleBody body={partial.body} />
-      <ArticleEditRecords records={articleNotes} />
-      <LightweightPushList pushes={pushes} />
-      <div className="py-6 text-center text-gray-500 text-sm border-t border-gray-800">
-        完整討論串整理中…
-      </div>
-    </>
-  );
 }
 
 type PushTypeBadgeType = "push" | "boo" | "neutral";
@@ -309,6 +243,7 @@ export function Article({
   onEditArticle,
   onReplyToBoard,
 }: ArticleProps) {
+  const navigationRef = useRef<HTMLDivElement>(null);
   const {
     article: liveArticle,
     partialArticle,
@@ -365,6 +300,11 @@ export function Article({
   const [composerSubmitting, setComposerSubmitting] = useState(false);
   const composerSubmittingRef = useRef(false);
   const [composerSubmitError, setComposerSubmitError] = useState<string | null>(null);
+  const [composerCanReload, setComposerCanReload] = useState(false);
+  const [composerRecovering, setComposerRecovering] = useState(false);
+  // Receipts outlive the modal, but intentionally remain local to this reader.
+  const replyDrafts = useRef(new Map<string, { input: ReplyDraftInput; delivery: ReplyDelivery }>());
+  const [replyDelivery, setReplyDelivery] = useState<ReplyDelivery>();
   const [lockedComposerFingerprints, setLockedComposerFingerprints] = useState<Set<string>>(new Set());
   const [deletingArticle, setDeletingArticle] = useState(false);
   const [deleteArticleError, setDeleteArticleError] = useState<string | null>(null);
@@ -376,6 +316,8 @@ export function Article({
     ? { board: boardName, aid: articleAid }
     : { board: boardName, index: articleIndex }, [articleAid, articleIndex, boardName]);
   const { isLoggedIn } = actions;
+  const replyPlan = useReplyDraftPlanner(composer && composer.mode !== "edit-push" && !replyDelivery
+    ? { article: articleKey, ...(composer.replyId ? { replyId: composer.replyId } : {}) } : null, actions.prepareReplyDraft);
   const isArticleAuthor = Boolean(
     article && currentUser &&
     samePttId(article.author, currentUser),
@@ -436,7 +378,7 @@ export function Article({
     onBack,
   ]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!article) return;
     setArticleVote({
       value: getViewerArticleVote(article, currentUser),
@@ -566,20 +508,25 @@ export function Article({
 
   const openReply = useCallback(() => {
     setComposerSubmitError(null);
-    setComposer({ mode: "reply", initial: {} });
-  }, []);
+    const saved = replyDrafts.current.get(JSON.stringify([articleKey, null]));
+    setReplyDelivery(saved?.delivery);
+    setComposer({ mode: "reply", initial: saved ? { body: saved.input.content, pushType: saved.input.pushType } : {} });
+  }, [articleKey]);
 
   const openReplyPush = useCallback((push: AggregatedPush) => {
     setComposerSubmitError(null);
+    const saved = replyDrafts.current.get(JSON.stringify([articleKey, push.id]));
+    setReplyDelivery(saved?.delivery);
     setComposer({
       mode: "reply-push",
-      initial: {},
+      initial: saved ? { body: saved.input.content, pushType: "neutral" } : {},
       replyId: push.id,
     });
-  }, []);
+  }, [articleKey]);
 
   const openEditPush = useCallback((push: AggregatedPush) => {
     setComposerSubmitError(null);
+    setReplyDelivery(undefined);
     setComposer({
       mode: "edit-push",
       initial: {
@@ -618,7 +565,7 @@ export function Article({
         article: articleKey,
         replyId: composer.replyId,
         content: payload.body,
-        pushType: payload.pushType,
+        pushType: "neutral",
       });
     }
     return writeFingerprint("replyToArticle", {
@@ -634,9 +581,64 @@ export function Article({
     composerSubmittingRef.current = true;
     setComposerSubmitting(true);
     setComposerSubmitError(null);
+    setComposerCanReload(false);
 
     void (async () => {
       try {
+        if (composer && composer.mode !== "edit-push" && actions.sendReplyDraft) {
+          const key = JSON.stringify([articleKey, composer.replyId ?? null]);
+          const previous = replyDrafts.current.get(key);
+          if (previous && previous.delivery.status !== "paused") return;
+          const input: ReplyDraftInput = previous?.input ?? {
+            operationId: crypto.randomUUID(),
+            maxFragments: MAX_REPLY_FRAGMENTS,
+            article: articleKey,
+            content: payload.body,
+            pushType: composer.mode === "reply-push" || isArticleAuthor ? "neutral" : payload.pushType,
+            ...(composer.replyId ? { replyId: composer.replyId } : {}),
+          };
+          const saveProgress = (delivery: ReplyDelivery) => {
+            replyDrafts.current.set(key, { input, delivery });
+            setReplyDelivery(delivery);
+          };
+          saveProgress(previous?.delivery ?? { operationId: input.operationId, status: "paused", confirmed: 0, total: 0 });
+          try {
+            const result = await actions.sendReplyDraft({ ...input, ...(previous ? { resume: true } : {}) }, saveProgress);
+            if (!result.ok) {
+              const last = replyDrafts.current.get(key)!.delivery;
+              if (result.error.outcome === "not-sent" && last.confirmed === 0) {
+                replyPlan.retry();
+                replyDrafts.current.delete(key);
+                setReplyDelivery(undefined);
+                const guidance = replyFailureGuidance(result.error.replyIssue);
+                setComposerSubmitError(guidance.message);
+                setComposerCanReload(guidance.reload);
+              } else {
+                saveProgress({ ...last, status: result.error.outcome === "not-sent" ? "paused" : "uncertain" });
+                if (result.error.outcome !== "not-sent") void liveReload().catch(() => {});
+              }
+              return;
+            }
+            saveProgress(result.value);
+            if (result.value.status === "complete") {
+              try { await liveReload(); } finally {
+                replyDrafts.current.delete(key);
+                setReplyDelivery(undefined);
+                setComposer(null);
+              }
+            } else if (result.value.status === "uncertain") {
+              // A refresh is a read only; it cannot unlock or prove this write.
+              void liveReload().catch(() => {});
+            }
+          } catch {
+            const last = replyDrafts.current.get(key)?.delivery;
+            if (last) {
+              saveProgress({ ...last, status: "uncertain" });
+              void liveReload().catch(() => {});
+            }
+          }
+          return;
+        }
         let result;
         if (composer?.mode === "edit-push" && composer.replyId) {
           result = payload.editMode === "撤回"
@@ -659,7 +661,7 @@ export function Article({
             article: articleKey,
             replyId: composer.replyId,
             content: payload.body,
-            pushType: payload.pushType,
+            pushType: "neutral",
           });
         } else {
           result = await actions.replyToArticle({
@@ -669,6 +671,17 @@ export function Article({
           });
         }
         if (!result.ok) {
+          if (composer?.mode !== "edit-push" && (result.error.outcome === "sent" || result.error.outcome === "uncertain")) {
+            setLockedComposerFingerprints((current) => new Set(current).add(fingerprint));
+            // A read refresh must never retry the write or be treated as proof
+            // that this particular submission was absent. Keep its lock.
+            try {
+              await liveReload();
+            } finally {
+              setComposer(null);
+            }
+            return;
+          }
           setComposerSubmitError(formatWriteError(
             result.error,
             composer?.mode === "edit-push" ? "推文編輯失敗" : "回文送出失敗",
@@ -692,7 +705,7 @@ export function Article({
         setComposerSubmitting(false);
       }
     })();
-  }, [actions, articleKey, clearWriteLocks, composer, composerFingerprint, isArticleAuthor, liveReload, lockedComposerFingerprints]);
+  }, [actions, articleKey, clearWriteLocks, composer, composerFingerprint, isArticleAuthor, liveReload, lockedComposerFingerprints, replyPlan]);
 
   const initialArticle =
     initialArticleSummary && !articleAid
@@ -704,6 +717,13 @@ export function Article({
           body: "",
         }
       : null;
+
+  const loadingArticle: PartialArticleData | null = loading ? partialArticle ?? cachedArticle ?? initialArticle : null;
+  const displayedArticle = article ?? loadingArticle;
+  const displayedVotes = article ? articleVote.count : loadingArticle?.articleVotes ? {
+    push: loadingArticle.articleVotes.pushCount,
+    boo: loadingArticle.articleVotes.booCount,
+  } : { push: 0, boo: 0 };
 
   useEffect(() => {
     if (!import.meta.env.DEV || typeof window === "undefined") return;
@@ -726,17 +746,34 @@ export function Article({
     };
   }, [article, articleIndex, boardName]);
 
-  // Compute native article votes and visible aggregated replies for the stats bar.
-  const fallbackPushTypes = article?.pushes.map((push) => push.type) ?? [];
-  const pushCount = article?.nativeVotes?.pushCount ?? article?.nativePushCount ?? fallbackPushTypes.filter((type) => type === "push").length;
-  const booCount = article?.nativeVotes?.booCount ?? article?.nativeBooCount ?? fallbackPushTypes.filter((type) => type === "boo").length;
-  const replyCount = (article?.pushes ?? []).filter((push) =>
+  // Count all visible aggregated replies, including nested replies.
+  const replyCount = (displayedArticle?.pushes ?? []).filter((push) =>
     push.type !== "edit" &&
     push.visible !== false
   ).length;
 
+  function handleNavigation(event: NavigationKeyEvent, scope?: HTMLElement) {
+    if (article && !composer && canUseShortcut(event, false, scope)) {
+      const key = event.key.toLowerCase();
+      if (key === "x" && isLoggedIn) {
+        event.preventDefault();
+        openReply();
+      } else if ((key === "y" || key === "r") && canReplyToBoard) {
+        event.preventDefault();
+        onReplyToBoard?.(article);
+      }
+    }
+    if (event.key === "ArrowLeft" && canUseShortcut(event, false, scope)) {
+      event.preventDefault();
+      onBack();
+    }
+  }
+  useBodyNavigation(navigationRef, handleNavigation);
+
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--text)" }}>
+    <div ref={navigationRef} tabIndex={-1} aria-label="文章閱讀區，左方向鍵返回"
+      onKeyDown={handleNavigation}
+      style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--text)" }}>
       {/* 頂部導覽 */}
       <div style={{
         position: "sticky",
@@ -829,6 +866,8 @@ export function Article({
               <button
                 type="button"
                 aria-label="回應至看板"
+                aria-keyshortcuts="r"
+                title="回應至看板（R）"
                 onClick={() => canReplyToBoard && onReplyToBoard?.(article)}
                 disabled={!canReplyToBoard}
                 style={{
@@ -871,13 +910,22 @@ export function Article({
           </div>
         )}
 
-        {/* 初次 loading，但有 partialArticle 可先顯示 */}
-        {loading && partialArticle && (
-          <PartialArticleView partial={partialArticle} />
-        )}
-
-        {loading && !partialArticle && (cachedArticle || initialArticle) && (
-          <PartialArticleView partial={(cachedArticle ?? initialArticle)!} />
+        {/* Keep the same formatted body mounted across partial, cached and final data. */}
+        {displayedArticle && (
+          <>
+            <ArticleHeader
+              title={displayedArticle.title}
+              author={displayedArticle.author}
+              board={displayedArticle.board}
+              date={displayedArticle.date}
+              score={displayedArticle.score}
+            />
+            {displayedArticle.body || article ? (
+              <ArticleBody key={`${boardName}:${articleAid ?? articleIndex}`} body={displayedArticle.body} />
+            ) : (
+              <div className="mb-8 py-4 text-sm text-gray-500">文章內容載入中…</div>
+            )}
+          </>
         )}
 
         {/* 初次 loading，尚無任何內容 */}
@@ -893,21 +941,13 @@ export function Article({
         )}
 
         {/* 完整文章 */}
-        {article && (
+        {displayedArticle && (
           <>
-            <ArticleHeader
-              title={article.title}
-              author={article.author}
-              board={article.board}
-              date={article.date}
-              score={article.score}
-            />
-            <ArticleBody body={article.body} />
-            <ArticleRevisions revisions={article.revisions ?? []} />
-            <ArticleEditRecords records={article.articleNotes} />
+            <ArticleRevisions revisions={displayedArticle.revisions ?? []} />
+            <ArticleEditRecords records={displayedArticle.articleNotes ?? []} />
 
-            {/* Stats bar */}
-            <div style={{
+            {/* One action row uses the core's corrected article vote totals. */}
+            <div role="group" aria-label="文章推噓與回覆" style={{
               display: "flex",
               alignItems: "center",
               gap: 16,
@@ -917,78 +957,85 @@ export function Article({
               marginBottom: 24,
               flexWrap: "wrap",
             }}>
-              {/* push count */}
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <PushTypeBadge type="push" />
-                <span style={{ fontWeight: 700, fontSize: 14, color: "var(--push-fg)", fontFamily: "var(--font-mono)" }}>{pushCount}</span>
-                <span style={{ fontSize: 12, color: "var(--text-dim)" }}>PTT 原生推</span>
-              </div>
-              {/* boo count */}
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <PushTypeBadge type="boo" />
-                <span style={{ fontWeight: 700, fontSize: 14, color: "var(--boo-fg)", fontFamily: "var(--font-mono)" }}>{booCount}</span>
-                <span style={{ fontSize: 12, color: "var(--text-dim)" }}>PTT 原生噓</span>
-              </div>
-              {/* aggregated reply count */}
+              <VotePair
+                value={articleVote.value}
+                count={displayedVotes}
+                countsPending={!article && !loadingArticle?.articleVotes}
+                reserveCountWidth
+                voters={{
+                  push: article?.articlePushVoters ?? [],
+                  boo: article?.articleBooVoters ?? [],
+                }}
+                myVote={articleVote.value}
+                onPush={() => handleArticleVote("push")}
+                onBoo={() => handleArticleVote("boo")}
+                disabled={!article || !isLoggedIn || isArticleAuthor || articleVotePending || articleVoteLocked}
+                size="lg"
+              />
               <div
                 aria-label={`聚合後回覆 ${replyCount}`}
                 style={{ display: "flex", alignItems: "center", gap: 6 }}
               >
                 <PushTypeBadge type="neutral" />
-                <span style={{ fontWeight: 700, fontSize: 14, color: "var(--neutral-fg)", fontFamily: "var(--font-mono)" }}>{replyCount}</span>
+                <span style={{ display: "inline-block", width: "6ch", fontVariantNumeric: "tabular-nums", fontWeight: 700, fontSize: 14, color: "var(--neutral-fg)", fontFamily: "var(--font-mono)" }}>{displayedArticle.pushes ? replyCount : "—"}</span>
                 <span style={{ fontSize: 12, color: "var(--text-dim)" }}>回覆</span>
               </div>
-            </div>
-
-            {/* Article-level VotePair */}
-            <div style={{ margin: "0 0 24px", display: "flex", alignItems: "center", gap: 12 }}>
-              <VotePair
-                value={articleVote.value}
-                count={articleVote.count}
-                voters={{
-                  push: article.articlePushVoters ?? [],
-                  boo: article.articleBooVoters ?? [],
-                }}
-                myVote={articleVote.value}
-                onPush={() => handleArticleVote("push")}
-                onBoo={() => handleArticleVote("boo")}
-                disabled={!isLoggedIn || isArticleAuthor || articleVotePending || articleVoteLocked}
-                size="lg"
-              />
-              {isArticleAuthor && (
-                <span style={{ color: "var(--text-dim)", fontSize: 12 }}>
+              {isLoggedIn && (
+                <span aria-hidden={!isArticleAuthor} style={{ visibility: isArticleAuthor ? "visible" : "hidden", color: "var(--text-dim)", fontSize: 12 }}>
                   作者本人, 使用 → 加註方式
                 </span>
               )}
               {isLoggedIn && (
-                <button type="button" onClick={openReply}
+                <button type="button" disabled={!article} onClick={openReply} aria-keyshortcuts="x" title="回覆此文（X）"
                   className="px-4 py-2 rounded-xl border border-gray-700 text-sm text-gray-300 hover:text-white hover:border-gray-500 transition-colors">
                   回覆此文
                 </button>
               )}
             </div>
             {pushVoteError && (
-              <p role="alert" className="mb-3 text-sm text-red-400">
-                {pushVoteError}
-              </p>
+              <div
+                role={pushVoteError === "尚未同步" ? "status" : "alert"}
+                className="mb-3 flex items-center gap-3 text-sm text-gray-400"
+              >
+                <span>{pushVoteError}</span>
+                {pushVoteError === "尚未同步" && (
+                  <button
+                    type="button"
+                    disabled={liveReloading}
+                    onClick={() => {
+                      void liveReload().then((refreshed) => {
+                        if (refreshed) {
+                          setPushVoteError(null);
+                          clearWriteLocks();
+                        }
+                      });
+                    }}
+                    className="text-gray-200 underline underline-offset-4 hover:text-white disabled:opacity-50"
+                  >
+                    重新整理
+                  </button>
+                )}
+              </div>
             )}
             <PushThread
-              pushes={article.pushes}
-              score={article.score}
+              pushes={displayedArticle.pushes ?? []}
+              score={displayedArticle.score ?? 0}
               onRefresh={async () => {
+                if (!article) return false;
                 const refreshed = await liveReload();
                 if (refreshed) clearWriteLocks();
                 return refreshed;
               }}
-              refreshing={liveReloading}
+              refreshing={!article || liveReloading}
               currentUser={currentUser}
-              onReply={openReplyPush}
-              onEdit={openEditPush}
+              onReply={article ? openReplyPush : undefined}
+              onEdit={article ? openEditPush : undefined}
               pushVotes={pushVotes}
-              onVote={handlePushVote}
+              onVote={article ? handlePushVote : undefined}
               pushEdits={pushEdits}
               pendingVoteIds={new Set([...pendingPushVoteIds, ...lockedPushVoteIds])}
             />
+            {!article && <div role="status" className="py-6 text-center text-gray-500 text-sm">討論載入中…</div>}
           </>
         )}
       </div>
@@ -998,8 +1045,26 @@ export function Article({
           initial={composer.initial}
           neutralOnly={isArticleAuthor && composer.mode === "reply"}
           submitting={composerSubmitting}
+          multipartEnabled={Boolean(actions.sendReplyDraft) && composer.mode !== "edit-push"}
+          plannerState={replyPlan.state}
+          onRetryPlan={replyPlan.retry}
+          delivery={composer.mode !== "edit-push" ? replyDelivery : undefined}
+          contentLocked={composer.mode !== "edit-push" && Boolean(replyDelivery)}
+          onRefresh={() => { void liveReload().catch(() => {}); }}
           isSubmitLocked={(payload) => lockedComposerFingerprints.has(composerFingerprint(payload))}
           submitError={composerSubmitError}
+          recovering={composerRecovering}
+          onRecoverSubmit={composerCanReload && composer.mode !== "edit-push" ? async () => {
+            if (composerSubmittingRef.current) return;
+            composerSubmittingRef.current = true;
+            setComposerSubmitting(true);
+            setComposerRecovering(true);
+            try {
+              const loaded = await liveReload();
+              setComposerSubmitError(loaded ? null : "文章尚未載入，請稍後再試。");
+            } catch { setComposerSubmitError("文章載入失敗，請確認連線後再試。"); }
+            finally { composerSubmittingRef.current = false; setComposerSubmitting(false); setComposerRecovering(false); }
+          } : undefined}
           onClose={handleComposerClose}
           onSubmit={handleComposerSubmit}
         />

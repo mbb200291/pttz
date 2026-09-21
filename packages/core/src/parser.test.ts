@@ -15,6 +15,11 @@ describe("stripAnsi", () => {
 });
 
 describe("parsePushLine", () => {
+  it.each(["", " "])("preserves full-width content spacing with separator %j", separator => {
+    const row = `→ alice:${separator}\u3000\u3000正文\u3000\u3000   04/09 10:01`;
+    expect(parsePushLine(row)?.content).toBe("　　正文　　");
+    expect(parsePushBuffer(row)[0]?.content).toBe("　　正文　　");
+  });
   it("parses a standard push row", () => {
     expect(
       parsePushLine("推 user1: 第一則推文                         04/09 10:01"),
@@ -92,6 +97,17 @@ describe("splitArticleEditableContent", () => {
 });
 
 describe("parsePushBuffer", () => {
+  it("measures local pushes without a space after the colon", () => {
+    const pushes = parsePushBuffer(
+      `→ pttzzz2:${"a".repeat(54)} 09/20 10:43\n→ pttzzz2:x 09/20 10:44`,
+    );
+
+    expect(pushes.map((push) => ({ content: push.content, remaining: push.remainingContentColumns }))).toEqual([
+      { content: "a".repeat(54), remaining: 0 },
+      { content: "x", remaining: 53 },
+    ]);
+  });
+
   it("removes IPv4 addresses from push content and keeps them as metadata", () => {
     const pushes = parsePushBuffer(
       "推 user1: 第一則推文                         111.22.33.44 04/09 10:01",
@@ -116,12 +132,12 @@ describe("parsePushBuffer", () => {
     expect(pushes[0]).toMatchObject({
       author: "neoa01",
       content: "新聞：專家：「跑山獸的存在」讓7.5億消",
-      remainingContentColumns: 3,
+      remainingContentColumns: 2,
     });
     expect(pushes[1]).toMatchObject({
       author: "neoa01",
       content: "短句",
-      remainingContentColumns: 36,
+      remainingContentColumns: 35,
     });
   });
 
@@ -133,12 +149,12 @@ describe("parsePushBuffer", () => {
     expect(pushes[0]).toMatchObject({
       author: "CMCC",
       content: "函釋是在說明可以列入，懂嗎？ 而非限制必須",
-      remainingContentColumns: 1,
+      remainingContentColumns: 0,
     });
     expect(pushes[1]).toMatchObject({
       author: "CMCC",
       content: "列入，因為政治獻金有稅法上優勢，所以釋法",
-      remainingContentColumns: 2,
+      remainingContentColumns: 1,
     });
   });
 
@@ -150,7 +166,7 @@ describe("parsePushBuffer", () => {
     expect(pushes[0]).toMatchObject({
       author: "alisabonsai",
       content: "候選人在選舉的時候只想要曝光換選",
-      remainingContentColumns: 3,
+      remainingContentColumns: 2,
     });
   });
 
@@ -161,7 +177,7 @@ describe("parsePushBuffer", () => {
       "推 antiSOC     : 川：華許幹的好 我來找買點                         08/29 16:56",
     ].join("\n"));
 
-    expect(pushes.map((push) => push.remainingContentColumns)).toEqual([1, 4, 24]);
+    expect(pushes.map((push) => push.remainingContentColumns)).toEqual([0, 3, 23]);
   });
 
   it("distinguishes unaligned long IDs from aligned author padding", () => {
@@ -174,15 +190,15 @@ describe("parsePushBuffer", () => {
       author: push.author,
       remaining: push.remainingContentColumns,
     }))).toEqual([
-      { author: "SouthEast62", remaining: 4 },
-      { author: "frank111", remaining: 3 },
+      { author: "SouthEast62", remaining: 3 },
+      { author: "frank111", remaining: 2 },
     ]);
   });
 
   it("treats one remaining column as full and two as not full", () => {
     const pushes = parsePushBuffer([
-      `→ alice: ${"a".repeat(55)}  08/24 13:21`,
-      `→ alice: ${"a".repeat(54)}   08/24 13:22`,
+      `→ alice: ${"a".repeat(54)}   08/24 13:21`,
+      `→ alice: ${"a".repeat(53)}    08/24 13:22`,
     ].join("\n"));
 
     expect(pushes.map((push) => push.remainingContentColumns)).toEqual([1, 2]);
@@ -199,11 +215,11 @@ describe("parsePushBuffer", () => {
     ].join("\n"));
 
     expect(pushes.map((push) => push.remainingContentColumns)).toEqual([
-      22,
-      7,
-      4,
-      2,
+      21,
+      6,
       3,
+      1,
+      2,
     ]);
   });
 

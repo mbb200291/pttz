@@ -15,6 +15,8 @@ export interface VotePairProps {
   myVote?: -1 | 0 | 1;
   size?: "xs" | "sm" | "lg";
   disabled?: boolean;
+  countsPending?: boolean;
+  reserveCountWidth?: boolean;
 }
 
 // ─── SVG icons ────────────────────────────────────────────────────────────────
@@ -174,6 +176,8 @@ export function VotePair({
   myVote: _myVote = 0,
   size = "sm",
   disabled = false,
+  countsPending = false,
+  reserveCountWidth = false,
 }: VotePairProps) {
   const pushRef = useRef<HTMLButtonElement>(null);
   const booRef = useRef<HTMLButtonElement>(null);
@@ -248,7 +252,7 @@ export function VotePair({
         }}
       >
         <ThumbUp s={iconSize} fill={isPush ? "currentColor" : "none"} />
-        {count.push}
+        <span style={reserveCountWidth ? { display: "inline-block", width: "6ch", fontVariantNumeric: "tabular-nums", textAlign: "center" } : undefined}>{countsPending ? "—" : count.push}</span>
       </button>
 
       <button
@@ -282,7 +286,7 @@ export function VotePair({
         }}
       >
         <ThumbDown s={iconSize} fill={isBoo ? "currentColor" : "none"} />
-        {count.boo}
+        <span style={reserveCountWidth ? { display: "inline-block", width: "6ch", fontVariantNumeric: "tabular-nums", textAlign: "center" } : undefined}>{countsPending ? "—" : count.boo}</span>
       </button>
 
       {hoverTarget && anchorRect && (

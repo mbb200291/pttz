@@ -80,10 +80,7 @@ describe("Article push editing", () => {
     render(<Article boardName="Test" articleIndex={99} onBack={() => {}} currentUser="alice" mockArticle={article} />);
 
     await userEvent.click(screen.getByRole("button", { name: "編輯" }));
-    await userEvent.click(screen.getByRole("button", { name: "區段" }));
-    fireEvent.change(screen.getByRole("spinbutton", { name: "區段起點" }), { target: { value: "1" } });
-    fireEvent.change(screen.getByRole("spinbutton", { name: "區段終點" }), { target: { value: "2" } });
-    await userEvent.type(screen.getByRole("textbox"), "新");
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "原新文" } });
     await userEvent.click(screen.getByRole("button", { name: "送出" }));
 
     expect(mocks.editReply).toHaveBeenCalledWith({
@@ -94,7 +91,7 @@ describe("Article push editing", () => {
     });
   });
 
-  it("renders parsed server edit history without local-only state", async () => {
+  it("renders a single operation-only edit from the public core contract", async () => {
     render(
       <Article
         boardName="Test"
@@ -107,7 +104,6 @@ describe("Article push editing", () => {
             ...article.pushes[0],
             content: "更新後推文",
             editHistory: [
-              { kind: "original", commandOrder: 0, time: "12:00", content: "原推文", resultContent: "原推文" },
               { kind: "replace", commandOrder: 1, time: "12:05", content: "更新後推文", resultContent: "更新後推文" },
             ],
           }],
@@ -116,8 +112,25 @@ describe("Article push editing", () => {
     );
 
     await userEvent.click(screen.getByRole("button", { name: "編輯歷史" }));
-    expect(screen.getByText("原推文")).toBeTruthy();
+    expect(screen.queryByText("原始")).toBeNull();
+    expect(screen.getByText("12:05")).toBeTruthy();
     expect(screen.getAllByText("更新後推文").length).toBeGreaterThan(0);
+  });
+
+  it("shows the original hearts before both section edit results", async () => {
+    render(<Article boardName="Test" articleIndex={99} onBack={() => {}} currentUser="viewer" mockArticle={{
+      ...article, pushes: [{ ...article.pushes[0], content: "♥♡♥♡♥♡", editHistory: [
+        { kind: "original", commandOrder: 0, time: "09/16 23:30", content: "♥♥♥♥♥", resultContent: "♥♥♥♥♥" },
+        { kind: "replace", commandOrder: 1, time: "09/16 23:31", content: "♡♥♡", resultContent: "♥♡♥♡♥" },
+        { kind: "replace", commandOrder: 2, time: "09/16 23:35", content: "♡", resultContent: "♥♡♥♡♥♡" },
+      ] }],
+    }} />);
+    await userEvent.click(screen.getByRole("button", { name: "編輯歷史" }));
+    expect(screen.getByText("編輯歷史 · 3 個版本")).toBeTruthy();
+    const records = screen.getAllByRole("listitem");
+    expect(records.map((item) => item.querySelector("p")?.textContent)).toEqual(["♥♥♥♥♥", "♥♡♥♡♥", "♥♡♥♡♥♡"]);
+    expect(records[0].textContent).toContain("原始");
+    expect(records[0].textContent).toContain("09/16 23:30");
   });
 
   it("keeps the composer and draft open when sending fails", async () => {
@@ -146,8 +159,8 @@ describe("Article push editing", () => {
     expect(mocks.editReply).toHaveBeenCalledWith({
       article: { board: "Test", index: 99 },
       replyId: "push-1",
-      mode: "append",
-      content: "修正內容",
+      mode: "section",
+      changes: [{ start: 0, end: 3, replacement: "修正內容" }],
     });
     await userEvent.click(screen.getByRole("button", { name: "送出" }));
     expect(mocks.editReply).toHaveBeenCalledTimes(1);
@@ -215,6 +228,7 @@ describe("Article push editing", () => {
     );
 
     await userEvent.click(screen.getByRole("button", { name: "編輯" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "原新文" } });
     const submit = screen.getByRole("button", { name: "送出" });
     fireEvent.click(submit);
     fireEvent.click(submit);

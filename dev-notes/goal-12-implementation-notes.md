@@ -59,3 +59,20 @@
 - 瀏覽器本機預覽：桌面串流、逐步讀文、返回／焦點恢復、登出／重載，以及離頁後上一頁返回；390×844 正文保留 pre，body/viewport 同為 390px，無整頁橫向溢出。
 - 既有三個 Fast Refresh lint warning 與 bundle size warning 保留；無新 lint error。
 - 不宣稱真站登入、熱門資料或 PTT 效能已實測；正式部署仍需相容的 WebSocket host。
+
+## 同步 dev 與相容性檢視（2026-09-22）
+
+- 合併本機 `dev`（`36fc20a`）。僅 `package.json` 指令區衝突，保留 Threads 啟動／測試／建置及 Web local／正式模式指令。
+- Threads 依賴同步為 core／browser 0.3.0、規則 0.4.x，更新 lockfile 與版本說明；未改動 Threads 執行行為，未推送 remote。
+- 完整 `npm run verify` 通過：core 448、browser 467、web 382、開發代理 21、Threads 74、smoke helpers 11；型別、兩個 UI 建置及 package smoke 通過。lint 0 errors／3 既有 warnings，保留 bundle 大小提示。建置後再次執行 Threads 74 個測試通過。
+- 此輪僅離線自動測試與程式檢視，未做真實瀏覽器視覺驗證或 PTT 連線操作。測試通過不代表以下呈現契約缺口已解決。
+
+### 待調整項目
+
+1. **彩色正文（優先）**：core 的 body 已保留 ANSI；`app.ts` 直接指定 `body.textContent`，未解析 SGR，因此不呈現色彩且可能露出控制序列。最低限度可先移除 ANSI 避免亂碼，但會失去色彩；建議建立安全的文字／色彩片段呈現，並加入 core 原始文字 → DTO → Threads DOM 回歸，不使用任意 HTML。
+2. **撤回與編輯歷程（優先）**：`replies()` 跳過 `visible=false`，會失去撤回占位；歷程忽略 `originalVersion`，且顯示 `edit.content` 而非 `resultContent`。應使用公開 DTO 顯示撤回占位、隱藏撤回內文，並依原始版本及每次結果呈現歷程，不在 UI 重算編輯規則。補撤回父留言仍有子留言、區段更正及多次編輯測試。
+3. **本機開發模式**：Threads Vite 仍硬編碼正式站代理，入口亦未傳入 local 的 protocol／pushFormat。Web 的 `dev:local` 不會切換 Threads。可另複製適配邏輯，但容易再次分歧；建議將既有開發代理抽為共用開發工具，再讓兩個 UI 分別接入設定，補 local／正式目標選擇測試。
+4. **分享文章定位**：分享欄位在列表階段使用摘要 key 建立，讀到文章後不更新為穩定 AID；只有 index 時，刪文遞補可能讓舊連結指向別篇。短期可停用沒有 AID 的分享；建議在取得已核對的 AID 後才提供持久分享，必要時補公開唯讀解析能力，不讓 UI 操作終端。
+5. **測試缺口**：既有 Threads 測試仍將隱藏節點略過視為預期，且沒有完整覆蓋 ANSI、原始編輯版本及 local 設定。需以新版公開契約補測，不以既有綠燈判定已完成適配。
+
+以上屬後續功能／架構調整，保留現況待確認；推薦先補閱讀契約與回歸，再處理共用代理及分享定位。Threads 仍為唯讀介面，因此不需要為本次同步新增回文送出或 30 則計數 UI。

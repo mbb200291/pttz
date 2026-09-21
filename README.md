@@ -92,14 +92,14 @@ flowchart TD
 
 | 層級 | 目前版本 | 位置 | 用途 |
 | --- | --- | --- | --- |
-| 規則層 | 規則 `0.2.0` | [`docs/whitepaper/`](docs/whitepaper/) | 白皮書與完整畫面案例 |
-| 核心實作層 | `@pttzzz/core` `0.2.0` | [`packages/core/`](packages/core/) | 平台無關的資料契約、解析規則與 `PttzzzClient` |
-| 核心實作層的瀏覽器接入 | `@pttzzz/browser` `0.2.0` | [`packages/browser/`](packages/browser/) | 透過 `ptt-client` 與 PTT WebSocket 連線，實作瀏覽器閘道器 |
-| 介面層範例 | `@pttzzz/web-example` `0.2.0` | [`apps/web/`](apps/web/) | React 網頁介面，示範如何使用核心實作 |
+| 規則層 | 規則 `0.4.0` | [`docs/whitepaper/`](docs/whitepaper/) | 白皮書與完整畫面案例 |
+| 核心實作層 | `@pttzzz/core` `0.3.0` | [`packages/core/`](packages/core/) | 平台無關的資料契約、解析規則與 `PttzzzClient` |
+| 核心實作層的瀏覽器接入 | `@pttzzz/browser` `0.3.0` | [`packages/browser/`](packages/browser/) | 透過 `ptt-client` 與 PTT WebSocket 連線，實作瀏覽器閘道器 |
+| 介面層範例 | `@pttzzz/web-example` `0.3.0` | [`apps/web/`](apps/web/) | React 網頁介面，示範如何使用核心實作 |
 
 `@pttzzz/core` 不依賴 React、瀏覽器或 `ptt-client`；其他介面可以直接依照公開契約建立自己的呈現方式。更完整的套件邊界請見[核心架構](packages/core/docs/README.md)與 [UI 開發指南](packages/core/docs/DEVELOPMENT_GUIDE.md)。
 
-規則、核心套件與介面各自採語意化版本。實作會在 package metadata 的 `pttzzz` 欄位宣告所支援的 core、browser 與規則版本；目前三層相容於規則 `0.2.x`。
+規則、核心套件與介面各自採語意化版本。實作會在 package metadata 的 `pttzzz` 欄位宣告所支援的 core、browser 與規則版本；目前三層相容於規則 `0.4.x`。
 
 ## 使用基於 pttzzz 規則實作的客戶端
 
@@ -107,10 +107,11 @@ flowchart TD
 
 ```bash
 npm install
-npm run dev
+npm run build:packages
+npm run dev:ptt
 ```
 
-開發伺服器會同時提供網頁與 `/ptt-ws` WebSocket 代理。瀏覽器仍是直接連線到 PTT；代理只負責加入 PTT WebSocket 所需的 `Origin` 標頭。
+開發伺服器會同時提供網頁與 `/ptt-ws` 代理。`dev:ptt` 連接正式 PTT；`dev:local` 連接本機 Telnet 測試環境。`npm run dev` 依設定選擇，預設本機。設定方式與測試帳號管理請見[本機 PTT 開發環境](apps/web/docs/local-ptt.md)。
 
 ## 開發指引
 
@@ -133,7 +134,9 @@ npm run dev
 常用指令：
 
 ```bash
-npm run dev       # 啟動網頁與 PTT WebSocket 代理
+npm run dev       # 啟動網頁與 PTT 代理，預設本機
+npm run dev:local # 明確選擇本機 Telnet 測試環境
+npm run dev:ptt   # 明確選擇正式 PTT WebSocket
 npm run build     # TypeScript 檢查與正式環境建置
 npm run test      # 執行所有測試
 npm run lint      # 執行 ESLint

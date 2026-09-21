@@ -6,7 +6,7 @@ const readJson = (path: string) => JSON.parse(
 ) as Record<string, unknown>;
 
 describe("three-layer version compatibility", () => {
-  it("declares one compatible 0.2 rule line across the proposal, core, and web example", () => {
+  it("declares one compatible 0.3 rule line across the proposal, core, and web example", () => {
     const whitepaper = readFileSync(
       new URL("../../../docs/whitepaper/pttzzz-core.md", import.meta.url),
       "utf8",
@@ -16,16 +16,16 @@ describe("three-layer version compatibility", () => {
     const browser = readJson("../../browser/package.json");
     const web = readJson("../../../apps/web/package.json");
 
-    expect(whitepaper).toContain("> 規則版本：0.2.0");
-    expect(fixtures).toMatchObject({ specVersion: "0.2.0" });
-    expect(core).toMatchObject({ version: "0.2.0", pttzzz: { rules: "0.2.x" } });
+    expect(whitepaper).toContain("> 規則版本：0.4.0");
+    expect(fixtures).toMatchObject({ specVersion: "0.4.0" });
+    expect(core).toMatchObject({ version: "0.3.0", pttzzz: { rules: "0.4.x" } });
     expect(browser).toMatchObject({
-      version: "0.2.0",
-      pttzzz: { core: "^0.2.0", rules: "0.2.x" },
+      version: "0.3.0",
+      pttzzz: { core: "^0.3.0", rules: "0.4.x" },
     });
     expect(web).toMatchObject({
-      version: "0.2.0",
-      pttzzz: { browser: "^0.2.0", core: "^0.2.0", rules: "0.2.x" },
+      version: "0.3.0",
+      pttzzz: { browser: "^0.3.0", core: "^0.3.0", rules: "0.4.x" },
     });
   });
 });

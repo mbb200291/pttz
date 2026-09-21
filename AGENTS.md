@@ -1,59 +1,46 @@
-# AGENTS.md
+# 開發指引
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+## 協作與流程
 
-## Commands
+- 使用正體中文溝通，程式碼註解使用英文；文件簡潔、中立，不寫成對話紀錄。
+- 需求以使用者當次指示為準；`dev-notes/spec.md` 由使用者維護，不自行修改。
+- 新目標使用 `feature/goal-N-*` 分支；需要隔離或平行開發時使用 worktree。
+- 開始目標時在 `dev-notes/` 建立 `goal-N-implementation-plan.md`；過程記入 `goal-N-implementation-notes.md`，完成後更新 `dev-notes/implement.md`。
+- 重要設計選擇先提出方案與建議，確認後實作；使用者明確要求直接做時，依授權推進。
+- 完成可驗證的階段後提交；若要求先不 commit，則保留改動。未經明確指示，不推送 remote、不合併或改寫 dev／main。
+- 保留使用者既有改動；整理歷史先備份，清理 worktree 前確認未提交檔案、`.env` 與本機測試資料。
+
+## 架構與文件
+
+- `packages/core`：解析、聚合、討論規則與公開契約，不依賴 UI 或終端連線。
+- `packages/browser`：PTT 連線、終端狀態與操作流程。
+- `apps/web`：介面與互動，透過公開 API 使用核心，不自行重做規則或直接操作終端。
+- 共用規則以 `docs/whitepaper/pttzzz-core.md` 為準，案例放在 `docs/fixtures/`；不要在本文件重複抄寫易過時的規則細節。
+- 各層 README 說明目前功能與使用方式；開發指南、設計取捨與實作筆記另放對應文件，不混入白皮書。
+
+## 品質與驗證
+
+- 修 bug 先重現並補回歸測試，保留原始案例；不要為迎合程式而修改 fixture 的 `expected`。
+- 跨層問題須測完整資料路徑，例如「終端文字 → 解析 → 聚合」，不能只測手工組出的中間資料。
+- 發現固定等待、假設狀態、過度簡化規則等脆弱設計時，提出原因與數個修正方案，由使用者決定是否重構。
+- 操作成功以可觀察狀態或讀回結果確認；結果不確定時不盲目重送，也不只靠警語掩蓋問題。
+- UI 與使用文件面向實際使用者，文案精簡；設計疑慮在開發時釐清，不把內部說明塞進介面。載入時避免閃動與版面位移。
+- 規則變更同步檢查白皮書、fixture、HTML 範例與版本資訊；宣稱完成前實際驗證，清楚區分離線測試與實站測試。
+
+## PTT 實測安全
+
+- 優先使用離線 fixture、fake gateway 或預覽模式；實站登入與中斷其他連線依當次授權處理。
+- 未經明確授權，不發文、推文、編輯或刪文。獲准寫入測試時限 Test 板，使用自建文章、不在內容使用專案名稱，完成後清理並確認結果。
+- 不提交或輸出帳密；終端紀錄可能含個資，分享或納入 fixture 前先檢查與遮蔽。
+
+## 常用指令
 
 ```bash
-npm run dev        # Start dev server (includes PTT WebSocket proxy at /ptt-ws)
-npm run build      # TypeScript check + Vite build
-npm run lint       # ESLint
-npm run test       # Run all tests (vitest run)
-npx vitest run src/lib/ptt/pushAggregator.test.ts  # Run a single test file
+npm run dev       # 啟動網頁與 PTT 開發代理
+npm test          # core、browser、web 測試
+npm run build     # 型別檢查與建置
+npm run lint      # 程式碼檢查
+npm run verify    # 提交／合併前完整驗證
 ```
 
-Dev server preview modes (bypass PTT login for UI development):
-- `?preview=home` / `?preview=board` / `?preview=article` / `?preview=login`
-
-## Architecture
-
-pttzzz is a pure-frontend PTT reader. The client connects directly to PTT's WebSocket (`wss://ws.ptt.cc/bbs`). In dev mode, `vite.config.ts` proxies `/ptt-ws` to inject the required `Origin: https://term.ptt.cc` header (PTT rejects connections without it).
-
-### Layer overview
-
-```
-ptt-client (npm)
-    ↓
-src/lib/ptt/adapter.ts       ← PTT access layer: login, listArticles, getArticle, disconnect
-    ↓
-src/hooks/usePttSocket.ts    ← Zustand store + bridge: wsStatus, pttState, credentials
-    ↓
-src/hooks/useBoard.ts        ← Board data: enter board, paginate article list, search/filter
-src/hooks/useArticle.ts      ← Article data: body, aggregated pushes, edit records, debug dump
-    ↓
-src/components/              ← React UI
-```
-
-### Key design decisions
-
-**adapter.ts** wraps `ptt-client` into a stable project interface. It serializes bot commands to avoid races, observes PTT terminal snapshot state, maps board/article data, and produces debug dumps in dev mode.
-
-**usePttSocket.ts** uses Zustand with `subscribeWithSelector`. It bridges adapter state to the UI. Login safety default: do NOT disconnect other sessions unless the user explicitly opts in via the "中斷其他連線" checkbox.
-
-**pushAggregator.ts** (`src/lib/ptt/pushAggregator.ts`) is the core of push/reply processing:
-- Merges pushes by the same author within ≤5 minutes (unless terminated by `.。!?！？;；`)
-- `||` at end of push forces merge with next push
-- Full-width lines concatenate directly; non-full lines get a newline
-- Detects nested replies via patterns like `回x樓`, `回xf`, `TO xf`, `reply to xf`, `>>xf`
-- Assigns `replyTo`, `floorNumber`, `anchorOrder`, `score`, `isOP`, `sourceFloors`
-- Article-level edits (`※ 編輯:`) become synthetic `edit` type pushes attached to the nearest reply
-
-**parser.ts** (`src/lib/ptt/parser.ts`) provides low-level string utilities: `stripAnsi`, `parsePushLine`, `parsePushBuffer`, `splitArticleBody`, `extractArticleThreadEvents`.
-
-**viewState.ts** (`src/lib/ptt/viewState.ts`) maps PTT connection states to safe UI views (e.g., redirects to home if connection drops while reading an article).
-
-**App.tsx** manages top-level navigation with a simple `AppView` discriminated union (`home | board | article | article-by-aid`). No router library — state is in-memory only.
-
-### Development workflow
-
-Per `dev-notes/AGENTS.md`: when advancing a spec goal, create a new `goal-N-implementation-plan.md` and `goal-N-implementation-notes.md` in `dev-notes/`, then update `dev-notes/implement.md` with high-level architecture changes after completion. Do not modify `dev-notes/spec.md`.
+純文件修改可只檢查內容、路徑與 `git diff --check`，不必重跑全部測試。

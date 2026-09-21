@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
+import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Composer } from "../Composer";
 
@@ -16,6 +17,97 @@ const defaultProps = {
 };
 
 describe("Composer", () => {
+  it("blocks unknown capacity and counts normalized physical pieces as the user types", () => {
+    const onSubmit = vi.fn();
+    const { rerender } = render(<Composer {...defaultProps} onSubmit={onSubmit} multipartEnabled initial={{ body: "短句。" }} />);
+    expect(screen.getByRole("button", { name: "送出" })).toBeDisabled();
+    const plannerState = { status: "ready" as const, planner: { plan: (body: string) => ({ ok: true as const,
+      value: { capacity: 55, total: body.trim() ? body.trim().split("\n").length : 0 } }) } };
+    rerender(<Composer {...defaultProps} onSubmit={onSubmit} multipartEnabled plannerState={plannerState} initial={{ body: "短句。" }} />);
+    expect(screen.getByText("剩餘 29 / 30 則")).toBeInTheDocument();
+    const full = Array(30).fill("短句。").join("\n");
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: full + " \u3000\t\n\n" } });
+    expect(screen.getByText("剩餘 0 / 30 則")).toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toHaveValue(full + " \u3000\t\n\n");
+    expect(screen.getByRole("button", { name: "送出" })).toBeEnabled();
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: full + "\n新增。" } });
+    expect(screen.getByText("超出 1 則")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "送出" }));
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+  it.each(["reply", "reply-push"] as const)("allows long multipart %s drafts", (mode) => {
+    render(<Composer {...defaultProps} mode={mode} multipartEnabled initial={{ body: "文".repeat(100) }}
+      plannerState={{ status: "ready", planner: { plan: () => ({ ok: true, value: { total: 4, capacity: 55 } }) } }} />);
+    expect(screen.getByRole("button", { name: "送出" })).not.toBeDisabled();
+  });
+  it("locks all content controls on partial delivery and offers continuation", () => {
+    render(<Composer {...defaultProps} multipartEnabled contentLocked initial={{ body: "文".repeat(100) }}
+      delivery={{ operationId: "one", confirmed: 1, total: 3, status: "paused" }} />);
+    expect(screen.getByRole("textbox")).toBeDisabled();
+    for (const name of ["推", "噓", "→", "表情符號", "新增圖片"]) expect(screen.getByRole("button", { name })).toBeDisabled();
+    expect(screen.getByRole("status").textContent).toContain("1 / 3");
+    expect(screen.getByRole("button", { name: "繼續送出" })).not.toBeDisabled();
+  });
+  it("never enables uncertain delivery or removes edit limits", () => {
+    const { rerender } = render(<Composer {...defaultProps} multipartEnabled contentLocked initial={{ body: "text" }}
+      delivery={{ operationId: "one", confirmed: 1, total: 3, status: "uncertain" }} />);
+    expect(screen.getByRole("button", { name: "送出" })).toBeDisabled();
+    rerender(<Composer {...defaultProps} mode="edit-push" multipartEnabled initial={{ body: "text" }} />);
+    expect(screen.getByRole("button", { name: "送出" })).toBeDisabled();
+  });
+  it.each(["push", "boo"] as const)("forces neutral floor replies even with initial %s", async (pushType) => {
+    const onSubmit = vi.fn();
+    render(<Composer {...defaultProps} mode="reply-push" initial={{ body: "回覆", pushType }} onSubmit={onSubmit} />);
+    for (const name of ["推", "噓", "→"]) expect(screen.queryByRole("button", { name })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "送出" }));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ body: "回覆", pushType: "neutral" }));
+  });
+  it("uses a monochrome image icon", () => {
+    render(<Composer {...defaultProps} />);
+    const button = screen.getByRole("button", { name: "新增圖片" });
+    expect(button.textContent).not.toContain("🖼");
+    expect(button.querySelector('svg[stroke="currentColor"]')).not.toBeNull();
+  });
+  it.each(["reply", "reply-push"] as const)("inserts native symbols into %s without formatting controls", async (mode) => {
+    const onSubmit = vi.fn();
+    render(<Composer {...defaultProps} mode={mode} initial={{ body: "前文字後" }} onSubmit={onSubmit} />);
+    const input = screen.getByRole("textbox") as HTMLTextAreaElement;
+    input.setSelectionRange(1, 3);
+    await userEvent.click(screen.getByRole("button", { name: "表情符號" }));
+    await userEvent.click(screen.getByRole("button", { name: "箭頭" }));
+    await userEvent.click(screen.getByRole("button", { name: "常用圖案" }));
+    await userEvent.click(screen.getByRole("button", { name: "插入 ✈" }));
+    expect(input.value).toBe("前✈後");
+    expect(input.selectionStart).toBe(2);
+    expect(document.activeElement).toBe(input);
+    expect(screen.queryByRole("group", { name: "內建表情符號" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /文字色|底色/ })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "送出" }));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ body: "前✈後" }));
+  });
+  it("closes the symbol palette before closing the reply on Escape", async () => {
+    const onClose = vi.fn();
+    render(<Composer {...defaultProps} onClose={onClose} />);
+    await userEvent.click(screen.getByRole("button", { name: "表情符號" }));
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("group", { name: "內建表情符號" })).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+  it("counts symbol bytes and blocks overflow", async () => {
+    render(<Composer {...defaultProps} initial={{ body: "a".repeat(79) }} />);
+    await userEvent.click(screen.getByRole("button", { name: "表情符號" }));
+    await userEvent.click(screen.getByRole("button", { name: "插入 ✈" }));
+    expect((screen.getByRole("button", { name: "送出" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+  it("does not send unchanged edits, but can withdraw a long merged reply", async () => {
+    render(<Composer {...defaultProps} mode="edit-push" initial={{ body: "原文".repeat(50) }} />);
+    const submit = screen.getByRole("button", { name: "送出" }) as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    await userEvent.click(screen.getByRole("button", { name: "撤回" }));
+    expect(submit.disabled).toBe(false);
+  });
   it("renders 回文 title when mode=reply", () => {
     render(<Composer {...defaultProps} mode="reply" />);
     // getByText throws if not found — sufficient to prove it renders
@@ -117,8 +209,8 @@ describe("Composer", () => {
         initial={{ body: "original", editMode: "補充" }}
       />,
     );
-    expect(screen.getByRole("button", { name: "補充" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "更正" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "編輯" })).toBeTruthy();
+    expect(screen.queryByRole("spinbutton")).toBeNull();
     expect(screen.getByRole("button", { name: "撤回" })).toBeTruthy();
   });
 

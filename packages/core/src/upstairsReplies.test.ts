@@ -39,7 +39,7 @@ describe("upstairs replies", () => {
     expect(result.pushes[0].score).toBe(0);
   });
 
-  it.each(["推樓上的貓", "回樓上住戶", "我想推樓上", "噓樓上"])("does not parse ordinary or unsupported wording: %s", (content) => {
+  it.each(["推樓上的貓", "回樓上住戶", "我想推樓上", "噓樓上的貓", "我想噓樓上"])("does not parse ordinary or unsupported wording: %s", (content) => {
     const result = parse(row("a", "問題。"), row("b", content));
     expect(result.pushes[1]).toMatchObject({ content, replyTo: null });
     expect(result.pushes[0].score).toBe(0);
@@ -75,10 +75,16 @@ describe("upstairs replies", () => {
     expect(normalizeThreadEvents(rows)[1]).toMatchObject({ content: "推樓上", visible: true });
   });
 
+  it("keeps a relative vote with content nested under a withdrawn target", () => {
+    const result = parse(row("a", "問題。"), row("b", "推樓上：同意"), row("a", "撤回我在1樓的發言"));
+    expect(result.pushes[0]).toMatchObject({ content: "同意", replyTo: "reply:1" });
+    expect(result.withdrawnPushes[0].score).toBe(0);
+  });
+
   it("preserves an edited body when its target is later withdrawn", () => {
     const rows = [row("a", "問題。"), row("b", "回樓上：原回答"), row("b", "更正我在2樓的說法：推樓上"), row("a", "撤回我在1樓的發言")];
     const result = parse(...rows);
-    expect(result.pushes[0]).toMatchObject({ content: "推樓上", replyTo: null, score: 0 });
+    expect(result.pushes[0]).toMatchObject({ content: "推樓上", replyTo: "reply:1", score: 0 });
     expect(normalizeThreadEvents(rows)[1]).toMatchObject({ content: "推樓上", visible: true });
   });
 
@@ -93,6 +99,59 @@ describe("upstairs replies", () => {
       row("a", "撤回我在1樓的發言"),
     ];
     expect(normalizeThreadEvents(rows)[1]).toMatchObject({ content, visible: true });
-    expect(parse(...rows).pushes[0]).toMatchObject({ content, replyTo: null });
+    expect(parse(...rows).pushes[0]).toMatchObject({ content, replyTo: "reply:1" });
+  });
+});
+
+describe("upstairs boos", () => {
+  it("votes against the preceding merged source and hides the pure vote", () => {
+    const rows = [row("a", "我認為"), row("a", "可以試試。"), row("b", "噓樓上", "boo")];
+    const result = parse(...rows);
+    expect(result.pushes).toHaveLength(1);
+    expect(result.pushes[0]).toMatchObject({ sourceFloors: [1, 2], score: -1, booVoters: ["b"] });
+    expect(result).toMatchObject({ articleScore: 0, nativeArticleScore: -1 });
+    expect(normalizeThreadEvents(rows)[2]).toMatchObject({ visible: false });
+  });
+
+  it.each(["噓樓上 回12樓不是指令", "噓樓上：回12樓不是指令", "噓樓上: 回12樓不是指令"])(
+    "uses the textual vote direction and keeps its body opaque: %s", (content) => {
+      const result = parse(row("a", "問題。"), row("b", content, "push"));
+      expect(result.pushes[0]).toMatchObject({ score: -1, booVoters: ["b"] });
+      expect(result.pushes[1]).toMatchObject({ replyTo: "reply:1", content: "回12樓不是指令" });
+      expect(result).toMatchObject({ articleScore: 0, nativeArticleScore: 1 });
+    },
+  );
+
+  it.each(["推", "噓1樓", "撤回我在1樓的發言"])("does not skip hidden events: %s", (control) => {
+    const result = parse(row("a", "原文。"), row("a", control), row("b", "噓樓上", "boo"));
+    expect(result.pushes.at(-1)).toMatchObject({ content: "噓樓上", replyTo: null });
+    expect(result.articleScore).toBe(-1);
+  });
+
+  it("preserves first-event and missing-floor boos", () => {
+    expect(parse(row("a", "噓樓上", "boo")).pushes[0]).toMatchObject({ content: "噓樓上", replyTo: null });
+    const result = parse(row("a", "原文。", "neutral", 8), row("b", "噓樓上", "boo", 10));
+    expect(result.pushes[1]).toMatchObject({ content: "噓樓上", replyTo: null });
+    expect(result.pushes[0].score).toBe(0);
+  });
+
+  it("does not inherit an earlier reply target when upstairs is invalid", () => {
+    const result = parse(row("a", "問題。"), row("b", "回1樓：先回答"), row("c", "推"), row("b", "噓樓上"), row("b", "繼續說明。"));
+    expect(result.pushes[2]).toMatchObject({ content: "噓樓上\n繼續說明。", replyTo: null });
+  });
+
+  it("deduplicates votes and supports explicit vote withdrawal", () => {
+    const rows = [row("a", "問題。"), row("b", "噓樓上"), row("b", "噓1樓")];
+    expect(parse(...rows).pushes[0]).toMatchObject({ score: -1, booVoters: ["b"] });
+    expect(parse(...rows, row("b", "撤回我對1樓的噓")).pushes[0]).toMatchObject({ score: 0, booVoters: [] });
+  });
+
+  it("restores ordinary text without redirecting after target withdrawal", () => {
+    const rows = [row("z", "更早的話。"), row("a", "目標。"), row("b", "噓樓上", "boo"), row("a", "撤回我在2樓的發言")];
+    const result = parse(...rows);
+    expect(result.pushes[0].score).toBe(0);
+    expect(result.pushes[1]).toMatchObject({ content: "噓樓上", replyTo: null });
+    expect(result.articleScore).toBe(-1);
+    expect(normalizeThreadEvents(rows)[2]).toMatchObject({ content: "噓樓上", visible: true });
   });
 });

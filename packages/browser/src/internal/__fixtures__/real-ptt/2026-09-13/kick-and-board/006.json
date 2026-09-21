@@ -1,0 +1,416 @@
+{
+  "cursor": {
+    "x": 79,
+    "y": 23
+  },
+  "lines": [
+    {
+      "str": "** 站內信箱僅供與站內其它使用者訊息交流，或方便與它站交換資料。",
+      "attr": {
+        "0": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "63": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "   請各位使用者別把站內信箱拿來當熱門看板永久備份空間超收上千或上萬封文件，",
+      "attr": {
+        "0": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "75": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "   未來系統有可能會不定期自動偵測並刪除此類保留過量且過久的看板備份文",
+      "attr": {
+        "0": {
+          "fg": 6,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "69": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "      歡迎您再度拜訪，上次您是從 000.000.000.000 連往本站。",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "33": {
+          "fg": 3,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "47": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": " ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄ 請按任意鍵繼續 ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄  ",
+      "attr": {
+        "0": {
+          "fg": 4,
+          "bg": 4,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "31": {
+          "fg": 7,
+          "bg": 4,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "47": {
+          "fg": 4,
+          "bg": 4,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "79": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    }
+  ]
+}

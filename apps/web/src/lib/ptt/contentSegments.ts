@@ -51,9 +51,14 @@ function normalizeImgurUrl(url: string): string {
 }
 
 export function parseContentSegments(text: string): ContentSegment[] {
+  return parseLocatedContentSegments(text).map(({ segment }) => segment);
+}
+
+/** Offsets refer to source text, before image URL normalization. */
+export function parseLocatedContentSegments(text: string): { segment: ContentSegment; start: number; end: number }[] {
   if (!text) return [];
 
-  const segments: ContentSegment[] = [];
+  const segments: { segment: ContentSegment; start: number; end: number }[] = [];
   let lastIndex = 0;
 
   MEDIA_URL_RE.lastIndex = 0;
@@ -67,36 +72,38 @@ export function parseContentSegments(text: string): ContentSegment[] {
     if (start > lastIndex) {
       const textChunk = text.slice(lastIndex, start);
       if (textChunk) {
-        segments.push({ kind: "text", content: textChunk });
+        segments.push({ segment: { kind: "text", content: textChunk }, start: lastIndex, end: start });
       }
     }
 
+    let segment: ContentSegment;
     if (isYouTubeUrl(url)) {
       const videoId = extractYouTubeId(url);
       if (videoId) {
-        segments.push({ kind: "youtube", videoId, url });
+        segment = { kind: "youtube", videoId, url };
       } else {
-        segments.push({ kind: "text", content: url });
+        segment = { kind: "text", content: url };
       }
     } else if (isImgurUrl(url) || isDirectHttpsImageUrl(url)) {
-      segments.push({
+      segment = {
         kind: "image",
         url: isImgurUrl(url) ? normalizeImgurUrl(url) : url,
-      });
+      };
     } else {
-      segments.push({ kind: "text", content: url });
+      segment = { kind: "text", content: url };
     }
 
     lastIndex = start + url.length;
+    segments.push({ segment, start, end: lastIndex });
   }
 
   // Remaining text after last match
   if (lastIndex < text.length) {
     const remaining = text.slice(lastIndex);
     if (remaining) {
-      segments.push({ kind: "text", content: remaining });
+      segments.push({ segment: { kind: "text", content: remaining }, start: lastIndex, end: text.length });
     }
   }
 
-  return segments.length > 0 ? segments : [{ kind: "text", content: text }];
+  return segments;
 }
