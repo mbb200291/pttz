@@ -130,6 +130,8 @@ Goal 11 分頁完整性：browser 較舊頁導航改為等待可觀察進展，�
 
 Goal 11 長回文欄寬修正：core 共用容量計算扣除正文固定分隔空白；browser 以實測容量核對讀回格式，送出前經實體文字解析與聚合逐字驗證，避免 sender 自填剩餘欄數掩蓋 receiver 差異。實錄七段回文納入離線回歸；本輪未重新連線 PTT。
 
+Goal 14 全形縮排修正：長回文分段、終端送出與讀回保留內部全形空白；補原文、指定樓層及多種容量回歸。完整驗證的既有白皮書覆蓋缺口記於 Goal 14 實作筆記，未實站送出。
+
 - [Goal 9 architecture design](goal-9-core-architecture-design.md)
 - [Goal 9 implementation plan](goal-9-implementation-plan.md)
 - [Goal 9 implementation notes](goal-9-implementation-notes.md)

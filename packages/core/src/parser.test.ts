@@ -15,6 +15,11 @@ describe("stripAnsi", () => {
 });
 
 describe("parsePushLine", () => {
+  it.each(["", " "])("preserves full-width content spacing with separator %j", separator => {
+    const row = `→ alice:${separator}\u3000\u3000正文\u3000\u3000   04/09 10:01`;
+    expect(parsePushLine(row)?.content).toBe("　　正文　　");
+    expect(parsePushBuffer(row)[0]?.content).toBe("　　正文　　");
+  });
   it("parses a standard push row", () => {
     expect(
       parsePushLine("推 user1: 第一則推文                         04/09 10:01"),

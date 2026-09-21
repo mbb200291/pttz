@@ -1,10 +1,35 @@
 import { describe, expect, it, vi } from "vitest";
+import indentedDraft from "./__fixtures__/indented-long-reply.txt?raw";
 import { encodedReplyBytes, planReplyDraft, readPushConfirmation, ReplyDraftQueue } from "./multipartReply.js";
 import { aggregatePushes, parsePushBuffer } from "@pttzzz/core/internal";
 
 const input = { operationId: "one", article: { board: "Test", aid: "abc" }, content: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefgh", pushType: "neutral" as const };
 const prepare = async () => ({ capacity: 55, author: "alice" });
 describe("multipart reply", () => {
+  it.each([33, 34, 53, 54].flatMap(capacity => [undefined, 1].map(floor => ({ capacity, floor }))))("round-trips the indented long reply at $capacity columns, target $floor", async ({ capacity, floor }) => {
+    const content = indentedDraft.trim();
+    const separator = capacity % 2 ? " " : "";
+    const queue = new ReplyDraftQueue(separator);
+    const wire: string[] = [];
+    const result = await queue.run({ ...input, content, floor }, async () => ({ author: "pttzzz1", capacity }), async piece => {
+      expect(encodedReplyBytes(piece)).toBeLessThanOrEqual(capacity);
+      const authorField = capacity < 40 ? "pttzzz1     " : "pttzzz1";
+      wire.push(`→ ${authorField}:${separator}${piece} ${capacity < 40 ? "192.0.2.1 " : ""}01/01 12:00`);
+      return { ok: true, outcome: "sent" };
+    });
+    expect(result.status).toBe("complete");
+    const raw = (floor ? "→ target: 目標。 01/01 12:00\n" : "") + wire.join("\n");
+    const replies = aggregatePushes(parsePushBuffer(raw), "op").pushes.filter(p => p.author === "pttzzz1");
+    expect(replies).toHaveLength(1);
+    expect(replies[0].content).toBe(content);
+    if (floor) expect(replies[0].replyTo).not.toBeNull();
+  });
+  it("preserves full-width spaces next to a hidden marker", () => {
+    const content = "開始。\n　　\n　　結束。";
+    expect(() => planReplyDraft(content, 55, 1, "alice")).not.toThrow();
+    expect(readPushConfirmation("→ alice:　　正文　　   確定[y/N]:", " ")?.content).toBeUndefined();
+    expect(readPushConfirmation("→ alice: 　　正文　　                  確定[y/N]:", " ")?.content).toBe("　　正文　　");
+  });
   it.each([
     { content: "中".repeat(501), issue: { kind: "too-long", excessColumns: 2 } },
     { content: "abc".repeat(334), issue: { kind: "too-long", excessColumns: 2 } },

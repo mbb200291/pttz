@@ -1,9 +1,8 @@
 import { expect, it, vi } from "vitest";
 import { createTerminalDriverForTesting, measurePushCapacity, submitPushFromCurrentArticle } from "./terminalDriver.js";
 
-it("waits for the complete input echo before submitting a full-width fragment", async () => {
+it.each(["中".repeat(27), "　　段落　　", "回1樓：　　段落　　"])("preserves the complete fragment through echo, confirmation and send: %s", async content => {
   const article = ["作者 alice 看板 Test", "標題 test", "時間 Sun Sep 20 12:00:00 2026", "body", "瀏覽 第 1/1 頁"];
-  const content = "中".repeat(27);
   let rows = article;
   const sent: string[] = [];
   const bot = { getLine: (i: number) => ({ str: rows[i] ?? "" }), send: async (key: string) => {

@@ -1,5 +1,24 @@
 [
   {
+    "id": "nested-fullwidth-indentation-and-blank-line",
+    "primaryRule": "THREAD-001.3",
+    "rules": ["THREAD-001.3", "MERGE-002.2", "MERGE-003.2"],
+    "articleAuthor": "op",
+    "rawPushes": [
+      { "type": "neutral", "author": "root", "content": "目標。", "time": "01/01 12:00" },
+      { "type": "neutral", "author": "alice", "content": "回1樓：　　首段。|", "time": "01/01 12:00", "remainingContentColumns": 20 },
+      { "type": "neutral", "author": "alice", "content": "回1樓：|", "time": "01/01 12:00", "remainingContentColumns": 30 },
+      { "type": "neutral", "author": "alice", "content": "回1樓：　　末段　　_", "time": "01/01 12:00", "remainingContentColumns": 20 }
+    ],
+    "expected": {
+      "replies": [
+        { "author": "root", "content": "目標。", "replyToAuthor": null, "score": 0 },
+        { "author": "alice", "content": "　　首段。\n\n　　末段　　", "replyToAuthor": "root", "score": 0 }
+      ],
+      "nativeArticleScore": 0, "articlePushVoters": [], "articleBooVoters": []
+    }
+  },
+  {
     "id": "multipart-receive-full-width-packets-preserve-characters",
     "primaryRule": "THREAD-006.4",
     "rules": ["THREAD-006.4", "MERGE-002.1"],

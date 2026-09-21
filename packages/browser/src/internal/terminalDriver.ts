@@ -3422,7 +3422,7 @@ const PUSH_CONFIRMATION_PROMPT_RE =
   /^(?:(?:推|噓|→)\s+[A-Za-z][A-Za-z0-9_]{0,11}[ \t]{0,11}:\s*.+?\s+確定\[y\/N\]:|確定送出推文嗎[?？]?)\s*$/iu;
 
 function lastTerminalPrompt(screen: string): string {
-  const lines = screen.split("\n").map(line => line.trim()).filter(Boolean);
+  const lines = screen.split("\n").map(line => line.replace(/^[ \t\r]+|[ \t\r]+$/g, "")).filter(line => line.trim().length > 0);
   return lines[lines.length - 1] ?? "";
 }
 
@@ -3531,7 +3531,7 @@ export async function submitPushFromCurrentArticle(
   confirmationGuard?: (screen: string) => boolean,
   waitForInputEcho = false,
 ): Promise<ActionResult> {
-  const trimmed = content.trim();
+  const trimmed = content.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, "");
   if (!trimmed) return actionNotSent();
   if (!bot.send || !bot.getLine) {
     throw new Error("Bot does not expose article write methods");
@@ -3673,7 +3673,7 @@ export async function submitPushFromCurrentArticle(
       const prompt = lastTerminalPrompt(stripAnsi(readVisibleScreen(bot)));
       const match = prompt.match(/^(?:推|噓|→)\s+([A-Za-z][A-Za-z0-9_]{0,11})\s*:(.*)$/u);
       if (match && match[1].toLowerCase() === inputAuthor?.toLowerCase() &&
-        (match[2].trimEnd() === trimmed || match[2].trimEnd() === ` ${trimmed}`)) {
+        (match[2].replace(/[ \t]+$/u, "") === trimmed || match[2].replace(/[ \t]+$/u, "") === ` ${trimmed}`)) {
         echoed = true;
         break;
       }

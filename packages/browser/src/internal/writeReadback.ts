@@ -12,11 +12,11 @@ function normalizeAuthor(value: string): string {
 
 function matchingPushCount(rawText: string, expected: PushWriteEvidence): number {
   const author = normalizeAuthor(expected.author);
-  const content = expected.content.trim();
+  const content = expected.content.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, "");
   return parsePushBuffer(rawText).filter((push) =>
     normalizeAuthor(push.author) === author &&
     push.type === expected.pushType &&
-    push.content.trim() === content
+    push.content === content
   ).length;
 }
 

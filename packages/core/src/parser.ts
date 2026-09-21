@@ -105,9 +105,9 @@ export function parsePushLine(line: string): RawPush | null {
   let time: string;
   if (middle.length >= timeLength + 1) {
     time = middle.slice(-timeLength).trim();
-    content = middle.slice(0, middle.length - timeLength).trim();
+    content = middle.slice(0, middle.length - timeLength).replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, "");
   } else {
-    content = middle.trim();
+    content = middle.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, "");
     time = "";
   }
 
@@ -181,7 +181,7 @@ export function parsePushBuffer(raw: string): RawPush[] {
     const segmentEnd = next?.index ?? plain.length;
     const segment = plain.slice(segmentStart, segmentEnd).trim();
     const headerMatch = segment.match(
-      new RegExp(`^${PUSH_MARKER_PATTERN}\\s*([\\s\\S]*)$`, "u"),
+      new RegExp(`^${PUSH_MARKER_PATTERN}[ \\t]*([\\s\\S]*)$`, "u"),
     );
     if (!headerMatch) continue;
 
@@ -189,11 +189,11 @@ export function parsePushBuffer(raw: string): RawPush[] {
     const timeMatch = remainder.match(/(\d{2}\/\d{2} \d{2}:\d{2})/u);
     if (!timeMatch || timeMatch.index === undefined) continue;
 
-    const beforeTime = remainder.slice(0, timeMatch.index).trim();
+    const beforeTime = remainder.slice(0, timeMatch.index).replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, "");
     const ipMatch = beforeTime.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b$/u);
     const ipAddress = ipMatch?.[0];
     const contentBeforeIp = ipAddress
-      ? beforeTime.slice(0, beforeTime.length - ipAddress.length).trimEnd()
+      ? beforeTime.slice(0, beforeTime.length - ipAddress.length).replace(/[ \t\r\n]+$/g, "")
       : beforeTime;
     const afterTime = remainder.slice(timeMatch.index + timeMatch[1].length);
     const continuation = afterTime
@@ -206,7 +206,7 @@ export function parsePushBuffer(raw: string): RawPush[] {
       .replace(/\d{2}\/\d{2} \d{2}:\d{2}/gu, "")
       .replace(/\s+/g, " ")
       .trim();
-    const content = `${contentBeforeIp}${continuation ? ` ${continuation}` : ""}`.trim();
+    const content = `${contentBeforeIp}${continuation ? ` ${continuation}` : ""}`.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, "");
     const normalized = `${marker} ${author}: ${content} ${timeMatch[1]}`;
     const parsed = parsePushLine(normalized);
     if (parsed) {

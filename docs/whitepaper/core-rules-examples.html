@@ -199,6 +199,15 @@
         <p class="explanation">短文以 _ 封口，連續發送仍各自獨立。長文保留主動換行與空白行，只有需要越過標點或補足續接條件時才加 |。實際切段會將編碼容量、回覆前綴與標記一起計算。</p>
       </article>
 
+      <article class="case" data-fixture="nested-fullwidth-indentation-and-blank-line">
+        <div class="case-title"><span class="case-id">THREAD-001 / MERGE-003</span><h3>回覆正文保留全形縮排</h3></div>
+        <div class="comparison">
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt">→ root: 目標。<br>→ alice: 回1樓：　　首段。|<br>→ alice: 回1樓：|<br>→ alice: 回1樓：　　末段　　_</div></div>
+          <div><div class="column-label">聚合後的回覆正文</div><div class="ptt">　　首段。<br><br>　　末段　　</div></div>
+        </div>
+        <p class="explanation">移除回覆前綴及尾標後，保留正文中的全形空白與空白行。<a href="../fixtures/thread-events/thread.json">對應 fixture</a></p>
+      </article>
+
       <article class="case">
         <div class="case-title"><span class="case-id">CASE 19</span><h3>巢狀回覆的續行合併</h3></div>
         <div class="comparison">

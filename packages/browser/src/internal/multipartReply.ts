@@ -39,7 +39,7 @@ export function readPushConfirmation(screen: string, separator?: "" | " "): { au
     const field = actualSeparator ? match[2].slice(1) : match[2];
     const capacity = encodedReplyBytes(field) - 1;
     if (capacity < 8 || capacity > 78) return null;
-    return { author: match[1].trim(), content: field.trimEnd(), capacity };
+    return { author: match[1].trim(), content: field.replace(/[ \t]+$/u, ""), capacity };
   }
   return null;
 }
@@ -109,7 +109,7 @@ export function planReplyDraft(draft: string, capacity: number, floor?: number, 
       if (endLine && !endDraft && capacity - encodedReplyBytes(piece) < 2) pieces.push(prefix + "|");
     } while (cursor < chars.length);
   }
-  if (pieces.some((piece) => piece.trim() !== piece)) throw replyPreparationError({ kind: "content-layout", reason: "leading-space" }, "分段開頭的空白無法保留，請調整內容後再試");
+  if (pieces.some((piece) => /^[ \t]|[ \t]$/u.test(piece))) throw replyPreparationError({ kind: "content-layout", reason: "leading-space" }, "分段開頭的空白無法保留，請調整內容後再試");
   // Production planning must cross the parser boundary too. Supplying sender-
   // computed remaining columns here would conceal receiver layout regressions.
   // Layout-free callers can split abstract capacities; the delivery queue always
