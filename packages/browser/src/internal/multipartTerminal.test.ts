@@ -135,6 +135,6 @@ it.each([
     operationId: "board-return", article: { board: "Test", index: 360 }, content: "a".repeat(70), pushType: "neutral",
   });
   expect(result).toMatchObject(published ? { status: "complete", confirmed: 2 } : { status: "uncertain", confirmed: 0 });
-  expect(writes.join("")).toBe(published ? "a".repeat(70) + "_" : "");
+  expect(writes.join("")).toBe(published ? "a".repeat(70) + "\\" : "");
   expect(actions.filter(command => command === "y\r")).toHaveLength(published ? 2 : 1);
 });

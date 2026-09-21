@@ -71,9 +71,9 @@ export function planReplyDraft(draft: string, capacity: number, floor?: number, 
   const room = capacity - encodedReplyBytes(prefix);
   if (room < 2) throw new Error("回覆前綴超過可用容量");
   const markerFor = (body: string, last: boolean): string => {
-    if (last) return /[。.!?！？;；]$/u.test(body) ? "" : "_";
+    if (last) return /[。.!?！？;；]$/u.test(body) ? "" : "\\";
     // Escape meaningful suffixes, but do not decorate ordinary full/short lines.
-    return !body || /[。.!?！？;；_|]$/u.test(body) ? "|" : "";
+    return !body || /[。.!?！？;；\\|]$/u.test(body) ? "|" : "";
   };
   const pieces: string[] = [];
   const lines = content.split("\n");

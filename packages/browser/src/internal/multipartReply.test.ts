@@ -6,6 +6,11 @@ import { aggregatePushes, parsePushBuffer } from "@pttzzz/core/internal";
 const input = { operationId: "one", article: { board: "Test", aid: "abc" }, content: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefgh", pushType: "neutral" as const };
 const prepare = async () => ({ capacity: 55, author: "alice" });
 describe("multipart reply", () => {
+  it("emits the current backslash stop and preserves literal underscore", () => {
+    expect(planReplyDraft("短句", 55)).toEqual(["短句\\"]);
+    expect(planReplyDraft("literal_", 55)).toEqual(["literal_\\"]);
+    expect(planReplyDraft("literal\\", 55)).toEqual(["literal\\\\"]);
+  });
   it.each([33, 34, 53, 54].flatMap(capacity => [undefined, 1].map(floor => ({ capacity, floor }))))("round-trips the indented long reply at $capacity columns, target $floor", async ({ capacity, floor }) => {
     const content = indentedDraft.trim();
     const separator = capacity % 2 ? " " : "";
@@ -87,10 +92,10 @@ describe("multipart reply", () => {
     ]);
   });
   it("normalizes CRLF and outer whitespace while preserving internal blank lines", () => {
-    expect(planReplyDraft(" \r\nfirst\r\n\r\nlast\r\n ", 20)).toEqual(["first", "|", "last_"]);
+    expect(planReplyDraft(" \r\nfirst\r\n\r\nlast\r\n ", 20)).toEqual(["first", "|", "last\\"]);
   });
   it.each(["literal|", "literal||"])("preserves literal intermediate pipes: %s", (content) => {
-    expect(planReplyDraft(content + "\nnext", 20)).toEqual([content + "|", "next_"]);
+    expect(planReplyDraft(content + "\nnext", 20)).toEqual([content + "|", "next\\"]);
   });
   it.each(["a".repeat(1000), "中".repeat(500), "中".repeat(250) + "a".repeat(500)])("THREAD-006.1–3: sends 1000 units excluding generated markers and rejects overflow", async (content) => {
     const send = vi.fn().mockResolvedValue({ ok: true, outcome: "sent" });
@@ -135,7 +140,7 @@ describe("multipart reply", () => {
       const pieces = planReplyDraft("甲乙♥♡✈abc".repeat(20), capacity, 12);
       expect(pieces.every((piece) => encodedReplyBytes(piece) <= capacity)).toBe(true);
       expect(pieces.every((piece) => !piece.endsWith("||") && !piece.endsWith("|!"))).toBe(true);
-      expect(pieces.at(-1)?.endsWith("_")).toBe(true);
+      expect(pieces.at(-1)?.endsWith("\\")).toBe(true);
     }
   });
   it("serializes duplicate submissions and isolates throwing progress observers", async () => {
@@ -205,20 +210,20 @@ describe("multipart reply", () => {
     expect(pieces.every(piece => encodedReplyBytes(piece) <= 51)).toBe(true);
   });
   it("terminates a short reply without adding redundant marks to punctuation", () => {
-    expect(planReplyDraft("hello", 20)).toEqual(["hello_"]);
+    expect(planReplyDraft("hello", 20)).toEqual(["hello\\"]);
     for (const mark of [".", "。", "!", "?", "！", "？", ";", "；"]) {
       expect(planReplyDraft(`hello${mark}`, 20)).toEqual([`hello${mark}`]);
     }
   });
   it("uses minimal continuation markers and closes the last line", () => {
-    expect(planReplyDraft("第一行\n第二行", 20)).toEqual(["第一行", "第二行_"]);
-    expect(planReplyDraft("第一行。\n第二行", 20)).toEqual(["第一行。|", "第二行_"]);
-    expect(planReplyDraft("a".repeat(20) + "\nlast", 20)).toEqual(["a".repeat(20), "|", "last_"]);
-    expect(planReplyDraft("first\n\nlast", 20)).toEqual(["first", "|", "last_"]);
+    expect(planReplyDraft("第一行\n第二行", 20)).toEqual(["第一行", "第二行\\"]);
+    expect(planReplyDraft("第一行。\n第二行", 20)).toEqual(["第一行。|", "第二行\\"]);
+    expect(planReplyDraft("a".repeat(20) + "\nlast", 20)).toEqual(["a".repeat(20), "|", "last\\"]);
+    expect(planReplyDraft("first\n\nlast", 20)).toEqual(["first", "|", "last\\"]);
   });
   it.each(["a".repeat(90), "a".repeat(20), "中♥♡✈".repeat(20), "a".repeat(19) + "\nnext", "first\n\nlast", "句號。\nnext", "literal_", "literal|", "literal|!"])('round-trips %s with the actual aggregator', (content) => {
     const pieces = planReplyDraft(content, 20);
-    expect(pieces.at(-1)).toMatch(/[_!]$/u);
+    expect(pieces.at(-1)).toMatch(/[\\!]$/u);
     const thread = aggregatePushes(pieces.map((content) => ({ author: "alice", content, type: "neutral" as const,
       time: "09/16 23:21", remainingContentColumns: 20 - encodedReplyBytes(content) })), "op");
     expect(thread.pushes).toHaveLength(1);

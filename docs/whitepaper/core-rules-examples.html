@@ -169,12 +169,12 @@
 
     <section class="group" id="aggregation">
       <div class="group-heading"><span class="group-number">01</span><h2>分散推文合併</h2></div>
-      <p class="group-note">同作者、同目標的非連續片段在兩分鐘內可合併；連續片段不限時間。末尾 | 續接，_ 終止後續合併；閱讀時隱藏標記。</p>
+      <p class="group-note">同作者、同目標的非連續片段在兩分鐘內可合併；連續片段不限時間。末尾 | 續接，\ 終止後續合併；閱讀時隱藏標記。</p>
 
       <article class="case">
         <div class="case-title"><span class="case-id">CASE 16</span><h3>同作者推文合併、終止符與強制續接</h3></div>
         <div class="comparison">
-          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="neutral">→</span> alice: 第一段還沒說完　　　　　 08/12 22:30<br><span class="neutral">→</span> alice: 接著把內容說完。　　　　 08/12 22:31<br><span class="neutral">→</span> alice: 這是新的主題_　　　　　　08/12 22:32<br><span class="neutral">→</span> bob: 這句有句號但要續接。|　　08/12 22:33<br><span class="neutral">→</span> bob: 強制續接的下一行_　　　　08/12 22:34</div></div>
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="neutral">→</span> alice: 第一段還沒說完　　　　　 08/12 22:30<br><span class="neutral">→</span> alice: 接著把內容說完。　　　　 08/12 22:31<br><span class="neutral">→</span> alice: 這是新的主題\　　　　　　08/12 22:32<br><span class="neutral">→</span> bob: 這句有句號但要續接。|　　08/12 22:33<br><span class="neutral">→</span> bob: 強制續接的下一行\　　　　08/12 22:34</div></div>
           <div><div class="column-label">PTTzzz 局部 UI</div><div class="ui">
             <div class="ui-bar">5 則原始推文 → 3 張回文卡片<span class="native-score">文章原生分數 <strong>0</strong></span></div>
             <div class="reply-card"><div class="reply-head"><span class="avatar">AL</span><span class="author">alice</span><span class="floor">1–2F</span></div><p class="reply-body">第一段還沒說完<br>接著把內容說完。</p></div>
@@ -182,13 +182,13 @@
             <div class="reply-card"><div class="reply-head"><span class="avatar">BO</span><span class="author">bob</span><span class="floor">4–5F</span></div><p class="reply-body">這句有句號但要續接。<br>強制續接的下一行</p></div>
           </div></div>
         </div>
-        <p class="explanation">Alice 的 1F 沒有終止符，所以與 2F 合併；2F 以句號結束，3F 因此另開卡片。Bob 的 4F 雖有句號，但尾端 | 會被移除並允許與 5F 合併；5F 的 _ 隱藏並阻止後續片段接入。舊資料中的 ||／|! 仍可讀取。</p>
+        <p class="explanation">Alice 的 1F 沒有終止符，所以與 2F 合併；2F 以句號結束，3F 因此另開卡片。Bob 的 4F 雖有句號，但尾端 | 會被移除並允許與 5F 合併；5F 的 \ 隱藏並阻止後續片段接入。舊的底線不再作為中斷標記。</p>
       </article>
 
       <article class="case">
         <div class="case-title"><span class="case-id">THREAD-006</span><h3>短文封口、換行與分段續接</h3></div>
         <div class="comparison">
-          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="neutral">→</span> alice: 第一則短文_　　　　　　　09/19 12:00<br><span class="neutral">→</span> alice: 第二則短文_　　　　　　　09/19 12:00<br><span class="neutral">→</span> bob: 第一句。|　　　　　　　　09/19 12:01<br><span class="neutral">→</span> bob: |　　　　　　　　　　　　09/19 12:01<br><span class="neutral">→</span> bob: 最後一句_　　　　　　　　09/19 12:01</div></div>
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt"><span class="neutral">→</span> alice: 第一則短文\　　　　　　　09/19 12:00<br><span class="neutral">→</span> alice: 第二則短文\　　　　　　　09/19 12:00<br><span class="neutral">→</span> bob: 第一句。|　　　　　　　　09/19 12:01<br><span class="neutral">→</span> bob: |　　　　　　　　　　　　09/19 12:01<br><span class="neutral">→</span> bob: 最後一句\　　　　　　　　09/19 12:01</div></div>
           <div><div class="column-label">PTTzzz 局部 UI</div><div class="ui">
             <div class="ui-bar">5 則原始推文 → 3 則討論</div>
             <div class="reply-card"><div class="reply-head"><span class="author">alice</span></div><p class="reply-body">第一則短文</p></div>
@@ -196,13 +196,13 @@
             <div class="reply-card"><div class="reply-head"><span class="author">bob</span></div><p class="reply-body">第一句。<br><br>最後一句</p></div>
           </div></div>
         </div>
-        <p class="explanation">短文以 _ 封口，連續發送仍各自獨立。長文保留主動換行與空白行，只有需要越過標點或補足續接條件時才加 |。實際切段會將編碼容量、回覆前綴與標記一起計算。</p>
+        <p class="explanation">短文以 \ 封口，連續發送仍各自獨立。長文保留主動換行與空白行，只有需要越過標點或補足續接條件時才加 |。實際切段會將編碼容量、回覆前綴與標記一起計算。</p>
       </article>
 
       <article class="case" data-fixture="nested-fullwidth-indentation-and-blank-line">
         <div class="case-title"><span class="case-id">THREAD-001 / MERGE-003</span><h3>回覆正文保留全形縮排</h3></div>
         <div class="comparison">
-          <div><div class="column-label">PTT 原始畫面</div><div class="ptt">→ root: 目標。<br>→ alice: 回1樓：　　首段。|<br>→ alice: 回1樓：|<br>→ alice: 回1樓：　　末段　　_</div></div>
+          <div><div class="column-label">PTT 原始畫面</div><div class="ptt">→ root: 目標。<br>→ alice: 回1樓：　　首段。|<br>→ alice: 回1樓：|<br>→ alice: 回1樓：　　末段　　\</div></div>
           <div><div class="column-label">聚合後的回覆正文</div><div class="ptt">　　首段。<br><br>　　末段　　</div></div>
         </div>
         <p class="explanation">移除回覆前綴及尾標後，保留正文中的全形空白與空白行。<a href="../fixtures/thread-events/thread.json">對應 fixture</a></p>

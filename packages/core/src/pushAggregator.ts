@@ -128,9 +128,9 @@ export function detectArticleVote(content: string): "push" | "boo" | null {
 // 同作者不連續但允許合併的最大時間間隔（分鐘）
 const TIME_GAP_MINUTES = 2;
 const CONTINUATION_MARKER_RE = /\|\s*$/u;
-const STOP_MARKER_RE = /_\s*$/u;
+const STOP_MARKER_RE = /\\\s*$/u;
 // Consume exactly one latest-rule marker; preceding symbols remain literal.
-const MERGE_MARKER_RE = /[|_]\s*$/u;
+const MERGE_MARKER_RE = /[|\\]\s*$/u;
 const END_TERMINATOR_RE = /[。.!?！？;；]$/u;
 
 export interface PushAggregationOptions {

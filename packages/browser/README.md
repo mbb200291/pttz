@@ -15,7 +15,7 @@ article and optional target reply. The browser measures capacity from a cancelle
 confirmation, plans UAO-safe pieces, validates their aggregate result, and sends
 them serially. Each confirmation must match the exact sender, text and capacity.
 New drafts use `|` only when continuation needs it; their final piece ends in
-natural punctuation or `_`. Old `||` / `|!` remain readable. The default
+natural punctuation or `\`. Underscores are ordinary text, not stop markers. The default
 nonconsecutive merge window is two minutes, including in the web client.
 
 Check `ReplyDelivery.status`, not only `Result.ok`: only `complete` means all pieces
