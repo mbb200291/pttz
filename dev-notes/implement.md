@@ -104,7 +104,7 @@ npm run verify    # tests + helper tests + build + lint + pack/example smoke
 
 串流依可視範圍依序讀取正文，預設五行，點文章區塊原位展開全文與回覆；預覽、展開與明確重試共用去重 FIFO 單筆讀取及快取。刷新等待目前讀取結束，成功後才替換串流與清除快取；全部失敗保留舊正文及展開狀態，部分成功仍可閱讀，連線結束則清除。圖片與 YouTube 直接呈現為原生橫向媒體列；緊湊版面及媒體網址識別不改動核心解析規則。Threads 使用 core/browser 0.2.0 與 rules 0.2.x。
 
-`apps/threads` 為獨立的原生 TypeScript/Vite 介面，透過公開 core/browser 契約取得熱門看板精選、逐步讀取文章、呈現巢狀回覆與編輯歷程。第一版以五個熱門看板、每板最多六篇及原生推數門檻 20 組成有限串流，不另建推薦引擎；保留原 Web UI，新增 `npm run dev:threads` 入口。詳見 [plan](goal-12-implementation-plan.md)、[notes](goal-12-implementation-notes.md) 及 [UI README](../apps/threads/README.md)。
+`apps/threads` 為獨立的原生 TypeScript/Vite 介面，透過公開 core/browser 契約取得近期看板精選、逐步讀取文章、呈現巢狀回覆與編輯歷程。目前讀取前五個熱門看板、每板最多兩個 20 筆 API 頁，保留今天與前兩天的候選，依原生熱度排序取前 30 篇，不設最低分。保留原 Web UI，入口為 `npm run dev:threads`。詳見 [plan](goal-12-implementation-plan.md)、[notes](goal-12-implementation-notes.md)、[UI README](../apps/threads/README.md) 及 [選文取捨](../apps/threads/docs/development.md)。
 
 ## 目前限制
 

@@ -205,8 +205,8 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
     },"refresh-button");
     top.append(title,refreshButton);
     const explanation=node("p",preview
-      ? "示例資料 · 非即時熱門 · 預覽未套用推數門檻"
-      : sharedKey ? "" : "熱門看板精選","muted");
+      ? "示例資料 · 非即時熱門"
+      : sharedKey ? "" : "近三日精選","muted");
     const list=node("div","","feed");
     for (const article of feed.items) {
       const id = articleKeyId(article.key);
@@ -357,10 +357,10 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
       // Public reads cannot be cancelled; let the current body finish before switching boards.
       await Promise.all([...articleCache.values()].flatMap(entry => entry.pending ? [entry.pending] : []));
       if (!current()) return;
-      const result=await loadFeed(client,current,(done,total)=>showStatus("已讀取 "+done+" / "+total+" 個看板"),preview?0:20);
+      const result=await loadFeed(client,current,(done,total)=>showStatus("已讀取 "+done+" / "+total+" 個看板"),{preview});
       if (!current()) return;
       // A failed source or zero successful boards must not masquerade as an empty success.
-      if (result.errors.length && result.completed <= result.errors.length) {
+      if (result.errors.length && !result.succeeded) {
         renderFeed(); showStatus("讀取失敗，已保留本次登入先前取得的列表。" + result.errors.join("；")); return;
       }
       clearPreviews();

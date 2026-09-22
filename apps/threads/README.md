@@ -26,18 +26,18 @@ npm test -w @pttzzz/threads-example
 npm run build -w @pttzzz/threads-example
 ```
 
-加上 `?preview=1` 使用公開 fake gateway，無須真實 PTT 帳密。預覽沿用 fake gateway 的示例資料，畫面明確標示非即時熱門，且將推數門檻設為 0；正式連線固定為 20。預覽不會發送實站命令。
+加上 `?preview=1` 使用公開 fake gateway，無須真實 PTT 帳密。預覽使用固定示例，不受近三日限制，亦不會發送實站命令。
 
 未設定環境目標時，`dev:threads` 預設正式 PTT；`PTT_TARGET` 可切換預設目標，`:local`／`:ptt` 指令則優先使用指定站台。登入前會顯示目前的連線目標。
 
 ## 串流如何選文章
 
-1. 以 `listBoards({source:{kind:"hot"},limit:5})` 取得前五個熱門看板。
-2. 依序以 `filterArticles({board,minimumNativeScore:20,limit:6})` 讀取每板第一批結果，排除置頂與重複文章。
-3. 各板輪流取一篇，維持來源順序；最多 30 篇，不做跨板數字排序，不把「爆」轉成假精確分數。
-4. 單板失敗時顯示原因，其他已成功資料仍可閱讀；不偷偷改為無門檻列表。
+1. 從前五個熱門看板各讀取最新兩頁，每頁最多 20 篇。
+2. 保留台灣時間今天與前兩天的文章，排除置底、已刪除及重複文章。
+3. 依 PTT 原生推噓分由高到低排列，最多顯示 30 篇，沒有最低分限制。
+4. 重新整理完成後一次更新列表；讀取失敗時保留仍可閱讀的資料。
 
-這是熱門看板精選，不是全站熱門排名，也沒有個人化推薦。上述 limit 是 API 結果上限，不保證底層只讀一張終端畫面。透過按鈕或頁首下拉更新，沒有背景輪詢或無限載入，也不在進站時一次預抓所有文章正文。
+這是有限範圍內的近三日精選，不是完整三日排行榜。透過按鈕或頁首下拉更新，沒有背景輪詢或無限載入。日期判斷、分頁成本及分數級距的取捨見 [UI 開發文件](docs/development.md)。
 
 ## Threads 呈現背後的資料流程
 
@@ -45,7 +45,7 @@ npm run build -w @pttzzz/threads-example
 PTT 終端資料
   → @pttzzz/browser：WebSocket host／gateway
   → @pttzzz/core：解析、合併推文、回覆關係、投票與可見性
-  → feed.ts：挑選看板與文章、去重、交錯排列
+  → feed.ts：近期候選、去重、依原生熱度排序
   → app.ts：可視文章 FIFO → partial/final 快取 → 文章列與討論
 ```
 
@@ -73,7 +73,7 @@ core 先依合併、明確回覆指向、投票控制與編輯規則，產出 `R
 | 「討論 N」 | 遍歷 `snapshot.replies` 計算 `visible` 節點 | 包含所有深度的可見留言，一個節點算一則 |
 | 留言下方推／噓 | `reply.votes` | 該留言收到的投票 |
 | PTT 原始統計 | `snapshot.nativeVotes` | PTT 原始推噓，放在討論底部的展開區 |
-| 熱門篩選門檻 | `ArticleSummary.nativeScore`／PTT 篩選 | 原生列表熱度，用於挑文章，不冒充文章投票或留言數 |
+| 精選排序 | `ArticleSummary.nativeScore`／`nativeScoreLabel` | 原生列表熱度，用於排序，不冒充文章投票或留言數 |
 
 未取得統計時顯示 `—`，不顯示假零。partial 的推噓標示「更新中」，討論數附 `+` 並提供讀取中可及性描述；目前數量可能隨後續合併／控制指令調整，`+` 不保證只增不減。只有 final 才顯示確定零則與「尚無回覆」。
 

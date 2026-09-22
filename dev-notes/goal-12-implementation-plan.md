@@ -2,9 +2,16 @@
 
 **Goal:** 獨立 apps/threads，登入後直接提供熱門看板精選與文章閱讀；第一版唯讀。
 
-**Architecture:** 沿用 core/browser 公開 API。串行讀熱門前5板，每板最多6篇、PTT推數>=20，排除置頂，輪流混合。依可視範圍依序載入內文，不做全站排名、推薦引擎或初始全量正文預抓。
+**Architecture:** 沿用 core/browser 公開 API。串行讀熱門前五板、每板最多兩個 20 筆 API 頁，保留近三日候選並依原生熱度排序，最多 30 篇。依可視範圍依序載入內文，不做全站排名、推薦引擎或初始全量正文預抓。
 
 **Tech Stack:** Vanilla TypeScript、Vite、Vitest；無新UI框架。
+
+## 近期精選修訂（2026-09-23）
+
+- [x] `feed.test.ts` 覆蓋近三日、跨年／閏日、兩頁上限、低分文章、排序去重、取消及部分失敗。
+- [x] `feed.ts` 改用 `listArticles`，每板兩個 20 筆 API 頁；依台灣日期及原生分數挑選最多 30 篇。
+- [x] `app.test.ts` 驗證整批更新與失敗保留，預覽資料豁免日期；不變更核心規則。
+- [x] UI 開發文件記錄取捨，更新 README、notes、implement；完整 verify 通過，同階段提交，不推送。
 
 ## 讀取佇列與刷新容錯修訂（2026-09-09）
 

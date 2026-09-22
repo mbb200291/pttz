@@ -25,7 +25,7 @@ function setup(count = 1, stableAid = false) {
     disconnect: vi.fn(async () => {}),
     subscribe: vi.fn((listener: (event: CoreEvent) => void) => { listeners.add(listener); return () => {listeners.delete(listener);}; }),
     listBoards: vi.fn<PttzzzClient["listBoards"]>(async () => ok({kind:"boards" as const,items:[{name:"Test",title:"Test"}]})),
-    filterArticles: vi.fn<PttzzzClient["filterArticles"]>(async () => ok({items:Array.from({length:count},(_,index)=>({key:stableAid ? {board:"Test",aid:`Stable${index+1}`} : {board:"Test",index:index+1},title:index?"Second article":"A <script>title</script>",author:"alice"}))})),
+    listArticles: vi.fn<PttzzzClient["listArticles"]>(async () => ok({items:Array.from({length:count},(_,index)=>({key:stableAid ? {board:"Test",aid:`Stable${index+1}`} : {board:"Test",index:index+1},title:index?"Second article":"A <script>title</script>",author:"alice"}))})),
     getArticle: vi.fn(({article}:{article:{index?:number}}) => new Promise<Result<Article>>(r => { resolvers.set(article.index!,r); })),
   };
   const root = document.createElement("div"); document.body.append(root);
@@ -79,7 +79,7 @@ it.each(["source-result","source-throw","all-boards"])("preserves readable bodie
   await screen.findByText("Secret body");
   if(kind==="source-result") test.client.listBoards.mockResolvedValueOnce(failure);
   else if(kind==="source-throw") test.client.listBoards.mockRejectedValueOnce(new Error("offline"));
-  else test.client.filterArticles.mockResolvedValueOnce(failure);
+  else test.client.listArticles.mockResolvedValueOnce(failure);
   fireEvent.click(screen.getByRole("button",{name:"重新整理"}));
   await screen.findByText(/已保留/);
   expect(screen.getByText("Secret body")).toBeTruthy();
@@ -91,11 +91,26 @@ it("replaces old content for a successful empty refresh", async () => {
   const test=setup();
   fireEvent.click(await screen.findByRole("button",{name:/A <script>title/}));
   test.finish(); await screen.findByText("Secret body");
-  test.client.filterArticles.mockResolvedValueOnce(ok({items:[]}));
+  test.client.listArticles.mockResolvedValueOnce(ok({items:[]}));
   fireEvent.click(screen.getByRole("button",{name:"重新整理"}));
   await screen.findByText(/這次沒有取得符合條件/);
   expect(screen.queryByText("Secret body")).toBeNull();
   expect(screen.queryByText(/已保留/)).toBeNull();
+});
+
+it("keeps the current feed until the second page settles and retains a successful first page", async () => {
+  const test=setup();
+  await screen.findByRole("button",{name:/A <script>title/});
+  let finishPage!: (result: Awaited<ReturnType<PttzzzClient["listArticles"]>>) => void;
+  test.client.listArticles.mockResolvedValueOnce(ok({items:[{key:{board:"Test",index:9},title:"Fresh article",author:"alice"}],nextCursor:"older"}))
+    .mockImplementationOnce(()=>new Promise(resolve=>{finishPage=resolve;}));
+  fireEvent.click(screen.getByRole("button",{name:"重新整理"}));
+  await waitFor(()=>expect(test.client.listArticles).toHaveBeenCalledTimes(3));
+  expect(screen.queryByRole("button",{name:"Fresh article"})).toBeNull();
+  expect(screen.getByRole("button",{name:/A <script>title/})).toBeTruthy();
+  finishPage(failure);
+  await screen.findByRole("button",{name:"Fresh article"});
+  expect(screen.queryByRole("button",{name:/A <script>title/})).toBeNull();
 });
 
 it("waits for the active body before refreshing and restores a failed partial without starting old queued work", async () => {
@@ -123,7 +138,7 @@ it("accepts a partially successful refreshed feed and reports the failed board",
   const test=setup();
   await screen.findByRole("button",{name:/A <script>title/});
   test.client.listBoards.mockResolvedValueOnce(ok({kind:"boards",items:[{name:"New",title:"New"},{name:"Failed",title:"Failed"}]}));
-  test.client.filterArticles.mockResolvedValueOnce(ok({items:[{key:{board:"New",index:1},title:"Fresh article",author:"new"}]})).mockResolvedValueOnce(failure);
+  test.client.listArticles.mockResolvedValueOnce(ok({items:[{key:{board:"New",index:1},title:"Fresh article",author:"new"}]})).mockResolvedValueOnce(failure);
   fireEvent.click(screen.getByRole("button",{name:"重新整理"}));
   await screen.findByRole("button",{name:"Fresh article"});
   expect(screen.queryByRole("button",{name:/A <script>title/})).toBeNull();
