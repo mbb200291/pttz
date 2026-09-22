@@ -16,7 +16,7 @@ beforeEach(() => {
   });
 });
 afterEach(() => { window.history.replaceState(null,"","/"); dispose?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); });
-function setup(count = 1) {
+function setup(count = 1, stableAid = false) {
   const listeners=new Set<(event: CoreEvent) => void>();
   const resolvers=new Map<number,(value: Result<Article>) => void>();
   const client = {
@@ -25,7 +25,7 @@ function setup(count = 1) {
     disconnect: vi.fn(async () => {}),
     subscribe: vi.fn((listener: (event: CoreEvent) => void) => { listeners.add(listener); return () => {listeners.delete(listener);}; }),
     listBoards: vi.fn<PttzzzClient["listBoards"]>(async () => ok({kind:"boards" as const,items:[{name:"Test",title:"Test"}]})),
-    filterArticles: vi.fn<PttzzzClient["filterArticles"]>(async () => ok({items:Array.from({length:count},(_,index)=>({key:{board:"Test",index:index+1},title:index?"Second article":"A <script>title</script>",author:"alice"}))})),
+    filterArticles: vi.fn<PttzzzClient["filterArticles"]>(async () => ok({items:Array.from({length:count},(_,index)=>({key:stableAid ? {board:"Test",aid:`Stable${index+1}`} : {board:"Test",index:index+1},title:index?"Second article":"A <script>title</script>",author:"alice"}))})),
     getArticle: vi.fn(({article}:{article:{index?:number}}) => new Promise<Result<Article>>(r => { resolvers.set(article.index!,r); })),
   };
   const root = document.createElement("div"); document.body.append(root);
@@ -38,6 +38,15 @@ function setup(count = 1) {
   }))};
 }
 const failure = {ok:false as const,error:{code:"READ_FAILED",message:"測試讀取失敗",retryable:true}};
+
+it("shows the selected connection destination before login", () => {
+  const test=setup();
+  dispose?.(); document.body.replaceChildren();
+  const root=document.createElement("div"); document.body.append(root);
+  dispose=mountApp(root,test.client as unknown as PttzzzClient,false,"本機 PTT（127.0.0.1:8888）");
+  expect(screen.getByText("本機 PTT（127.0.0.1:8888）")).toBeTruthy();
+  expect(screen.getByLabelText("PTT 帳號")).toBeTruthy();
+});
 
 it("queues retries behind visible reads and publishes deduplicated queued/loading states immediately", async () => {
   const test=setup(3);
@@ -292,16 +301,31 @@ it("exposes discussion before loading and counts visible nested replies without 
 });
 
 it("offers a selectable share URL when clipboard access fails without expanding the article", async () => {
-  setup();
+  setup(1,true);
   Object.defineProperty(navigator,"clipboard",{configurable:true,value:{writeText:vi.fn().mockRejectedValue(new Error("denied"))}});
   Object.defineProperty(navigator,"share",{configurable:true,value:undefined});
   fireEvent.click(await screen.findByRole("button",{name:"分享文章"}));
   const field=await screen.findByRole("textbox",{name:"分享連結"}) as HTMLInputElement;
   expect(new URL(field.value).searchParams.get("board")).toBe("Test");
-  expect(new URL(field.value).searchParams.get("index")).toBe("1");
+  expect(new URL(field.value).searchParams.get("aid")).toBe("Stable1");
+  expect(new URL(field.value).searchParams.has("index")).toBe(false);
   expect(new URL(field.value).searchParams.get("preview")).toBe("1");
   expect(screen.getByRole("button",{name:/A <script>title/}).getAttribute("aria-expanded")).toBe("false");
   expect(screen.queryByText("已複製連結")).toBeNull();
+});
+
+it("does not share a mutable article index even when the click event is dispatched", async () => {
+  setup();
+  const writeText=vi.fn();
+  const share=vi.fn();
+  Object.defineProperty(navigator,"clipboard",{configurable:true,value:{writeText}});
+  Object.defineProperty(navigator,"share",{configurable:true,value:share});
+  const button=await screen.findByRole("button",{name:"分享文章"}) as HTMLButtonElement;
+  expect(button.disabled).toBe(true);
+  fireEvent.click(button);
+  expect(writeText).not.toHaveBeenCalled();
+  expect(share).not.toHaveBeenCalled();
+  expect(screen.queryByRole("textbox",{name:"分享連結"})).toBeNull();
 });
 
 it("opens a shared article outside the hot feed after login", async () => {
@@ -341,7 +365,7 @@ it("clears the shared article URL when returning to the hot feed", async () => {
 });
 
 it("does not claim share success or copy when the native share sheet is cancelled", async () => {
-  setup();
+  setup(1,true);
   const writeText=vi.fn();
   Object.defineProperty(navigator,"clipboard",{configurable:true,value:{writeText}});
   Object.defineProperty(navigator,"share",{configurable:true,value:vi.fn().mockRejectedValue(new DOMException("cancelled","AbortError"))});

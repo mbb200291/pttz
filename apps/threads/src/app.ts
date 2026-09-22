@@ -4,6 +4,8 @@ import { articleLink, parseArticleLink } from "./articleLink";
 import { attachPullRefresh } from "./pullRefresh";
 import { RequestScope } from "./requestScope";
 import { mediaFromText, updateMedia } from "./media";
+import { renderArticleBody, plainArticleText } from "./articleBody";
+import { renderReplies } from "./replyPresentation";
 
 function node<K extends keyof HTMLElementTagNameMap>(tag: K, text = "", className = ""): HTMLElementTagNameMap[K] {
   const element = document.createElement(tag);
@@ -18,7 +20,7 @@ function button(text: string, action: () => void, className = ""): HTMLButtonEle
   return element;
 }
 
-export function mountApp(root: HTMLElement, client: PttzzzClient, preview = false): () => void {
+export function mountApp(root: HTMLElement, client: PttzzzClient, preview = false, connectionLabel = "正式 PTT（ws.ptt.cc）"): () => void {
   const scope = new RequestScope();
   let user = "";
   let refreshing: Promise<void> | undefined;
@@ -120,7 +122,7 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
       event.preventDefault(); submit.disabled=true;
       void login(name.value.trim(),password.value).finally(()=>{password.value="";submit.disabled=false;});
     });
-    content.replaceChildren(title,intro,form);
+    content.replaceChildren(title,intro,...(preview ? [] : [node("p",connectionLabel,"muted")]),form);
   }
 
   async function login(username: string, password: string): Promise<void> {
@@ -247,16 +249,19 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
       const sharePanel=node("div","","share-panel"); sharePanel.hidden=true;
       sharePanel.dataset.noPullRefresh="";
       const shareInput=node("input"); shareInput.readOnly=true; shareInput.setAttribute("aria-label","分享連結");
-      shareInput.value=articleLink(article.key,location.href,preview);
+      const shareUrl=articleLink(article.key,location.href,preview);
+      shareInput.value=shareUrl ?? "";
       shareInput.addEventListener("click",()=>shareInput.select());
       const shareStatus=node("span","","muted"); shareStatus.setAttribute("role","status");
       const copy=async ():Promise<void>=>{
+        if (!shareUrl) return;
         sharePanel.hidden=false; shareStatus.textContent="";
         try { await navigator.clipboard.writeText(shareInput.value); shareStatus.textContent="已複製連結"; }
         catch { shareStatus.textContent="選取連結以複製"; shareInput.focus(); shareInput.select(); }
       };
       sharePanel.append(shareInput,button("複製",()=>void copy()),button("關閉",()=>{sharePanel.hidden=true;shareButton.focus();}),shareStatus);
       const shareButton=button("分享",()=>{
+        if (!shareUrl) return;
         if(typeof navigator.share!=="function") {void copy();return;}
         shareButton.disabled=true;
         void navigator.share({title:titleButton.textContent ?? article.title,url:shareInput.value}).catch(error=>{
@@ -264,12 +269,15 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
         }).finally(()=>{shareButton.disabled=false;});
       },"share-action");
       shareButton.setAttribute("aria-label","分享文章");
+      shareButton.disabled=!shareUrl;
+      if (!shareUrl) shareButton.title="此文章暫無分享連結";
       titleButton.setAttribute("aria-controls",body.id+" "+discussion.id);
       toggle.setAttribute("aria-controls",body.id+" "+discussion.id);
       const media=node("div","","media-strip"); media.tabIndex=0; media.hidden=true;
       media.dataset.noPullRefresh="";
       media.setAttribute("role","region"); media.setAttribute("aria-label","文章媒體，可左右捲動");
       let mediaText: string | undefined;
+      let renderedBody: string | undefined;
       let discussionSnapshot: Article | PartialArticle | undefined;
       let pointerStart: {x:number;y:number} | undefined;
       let dragged=false;
@@ -289,8 +297,9 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
         if(sharedKey && snapshot?.title) titleButton.textContent=snapshot.title;
         if(snapshot?.author) {authorName.textContent=snapshot.author;avatar.textContent=snapshot.author.slice(0,2).toUpperCase();}
         const text=snapshot?.body===undefined ? undefined : feedBody(snapshot.body,{...article,title:snapshot.title ?? article.title,author:snapshot.author ?? article.author});
-        if (text!==undefined && body.textContent!==text) body.textContent=text;
-        if(text!==mediaText) {mediaText=text;updateMedia(media,mediaFromText(text ?? ""));}
+        if (text!==undefined && renderedBody!==text) { renderedBody=text;renderArticleBody(body,text); }
+        const mediaBody=plainArticleText(text ?? "");
+        if(mediaBody!==mediaText) {mediaText=mediaBody;updateMedia(media,mediaFromText(mediaBody));}
         const isExpanded=expanded.has(id);
         body.classList.toggle("expanded",isExpanded);
         titleButton.setAttribute("aria-expanded",String(isExpanded));
@@ -310,8 +319,8 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
           nativeCounts.textContent=snapshot.nativeVotes ? `推 ${snapshot.nativeVotes.pushCount} / 噓 ${snapshot.nativeVotes.booCount}` : "讀取中…";
           history.hidden=snapshot.completeness!=="final" || !snapshot.articleEdits.length;
           if(snapshot.completeness==="final") for(const edit of snapshot.articleEdits) history.append(node("pre",edit.marker+"\n"+edit.content));
-          replyContent.replaceChildren(replies(snapshot.replies,snapshot.completeness==="final"));
-          if(!replyCount) replyContent.append(node("p",snapshot.completeness==="final"?"尚無回覆":"回覆讀取中…","muted"));
+          replyContent.replaceChildren(renderReplies(snapshot.replies,snapshot.completeness==="final"));
+          if(!snapshot.replies.length) replyContent.append(node("p",snapshot.completeness==="final"?"尚無回覆":"回覆讀取中…","muted"));
         }
         loading.textContent=entry?.error ?? (complete ? (text?.trim() ? "" : "（無內文）") : entry?.pending ? (text ? "正在讀取其餘內容…" : "內文讀取中…") : queued.has(id) ? "內文排隊中…" : "內文等待載入…");
         loading.hidden=!loading.textContent;
@@ -357,28 +366,6 @@ export function mountApp(root: HTMLElement, client: PttzzzClient, preview = fals
       clearPreviews();
       feed=result; renderFeed();
     } catch { if(current()) {renderFeed();showStatus("讀取失敗，已保留本次登入先前取得的列表。");} }
-  }
-  function replies(replies: readonly Reply[], final: boolean): HTMLElement {
-    const list=node("div","","replies");
-    const queue=[...replies].reverse().map(reply=>({reply,depth:0,parent:""}));
-    while(queue.length) {
-      const {reply,depth,parent}=queue.pop()!;
-      for (const child of [...reply.children].reverse()) queue.push({reply:child,depth:depth+1,parent:reply.author});
-      if (!reply.visible) continue;
-      const item=node("article","","reply");
-      item.dataset.replyId=reply.replyId;
-      item.style.marginInlineStart=Math.min(depth,3)*12+"px";
-      const label=reply.pushType==="push"?"推":reply.pushType==="boo"?"噓":"→";
-      item.append(node("strong",reply.author+(reply.isOp?" · 原作者":"")+" · "+label),
-        node("p",reply.content,"reply-content"),node("p","推 "+reply.votes.pushCount+" · 噓 "+reply.votes.booCount+(parent?" · 回覆 "+parent:""),"muted"));
-      if (final && reply.edits.length) {
-        const history=node("details"); history.append(node("summary","編輯歷程"));
-        for(const edit of reply.edits) history.append(node("pre",[edit.createdAt,edit.kind,edit.content].filter(Boolean).join("\n")));
-        item.append(history);
-      }
-      list.append(item);
-    }
-    return list;
   }
   renderLogin();
   if(preview) void login("preview","preview");

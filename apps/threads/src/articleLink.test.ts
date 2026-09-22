@@ -5,13 +5,20 @@ describe('articleLink', () => {
   it('shares the app path and explicit AID, without unrelated query or fragment', () => {
     const link = articleLink({ board: 'Gossiping', aid: '#FAKEGOSSIP' }, 'https://example.com/threads/?token=secret#old', false);
     expect(link).toBe('https://example.com/threads/?board=Gossiping&aid=FAKEGOSSIP');
-    expect(parseArticleLink(link)).toEqual({ board: 'Gossiping', aid: 'FAKEGOSSIP' });
+    expect(parseArticleLink(link!)).toEqual({ board: 'Gossiping', aid: 'FAKEGOSSIP' });
   });
 
-  it('retains preview mode and round-trips an index', () => {
-    const link = articleLink({ board: 'Test_1-2', index: 123 }, 'http://localhost:5182/?preview=home', true);
-    expect(link).toBe('http://localhost:5182/?board=Test_1-2&index=123&preview=1');
-    expect(parseArticleLink(link)).toEqual({ board: 'Test_1-2', index: 123 });
+  it('does not publish a mutable index as a persistent share link', () => {
+    expect(articleLink({ board: 'Test_1-2', index: 123 }, 'http://localhost:5182/?preview=home', true)).toBeUndefined();
+    expect(parseArticleLink('http://localhost:5182/?board=Test_1-2&index=123')).toEqual({ board: 'Test_1-2', index: 123 });
+  });
+
+  it('retains preview mode with a stable aid', () => {
+    expect(articleLink({ board: 'Test', aid: 'Ab_12-xy' }, 'http://localhost:5182/', true)).toBe('http://localhost:5182/?board=Test&aid=Ab_12-xy&preview=1');
+  });
+
+  it('rejects malformed ids instead of publishing unusable links', () => {
+    expect(articleLink({ board: 'Test', aid: '##abc' }, 'https://example.com', false)).toBeUndefined();
   });
 });
 

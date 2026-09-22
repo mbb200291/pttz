@@ -1,15 +1,15 @@
 import type { ArticleKey } from '@pttzzz/core';
 
-export function articleLink(key: ArticleKey, locationHref: string, preview: boolean): string {
+export function articleLink(key: ArticleKey, locationHref: string, preview: boolean): string | undefined {
+  if (key.aid === undefined) return undefined;
+  const aid = key.aid.replace(/^#/, '');
+  if (!/^[A-Za-z0-9_-]{1,32}$/.test(aid)) return undefined;
   const url = new URL(locationHref);
   url.search = '';
   url.hash = '';
   url.searchParams.set('board', key.board);
-  if (key.aid !== undefined) {
-    url.searchParams.set('aid', key.aid.replace(/^#/, ''));
-  } else {
-    url.searchParams.set('index', String(key.index));
-  }
+  url.searchParams.set('aid', aid);
+  if (!parseArticleLink(url.href)) return undefined;
   if (preview) url.searchParams.set('preview', '1');
   return url.href;
 }

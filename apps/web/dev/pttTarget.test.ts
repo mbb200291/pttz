@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolvePttTarget } from './pttTarget'
+import { resolvePttTarget } from '../../../dev/pttTarget'
 
 describe('PTT target selection', () => {
   it('defaults to loopback TCP, never the live service', () => {

@@ -122,6 +122,8 @@ npm run verify    # tests + helper tests + build + lint + pack/example smoke
 
 ## 細節文件
 
+Goal 12 新版核心適配：Threads 支援 ANSI 文字樣式、撤回占位與完整編輯版本；Web／Threads 共用開發代理並可切換本機目標。新分享只產生 AID 連結，無 AID 時停用，舊 index 入口保留。驗證及後續限制見 [適配紀錄](goal-12-compatibility-implementation-notes.md)。
+
 Goal 11 首頁與看板支援任意方向鍵啟用選取、Z 自訂推文門檻，body 與區域鍵盤事件分工避免雙觸發；首頁登出呼叫目前 client.disconnect，清除登入記憶體並使用明確已登出畫面。
 
 Goal 11 閱讀樣式預設繼承網站，僅投影作者明確 ANSI 樣式為可讀色盤；表格／ASCII 才預設等寬，手動原始排版恢復終端色彩。登入中斷保留 closed 並提示可能的重複連線上限，不自動踢除其他連線。

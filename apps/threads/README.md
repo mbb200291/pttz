@@ -5,7 +5,7 @@ Goal 12 的獨立唯讀介面範例。以 Threads 式單欄討論串流呈現跨
 ## 版本與邊界
 
 - 套件：`@pttzzz/threads-example` 0.1.0，private workspace。
-- 使用 `@pttzzz/core` / `@pttzzz/browser` 0.3.0，核心規則為 0.4.x；介面尚待補齊撤回占位與原始編輯版本呈現。
+- 使用 `@pttzzz/core` / `@pttzzz/browser` 0.3.0，支援核心規則 0.4.x。
 - 只使用公開 API；沒有發文、回覆、推噓、編輯、刪除或修改最愛的入口。
 - 規則與投票資料由核心提供；列表的 PTT 原生熱度不等於文章頁的提案文章推噓。
 
@@ -17,6 +17,9 @@ Goal 12 的獨立唯讀介面範例。以 Threads 式單欄討論串流呈現跨
 npm ci
 npm run build:packages
 npm run dev:threads
+# 本機 PTT / 正式 PTT
+npm run dev:threads:local
+npm run dev:threads:ptt
 # 自訂位址與連接埠
 npm run dev:threads -- --host 127.0.0.1 --port 5182
 npm test -w @pttzzz/threads-example
@@ -24,6 +27,8 @@ npm run build -w @pttzzz/threads-example
 ```
 
 加上 `?preview=1` 使用公開 fake gateway，無須真實 PTT 帳密。預覽沿用 fake gateway 的示例資料，畫面明確標示非即時熱門，且將推數門檻設為 0；正式連線固定為 20。預覽不會發送實站命令。
+
+未設定環境目標時，`dev:threads` 預設正式 PTT；`PTT_TARGET` 可切換預設目標，`:local`／`:ptt` 指令則優先使用指定站台。登入前會顯示目前的連線目標。
 
 ## 串流如何選文章
 
@@ -56,7 +61,9 @@ Threads 是同一套 PTT 核心資料的另一種呈現方式，沒有呼叫 Met
 
 ### 推文如何變成討論
 
-core 先依合併、明確回覆指向、投票控制與編輯規則，產出 `Reply[]` 樹。UI 按原本樹順序深度優先呈現；只顯示 `visible=true` 節點，但仍走訪隱藏節點的子樹。縮排最多三層，較深留言保留「回覆某作者」文字。留言原始推／噓／箭頭類型與留言本身收到的票數分別呈現。
+core 先依合併、明確回覆指向、投票控制與編輯規則，產出 `Reply[]` 樹。UI 按原本樹順序呈現；已撤回的回覆保留位置，顯示「此回覆已撤回」，不顯示原文或歷史，後續回覆仍留在原位置。縮排最多三層，較深留言保留「回覆某作者」文字。可見留言的原始推／噓／箭頭類型與留言本身收到的票數分別呈現。
+
+編輯歷程顯示原始版本及每次修改後的完整內容；舊資料未提供的版本不會自行推測。
 
 同作者的多行推文可能被核心合為一則回覆；純投票控制、撤回等也可能不成為可見留言。因此討論數不是原始推文行數，也不是推噓相加。合併與可見性的具體規則以[核心白皮書](../../docs/whitepaper/pttzzz-core.md)為準。
 
@@ -80,9 +87,9 @@ core 先依合併、明確回覆指向、投票控制與編輯規則，產出 `R
 
 每篇「分享」會優先呼叫瀏覽器原生分享；不支援時複製連結並顯示可選取欄位。clipboard 被拒絕則保留手動複製，取消原生分享不顯示成功。
 
-連結指向目前這套 UI 的來源與路徑，使用明確的 `board` 加 `aid` 或 `index` 參數，不使用 opaque `articleKeyId()`。接收者登入後會直接讀該文章，即使文章不在熱門精選內；可返回熱門討論。預覽連結保留 `preview=1`，不登入實站。
+連結指向目前這套 UI 的來源與路徑，使用看板名稱與穩定的 AID。接收者登入後會直接讀該文章，即使文章不在熱門精選內；可返回熱門討論。預覽連結保留 `preview=1`，不登入實站。
 
-AID 是較穩定的定位方式；若核心摘要只提供 index，就沿用該 index，其位置可能受看板文章刪除／重編影響。分享的連結不含帳密，也不賦予看板閱讀權限。localhost／127.0.0.1 連結只能在相同本機環境使用，對外分享需部署到接收者能連線的 host。
+未提供 AID 的文章暫不支援分享，以免文章刪除或編號變動後連到別篇；既有使用編號的連結仍可開啟。分享的連結不含帳密，也不賦予看板閱讀權限。localhost／127.0.0.1 連結只能在相同本機環境使用，對外分享需部署到接收者能連線的 host。
 
 ### 視覺與動態
 
@@ -96,7 +103,7 @@ AID 是較穩定的定位方式；若核心摘要只提供 index，就沿用該 
 - 快取與展開狀態僅限本次串流（最多 30 篇），成功重新整理或登入結束才清除；以請求世代、文章 identity、遞增 revision 過濾過期內容。刷新會停止排隊、等待目前不可取消的讀文結束，再讀熱門看板；等待期間保留可讀的舊畫面，按鈕停用，與下拉入口共用同一個刷新操作；來源或所有看板失敗時保留舊列表、正文及展開狀態。成功空列表正常替換舊資料；部分成功使用新列表並顯示失敗看板，不清空其他成功批次。
 - 串流只移除位於最開頭且作者／標題均符合卡片資料的重複 PTT 三行標頭；其他文字與原始核心 body 不變。
 - 正文、標題按鈕與媒體在 partial 更新時保持穩定；回覆可逐步更新，編輯歷程的互動展開於 final 後提供。選取文字、操作回覆、點媒體／連結與拖曳不觸發整塊展開。
-- 串流內文保留換行並自動折行；不執行內文 HTML。圖片／YouTube 直接放在內文下方，收合時仍顯示；多個媒體右側露出下一張，使用原生橫向捲動與 scroll snap，不新增輪播依賴。
+- 串流內文保留換行並自動折行，顯示作者指定的文字顏色、底色與高亮，其他文字沿用介面樣式；不執行內文 HTML。圖片／YouTube 直接放在內文下方，收合時仍顯示；多個媒體右側露出下一張，使用原生橫向捲動與 scroll snap，不新增輪播依賴。
 - 支援 HTTPS 直接圖片（png/jpg/jpeg/gif/webp，可附 query）、單張 Imgur、YouTube watch／youtu.be／shorts／embed／live 連結；驗證主機與完整 11 字元影片 ID，同一媒體去重。未知網址保留原文。
 - 圖片使用 lazy loading 與 no-referrer，失敗時保留原圖連結。影片使用 youtube-nocookie iframe、lazy loading、不自動播放，保留「在 YouTube 觀看」以處理禁止嵌入的影片。iframe 使用 strict-origin-when-cross-origin 以提供播放器所需的來源識別。
 - 顯示媒體會直接向第三方圖片主機或 YouTube 發出請求；privacy-enhanced mode 不代表沒有第三方連線。媒體網址辨識僅屬本 UI，不改變核心規則或其他 UI。
@@ -108,6 +115,6 @@ AID 是較穩定的定位方式；若核心摘要只提供 index，就沿用該 
 
 ## 部署
 
-Vite 開發模式提供 `/ptt-ws` proxy 並加入 PTT 要求的 Origin。正式部署仍需依 [browser host 說明](../../packages/browser/README.md) 提供相容連線環境；不能把開發 proxy 當成已部署的服務。新 UI 與原有 Web UI 各自 build，不互相匯入。
+Vite 開發模式與 Web 版共用 `/ptt-ws` 代理，可切換本機 Telnet 與正式 PTT；環境設定見[本機開發說明](../web/docs/local-ptt.md)。本機模式僅限開發，不可用於正式建置。正式部署仍需依 [browser host 說明](../../packages/browser/README.md) 提供相容連線環境；不能把開發 proxy 當成已部署的服務。新 UI 與原有 Web UI 各自 build，不互相匯入。
 
 相關文件：[白皮書](../../docs/whitepaper/pttzzz-core.md)、[UI 開發指南](../../packages/core/docs/DEVELOPMENT_GUIDE.md)。

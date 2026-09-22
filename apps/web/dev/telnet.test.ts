@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { TelnetCodec } from './telnet'
+import { TelnetCodec } from '../../../dev/telnet'
 
 describe('Telnet binary transport', () => {
   it('preserves Big5 and escaped IAC across arbitrary packet splits', () => {

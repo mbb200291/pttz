@@ -10,6 +10,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:local": "vite --mode ptt-local",
+    "dev:ptt": "vite --mode ptt-live",
     "build": "tsc --noEmit && vite build",
     "test": "vitest run"
   },
