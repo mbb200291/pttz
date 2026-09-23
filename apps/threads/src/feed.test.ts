@@ -68,6 +68,31 @@ it("continues other boards after a failed read and reports zero successes when a
   expect(await read(client)).toMatchObject({items:[],succeeded:0,completed:2});
 });
 
+it("uses favorite boards when the hot-board source is successfully empty", async () => {
+  const client=source();
+  client.listBoards
+    .mockResolvedValueOnce(ok({kind:"boards",items:[]}))
+    .mockResolvedValueOnce(ok({kind:"boards",items:[{name:"Gossiping",title:"Gossiping",favorite:true}]}));
+  client.listArticles.mockResolvedValue(ok({items:[article(1,{key:{board:"Gossiping",index:1}})]}));
+
+  const result=await read(client);
+
+  expect(result.items.map(item=>item.key.board)).toEqual(["Gossiping"]);
+  expect(client.listBoards.mock.calls).toEqual([
+    [{source:{kind:"hot"},limit:5}],
+    [{source:{kind:"favorite"},limit:5}],
+  ]);
+});
+
+it("does not hide a failed hot-board source behind favorites", async () => {
+  const client=source();
+  client.listBoards.mockResolvedValueOnce({ok:false,error:{code:"READ_FAILED",message:"熱門看板讀取失敗",retryable:true}});
+
+  expect(await read(client)).toMatchObject({items:[],errors:["熱門看板讀取失敗"]});
+  expect(client.listBoards).toHaveBeenCalledTimes(1);
+  expect(client.listArticles).not.toHaveBeenCalled();
+});
+
 it("keeps stable source order for equal scores and only exempts preview dates", async () => {
   const client=source();
   client.listArticles.mockResolvedValue(ok({items:[article(1,{publishedAt:"9/20"}),article(2,{publishedAt:"9/20"}),article(3,{pinned:true}),article(4,{author:"-"})]}));

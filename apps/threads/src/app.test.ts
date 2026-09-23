@@ -356,7 +356,8 @@ it("keeps the previous feed visible and prevents repeated refresh commands while
   fireEvent.click(await screen.findByRole("button",{name:/A <script>title/}));
   test.finish(); await screen.findByText("Secret body");
   let resolveBoards: ((value: Awaited<ReturnType<PttzzzClient["listBoards"]>>) => void) | undefined;
-  test.client.listBoards.mockImplementationOnce(()=>new Promise(resolve=>{resolveBoards=resolve;}));
+  test.client.listBoards.mockImplementationOnce(()=>new Promise(resolve=>{resolveBoards=resolve;}))
+    .mockResolvedValueOnce(ok({kind:"boards",items:[]}));
   const refresh=screen.getByRole("button",{name:"重新整理"});
   fireEvent.click(refresh); fireEvent.click(refresh);
   expect(screen.getByText("Secret body")).toBeTruthy();
@@ -364,7 +365,7 @@ it("keeps the previous feed visible and prevents repeated refresh commands while
   await waitFor(()=>expect(test.client.listBoards).toHaveBeenCalledTimes(2));
   resolveBoards!(ok({kind:"boards",items:[]}));
   await screen.findByText(/這次沒有取得/);
-  expect(test.client.listBoards).toHaveBeenCalledTimes(2);
+  expect(test.client.listBoards).toHaveBeenCalledTimes(3);
 });
 
 it("clears the shared article URL when returning to the hot feed", async () => {
@@ -401,7 +402,8 @@ it("wires top pull refresh to a single feed reload while preserving the readable
     fireEvent.touchEnd(target,{touches:[]});
   };
   let resolveBoards: ((value: Awaited<ReturnType<PttzzzClient["listBoards"]>>) => void) | undefined;
-  test.client.listBoards.mockImplementationOnce(()=>new Promise(resolve=>{resolveBoards=resolve;}));
+  test.client.listBoards.mockImplementationOnce(()=>new Promise(resolve=>{resolveBoards=resolve;}))
+    .mockResolvedValueOnce(ok({kind:"boards",items:[]}));
   pull();
   const refresh=screen.getByRole("button",{name:"重新整理"});
   expect((refresh as HTMLButtonElement).disabled).toBe(true);
@@ -413,5 +415,5 @@ it("wires top pull refresh to a single feed reload while preserving the readable
   await screen.findByText(/這次沒有取得/);
   await waitFor(()=>expect(document.querySelector(".pull-indicator")?.getAttribute("data-state")).toBe("idle"));
   expect((screen.getByRole("button",{name:"重新整理"}) as HTMLButtonElement).disabled).toBe(false);
-  expect(test.client.listBoards).toHaveBeenCalledTimes(2);
+  expect(test.client.listBoards).toHaveBeenCalledTimes(3);
 });

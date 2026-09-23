@@ -47,8 +47,16 @@ export async function loadFeed(client: Pick<PttzzzClient,"listBoards" | "listArt
   if (!current()) return result;
   if (!source.ok) return {...result,errors:[source.error.message]};
   if (source.value.kind!=="boards") return {...result,errors:["熱門看板來源格式不符"]};
+  let sourceItems=source.value.items;
+  if (!sourceItems.length) {
+    const favorites=await client.listBoards({source:{kind:"favorite"},limit:5});
+    if (!current()) return result;
+    if (!favorites.ok) return {...result,errors:[favorites.error.message]};
+    if (favorites.value.kind!=="boards") return {...result,errors:["我的最愛來源格式不符"]};
+    sourceItems=favorites.value.items;
+  }
   const seenBoards=new Set<string>();
-  const boards=source.value.items.filter(board=>{
+  const boards=sourceItems.filter(board=>{
     const key=board.name.toLowerCase();
     if (seenBoards.has(key)) return false;
     seenBoards.add(key);return true;

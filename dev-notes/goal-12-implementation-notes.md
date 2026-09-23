@@ -86,3 +86,4 @@
 - 新測試先確認舊版因仍使用篩分而失敗，再改用一般列表；覆蓋日期、低分、游標兩頁、去重排序、取消、部分失敗及 DOM 整批更新。
 - 唯讀 review 未發現阻擋問題。此輪未登入本機或正式 PTT，未宣稱實站耗時或視覺驗證完成。
 - 完整 `npm run verify` 通過：core 448、browser 467、web 382、開發代理 21、Threads 104、smoke helpers 11，型別／建置及 package smoke 通過。保留 3 個既有 lint warnings 及 bundle 大小提示。首次代理測試受沙盒 `listen EPERM` 阻擋，允許本機監聽後重跑完整驗證通過。
+- 本機實測確認熱門看板來源為空、測試帳號的我的最愛包含 `Gossiping`；加入空來源 fallback。熱門來源錯誤仍維持失敗語意，避免用 fallback 掩蓋真正故障。
