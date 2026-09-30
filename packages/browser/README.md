@@ -2,23 +2,66 @@
 
 Official browser gateway and client factory for `@pttzzz/core`.
 
-The current package version is `0.2.0`, targeting rules `0.2.x`. See
+The current package version is `0.3.0`, targeting rules `0.4.x`. See
 [package.json](./package.json) for dependencies and compatibility declarations.
 These declarations do not establish npm publication status.
+
+## Automatic reply drafts
+
+Drafts use the PTT UAO codec after CRLF and outer-whitespace normalization. Trailing spaces and blank lines are removed before both preview and sending; internal whitespace is preserved. There is no fixed character ceiling. Callers may set `maxFragments` to a positive integer; the transport rejects an over-budget plan before publishing any fragment. Prefixes, markers and blank-line bridges all affect the fragment count.
+
+`PttzzzClient.prepareReplyDraft({ article, replyId? })` returns a `ReplyDraftPlanner`. Its synchronous `plan(content)` uses the same splitter and readback validation as sending. Preparing measures the current terminal capacity and cancels without publishing; unsupported or failed preparation never falls back to an assumed width. Planners expire with terminal navigation/session changes or a replacement preparation. Sending always measures again, so a preview is not a capacity guarantee.
+
+`PttzzzClient.sendReplyDraft` accepts an immutable `operationId`, full text,
+article and optional target reply. The browser measures capacity from a cancelled
+confirmation, plans UAO-safe pieces, validates their aggregate result, and sends
+them serially. Each confirmation must match the exact sender, text and capacity.
+New drafts use `|` only when continuation needs it; their final piece ends in
+natural punctuation or `\`. Underscores are ordinary text, not stop markers. The default
+nonconsecutive merge window is two minutes, including in the web client.
+
+Check `ReplyDelivery.status`, not only `Result.ok`: only `complete` means all pieces
+were confirmed. `paused` may resume with the same ID and immutable payload;
+`uncertain` must not retry blindly. Receipts are in-memory and invalidated across
+authentication changes. The fake gateway uses the same planner and receipt queue.
+No live PTT posting is part of the automated validation.
+
+## Article formatting
+
+Version 0.3 accepts the core's optional ordered UTF-16 `formatting` ranges for
+article create/edit/board-reply commands. Only high intensity and foreground
+colors 30–37 are encoded. The driver inserts controlled SGR using PTT editor
+Ctrl+U (literal ESC insertion), never caller-provided terminal keystrokes.
+Formatted create requires a confirmed editor; blank formatted content is rejected
+before sending. Ordinary unformatted writes retain their previous behavior.
+
+The fake gateway persists the equivalent ANSI source, not Ctrl+U commands.
+Readback still exposes source body text and does not promise rich-text round-trip.
+No real PTT posting was used to verify this release: tests cover the gateway and
+scripted terminal sends. See the [UI formatting contract](../core/docs/DEVELOPMENT_GUIDE.md#article-text-formatting-corebrowser-03).
 
 This implementation wraps `ptt-client`, serializes terminal operations, and
 translates PTT screens and prompts into the public core gateway contract.
 The browser host must supply `Buffer` and a same-origin `/ptt-ws` WebSocket
-proxy to `wss://ws.ptt.cc/bbs` with `Origin: https://term.ptt.cc`.
-The repository development server supplies this proxy; other hosts must
-configure it themselves.
+proxy. For the official site, that proxy connects to `wss://ws.ptt.cc/bbs`
+with `Origin: https://term.ptt.cc`; the repository development server can
+instead connect to local `imageptt` over Telnet.
 
 UI authors should start with the core [Building a UI with @pttzzz/core](../core/docs/DEVELOPMENT_GUIDE.md).
 Use `createBrowserClient()` from the package root and send operations through
 the resulting `PttzzzClient`; terminal driver helpers are internal.
+When connecting to local `imageptt`, use
+`createBrowserClient({ pushFormat: "local", terminalProtocol: "local" })`.
+Push confirmations use `ID:content`; the terminal profile also selects local AID
+navigation and validates pagination anchors when deletion renumbers articles.
+Both options default to `ptt`, whose push format is `ID: content`.
 
 Run `npm test -w @pttzzz/browser` from the repository root to check the gateway
 and terminal workflows. Core rule conformance is documented in the
 [core README](../core/docs/README.md#fixture-符合性驗證).
 
 Use `@pttzzz/browser/testing` for the fake browser gateway used by tests and previews.
+
+Terminal workflow developers can consult the
+[local/official PTT format comparison](../../dev-notes/goal-14-local-ptt-conformance.md)
+for observed screen differences and verification coverage.

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import type { ArticleKey, PttCommand, PttGateway } from "@pttzzz/core";
+import { PttzzzClient, type ArticleKey, type PttCommand, type PttGateway } from "@pttzzz/core";
+import { stripAnsi } from "@pttzzz/core/internal";
 import { createFakeBrowserGateway } from "./testing.js";
 import {
   BrowserPttGateway,
@@ -215,6 +216,60 @@ function runGatewayContract(name: string, harness: ContractHarness): void {
 
 for (const [name, harness] of harnesses) runGatewayContract(name, harness);
 
+it("stores formatted fake create/edit/reply as ANSI with a lossless plain text projection", async () => {
+  localStorage.clear();
+  const gateway = createFakeBrowserGateway();
+  const client = new PttzzzClient(gateway);
+  await client.connect();
+  await client.login({ username: "opUser", password: "fake" });
+  const formatting = [{ start: 0, end: 3, color: 31 as const, bold: true }];
+  const key = { board: "test", index: 1001 };
+  for (const command of [
+    { type: "create-article", board: "test", title: "formatted", content: "red text", formatting },
+    { type: "edit-article", article: key, content: "red edit", formatting },
+    { type: "reply-article-to-board", article: key, content: "red reply", formatting },
+  ] satisfies PttCommand[]) {
+    await expect(gateway.execute(command)).resolves.toEqual({ ok: true, outcome: "sent" });
+    const page = await client.listArticles({ board: "test" });
+    expect(page.ok).toBe(true);
+    if (!page.ok) throw new Error("missing list");
+    const target = command.type === "edit-article" ? key : page.value.items[0].key;
+    const sources = [];
+    for await (const source of gateway.readArticle({ article: target })) sources.push(source);
+    expect(sources.at(-1)?.rawText).toContain("\x1b[0;1;31mred\x1b[0m");
+    expect(sources.at(-1)?.rawText).not.toContain("\x15");
+    const article = await client.getArticle({ article: target });
+    expect(article.ok).toBe(true);
+    if (!article.ok) throw new Error("missing article");
+    // The public body preserves source ANSI; the reference UI strips it for plain reading.
+    expect(stripAnsi(article.value.body)).toContain(command.content);
+    expect(article.value.body).not.toContain("\x15");
+  }
+  await client.disconnect();
+});
+
+it("rejects caller terminal controls before mutating formatted fake storage", async () => {
+  localStorage.clear();
+  const gateway = createFakeBrowserGateway();
+  await gateway.login({ username: "opUser", password: "fake" });
+  const before = localStorage.getItem("pttzzz_fake_ptt_store_v1");
+  await expect(gateway.execute({ type: "create-article", board: "test", title: "unsafe", content: "red\x15[31m", formatting: [{ start: 0, end: 3, color: 31 }] }))
+    .resolves.toMatchObject({ ok: false, code: "INVALID_INPUT", outcome: "not-sent" });
+  expect(localStorage.getItem("pttzzz_fake_ptt_store_v1")).toBe(before);
+  await gateway.disconnect();
+});
+
+it.each(["edit-article", "reply-article-to-board"] as const)("rejects formatted blank fake %s before storage changes", async (type) => {
+  localStorage.clear();
+  const gateway = createFakeBrowserGateway();
+  await gateway.login({ username: "opUser", password: "fake" });
+  const before = localStorage.getItem("pttzzz_fake_ptt_store_v1");
+  await expect(gateway.execute({ type, article: { board: "test", index: 1001 }, content: "   ", formatting: [{ start: 0, end: 3, bold: true }] }))
+    .resolves.toMatchObject({ ok: false, outcome: "not-sent" });
+  expect(localStorage.getItem("pttzzz_fake_ptt_store_v1")).toBe(before);
+  await gateway.disconnect();
+});
+
 function supplementalTerminal() {
   const methods = {
     getStatus: () => "connected" as const,
@@ -272,13 +327,27 @@ describe("real terminal gateway supplemental contract", () => {
     });
     await gateway.execute({ type: "edit-article", article: key, content: "new" });
     await gateway.execute({ type: "reply-article-to-board", article: key, content: "response" });
-    expect(methods.postArticle).toHaveBeenCalledWith("Test", "問卦", "title", "body");
+    expect(methods.postArticle).toHaveBeenCalledWith("Test", "問卦", "title", "body", undefined);
     expect(methods.executeArticleCommand).toHaveBeenNthCalledWith(1, {
       type: "edit-article", article: key, content: "new",
     });
     expect(methods.executeArticleCommand).toHaveBeenNthCalledWith(2, {
       type: "reply-article-to-board", article: key, content: "response",
     });
+  });
+
+  it("preserves optional article formatting through create, edit and board-reply dispatch", async () => {
+    const { methods, driver } = supplementalTerminal();
+    const gateway = new BrowserPttGateway(createTerminalGatewayDriverForTesting(driver));
+    const article = { board: "Test", index: 12 };
+    const formatting = [{ start: 0, end: 2, bold: true, color: 31 as const }];
+    await gateway.execute({ type: "create-article", board: "Test", title: "title", content: "body", formatting });
+    expect(methods.postArticle).toHaveBeenCalledWith("Test", "", "title", "body", formatting);
+    for (const type of ["edit-article", "reply-article-to-board"] as const) {
+      const command = { type, article, content: "body", formatting };
+      await gateway.execute(command);
+      expect(methods.executeArticleCommand).toHaveBeenLastCalledWith(command);
+    }
   });
 
   it("routes native author and combined author/title searches", async () => {
@@ -314,20 +383,58 @@ describe("real terminal gateway supplemental contract", () => {
     const transport = createTerminalGatewayDriverForTesting({
       listArticles,
     } as unknown as GatewayTerminalDriver);
-    await expect(transport.listArticles?.({ board: "Test", limit: 2 })).resolves.toHaveLength(2);
+    await expect(transport.listArticles?.({ board: "Test", limit: 2 })).resolves.toMatchObject({
+      items: expect.arrayContaining([
+        expect.objectContaining({ index: 10 }),
+        expect.objectContaining({ index: 9 }),
+      ]),
+      exhausted: false,
+    });
     expect(listArticles).toHaveBeenNthCalledWith(1, "Test", undefined);
     expect(listArticles).toHaveBeenNthCalledWith(2, "Test", 10);
   });
 
+  it("rejects a terminal page that makes no progress instead of declaring the list exhausted", async () => {
+    const row = { index: 10, title: "same", author: "a", date: "9/06" };
+    const listArticles = vi.fn(async () => [row]);
+    const transport = createTerminalGatewayDriverForTesting({
+      listArticles,
+    } as unknown as GatewayTerminalDriver);
+
+    await expect(transport.listArticles?.({ board: "Test", limit: 2 }))
+      .rejects.toMatchObject({ code: "GATEWAY_FAILURE", retryable: true });
+  });
+
+  it("excludes overlapping terminal rows and pinned rows from older cursor pages", async () => {
+    const row = (index: number, fixed = false) => ({ index, fixed, title: String(index), author: "a", date: "1/1" });
+    const listArticles = vi.fn(async (_board: string, before?: number) => {
+      if (before === undefined) return [row(999, true), row(10), row(9)];
+      if (before >= 9) return [row(999, true), row(10), row(9), row(8), row(7)];
+      if (before !== undefined && before < 7) return [row(5), row(4), row(1)];
+      return [row(8), row(7), row(6), row(5), row(4)];
+    });
+    const gateway = new BrowserPttGateway(createTerminalGatewayDriverForTesting({ listArticles } as unknown as GatewayTerminalDriver));
+    const first = await gateway.listArticles({ board: "Test", limit: 3 });
+    expect(first.items.map((item) => item.key.index)).toEqual([999, 10, 9]);
+    const second = await gateway.listArticles({ board: "Test", limit: 3, cursor: first.nextCursor });
+    expect(second.items.map((item) => item.key.index)).toEqual([8, 7, 6]);
+    expect(second.nextCursor).toBeTruthy();
+    const third = await gateway.listArticles({ board: "Test", limit: 3, cursor: second.nextCursor });
+    expect(third.items.map((item) => item.key.index)).toEqual([5, 4, 1]);
+    expect(third.nextCursor).toBeUndefined();
+  });
+
   it("intersects author with native score filtering across terminal pages", async () => {
-    const score = vi.fn(async (_board: string, _keywords: string[], _minimum: number, before?: number) => before
+    const score = vi.fn(async (_board: string, _keywords: string[], _minimum: number, before?: number) => before === undefined
       ? [
-          { index: 10, title: "topic older", author: "alice", date: "date" },
-          { index: 9, title: "topic other", author: "bob", date: "date" },
-        ]
-      : [
           { index: 12, title: "topic newest", author: "bob", date: "date" },
           { index: 11, title: "topic match", author: "alice", date: "date" },
+        ]
+      : before <= 9
+        ? [{ index: 1, title: "topic boundary", author: "bob", date: "date" }]
+        : [
+          { index: 10, title: "topic older", author: "alice", date: "date" },
+          { index: 9, title: "topic other", author: "bob", date: "date" },
         ]);
     const gateway = new BrowserPttGateway(createTerminalGatewayDriverForTesting({
       filterArticlesByTitleAndPush: score,

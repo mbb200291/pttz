@@ -11,9 +11,17 @@ const methods = {
   voteArticle: vi.fn(), withdrawArticleVote: vi.fn(),
   replyToReply: vi.fn(), editReply: vi.fn(), withdrawReply: vi.fn(),
   voteReply: vi.fn(), withdrawReplyVote: vi.fn(),
+  sendReplyDraft: vi.fn(),
 };
 
 describe("usePttActions public client delegation", () => {
+  it("forwards multipart progress and the immutable draft input", async () => {
+    const { result } = renderHook(() => usePttActions());
+    const input = { article: { board: "Test", index: 1 }, operationId: "draft", content: "long", pushType: "neutral" as const, resume: true };
+    const progress = vi.fn();
+    await result.current.sendReplyDraft!(input, progress);
+    expect(methods.sendReplyDraft).toHaveBeenCalledWith(input, progress);
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     for (const method of Object.values(methods)) method.mockResolvedValue({ ok: true, value: undefined });

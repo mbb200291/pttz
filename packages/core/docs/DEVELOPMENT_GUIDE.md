@@ -4,6 +4,30 @@ This guide is for developers and AI assistants building a user interface on top 
 
 For an independent rules implementation, start with the [whitepaper](../../../docs/whitepaper/pttzzz-core.md) and its implementation-neutral [fixture guide](../../../docs/fixtures/thread-events/README.md). For this package's architecture and tests, see the [core README](./README.md).
 
+## Article text formatting (core/browser 0.3+)
+
+`createArticle`, `editArticle`, and `replyArticleToBoard` accept optional `formatting: readonly ArticleTextStyle[]`. Keep `content` as plain text, not Markdown, HTML, ANSI, or editor keystrokes. This is a presentation contract, separate from the reply-edit rule syntax.
+
+```ts
+import { articleTextRuns, type CreateArticleInput } from "@pttzzz/core";
+const draft: CreateArticleInput = {
+  board: "Test", title: "Example", content: "Normal red text",
+  formatting: [{ start: 7, end: 10, bold: true, color: 31 }],
+};
+const previewRuns = articleTextRuns(draft.content, draft.formatting);
+// Render each run as escaped text; map bold/color to your own CSS.
+// Only on explicit user submission: await client.createArticle(draft).
+```
+
+- Offsets are JavaScript UTF-16 positions: start inclusive, end exclusive. Do not split a surrogate pair. Unlike reply section-edit indices, these offsets follow textarea selection APIs.
+- Ranges must be ordered, nonoverlapping, nonempty, and within content. `bold` is optional boolean (PTT high intensity, not a guaranteed font weight); `color` is one of 30–37 (black, red, green, yellow, blue, magenta, cyan, white).
+- Nonempty formatting requires nonblank content, at most 50,000 UTF-16 units, and no C0/C1 controls except tab and LF. Normalize CRLF before recording offsets. Invalid formatting is rejected before gateway writes with `INVALID_INPUT`/`not-sent`.
+- The helper may throw on an invalid draft: catch it in preview, show a validation error and disable submission. Never let preview errors unmount the editor.
+- Do not silently reuse offsets after editing. The reference UI removes intersected styles and shifts later ranges using a minimal text diff; repeated identical characters can make the inferred edit boundary ambiguous.
+- Include formatting in uncertain-write fingerprints. A failed or uncertain write must not automatically retry.
+- Use matching 0.3+ core and gateway implementations; older gateways may ignore unknown fields. No formatting is supported for one-line pushes, reply votes, or reply edits.
+- `Article.body` can contain source ANSI. The Web reader safely projects allowlisted SGR colors and intensity into styled text and adapts wrapping to its container. The reference editor still strips existing ANSI and warns that old colors are not retained. This release is not a full ANSI round-trip editor.
+
 ## Layer model
 
 - **Rules layer** — the whitepaper defines the meaning of aggregation, nested replies, article/reply votes, edits, and withdrawals.
@@ -67,6 +91,8 @@ Article search and filtering require a non-empty query or filter. Do not turn a 
 
 Article identity is represented by an `ArticleKey` (`index` or canonical `aid`). Keep the key returned by the API with the article; do not replace it with a UI array position. Reply identity is always `replyId`, never a display floor or card index.
 
+Treat `ArticleSummary.publishedAt` as source-provided display text, not necessarily a complete timestamp. PTT board lists normally expose only month/day. Do not infer missing years or reorder paginated results by that field; preserve the gateway order and use numeric article indexes as the stable order cue for index-based PTT boards.
+
 `articleKeyId()` produces an opaque in-memory comparison key. Do not decode its string representation or treat it as a persistence format. Index and AID keys remain distinct representations; the UI must not assume that it can convert between them.
 
 Check `BoardListPage.kind` before rendering: `boards` contains boards, while `directory` may contain both boards and category entries. `searchBoards()` and `filterBoards()` return board pages only. Prefer `onlineUsers` when present; otherwise display `popularityLabel` without inventing a numeric value for `HOT` or `爆!`. Keep pagination cursors paired with the same source and filters. A successful login or disconnect invalidates previous session cursors.
@@ -103,6 +129,41 @@ Do not expose raw source floors in ordinary UI unless the product explicitly cho
 
 ## Semantic writes
 
+### Automatic reply drafts
+
+Use `client.sendReplyDraft({ operationId, article, content, pushType, replyId?, resume? }, onProgress?)`
+for a whole reply draft. The browser gateway measures capacity, encodes and splits
+it; do not split by UI character count or add protocol markers yourself. Omit
+`replyId` for an article comment; target a loaded reply by its stable `replyId`
+for a nested reply. Nested drafts always use native neutral comments.
+
+This optional gateway capability returns `Result<ReplyDelivery>`. Check `status`
+as well as `ok`: `complete` means all `total` pieces were confirmed; `paused`
+retains `confirmed` and can be explicitly resumed with the same immutable ID and
+payload; `uncertain` is not safe to resend. Progress observers are informational.
+Do not interpret a read refresh as evidence that a write was absent. Old gateways
+without this capability return an unsupported result without falling back to an
+unsafe one-shot write. Existing single-write methods retain their contracts.
+
+For a confirmed `not-sent` result, optional `error.replyIssue` provides actionable
+preparation details: `too-long` includes `excessColumns` (two half-width columns
+equal one full-width character), `unsupported-characters` lists characters to
+replace, and `connection`, `article-unavailable`, `capacity`, or `content-layout`
+identify the relevant recovery step. Preserve the draft and render UI-owned copy;
+do not display raw transport messages or infer a category by matching their text.
+An absent issue means unknown, not invalid content. This additive field does not
+change delivery outcomes or authorize resending uncertain/partially sent drafts.
+
+The reference composer retains drafts while its Article component remains mounted,
+including closing/reopening the modal. Navigation or reload does not provide
+durable recovery. Browser receipts also live in memory and become unusable across
+authentication changes. Never invent a fresh ID to retry a partially sent draft.
+
+Default aggregation follows rules 0.3: two minutes for nonconsecutive fragments,
+no time cap for consecutive fragments, with author/target/control/terminator
+boundaries still enforced. A custom `aggregation.nonconsecutiveGapMinutes` is an
+explicit nonstandard profile and must be applied to both partial and final reads.
+
 Send semantic DTOs and let core/browser format PTT control text. Reply and vote operations target `replyId`; they do not target a card position or a guessed floor:
 
 ```ts
@@ -122,7 +183,7 @@ await client.voteReply({
 
 `replyArticleToBoard()` creates a PTT article and is not a push reply. `editArticle()` edits the article body; `editReply()` edits a reply through the whitepaper's control semantics. Never concatenate control prefixes in UI code.
 
-Load the article before acting on a reply so the client can resolve its `replyId` to source events. Check the `Result` of every write and reload when needed to reconcile displayed state; successful writes return `void`, not a new article identity. `editArticle({ article, content })` does not require an edit summary. Section edits use `mode: "section"` with `changes`, rather than a `content` field; consult the contract and fixtures for range semantics. Do not infer write permission from a successful local preview.
+Load the article before acting on a reply so the client can resolve its `replyId` to source events. Check the `Result` of every write and reload when needed to reconcile displayed state. Legacy single-write methods return `void` on success, not a new article identity; draft delivery methods return the delivery state described above. `editArticle({ article, content })` does not require an edit summary. Section edits use `mode: "section"` with `changes`, rather than a `content` field; consult the contract and fixtures for range semantics. Do not infer write permission from a successful local preview.
 
 ## Errors and uncertain writes
 

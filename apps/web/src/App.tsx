@@ -5,12 +5,14 @@ import {
   useRecentBoards,
   usePttSocket,
   usePttSocketStore,
+  submitLogout,
 } from "./hooks/usePttSocket";
 import { BoardInput } from "./components/BoardInput";
 import { ArticleList } from "./components/ArticleList";
 import { Article } from "./components/Article";
 import { LoginModal } from "./components/LoginModal";
 import { ComposeScreen } from "./components/ComposeScreen";
+import { ShortcutHelp } from "./components/ShortcutHelp";
 import type { ArticleSummary } from "./lib/ptt/uiArticle";
 import type { ArticleData } from "./hooks/useArticle";
 import type { AggregatedPush } from "./lib/ptt/uiTypes";
@@ -195,6 +197,16 @@ const MOCK_ARTICLE: ArticleData = {
 };
 
 export default function App() {
+  useEffect(() => {
+    // Page commands are explicit shortcuts, not sequential element navigation.
+    const handleTab = (event: KeyboardEvent) => {
+      if (event.key === "Tab" && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        event.preventDefault();
+      }
+    };
+    document.addEventListener("keydown", handleTab, true);
+    return () => document.removeEventListener("keydown", handleTab, true);
+  }, []);
   const isPreview = previewMode !== null;
   const { wsStatus, pttState, client } = usePttSocket();
   const { boards: hotBoards, loading: hotBoardsLoading } = useHotBoards(!isPreview);
@@ -260,6 +272,7 @@ export default function App() {
     <>
       {/* 登入對話框：偵測到 PTT 登入畫面時自動出現 */}
       <LoginModal pttState={modalPttState} wsStatus={effectiveWsStatus} />
+      <ShortcutHelp key={view.type} page={view.type} />
 
       {view.type === "home" && (
         <BoardInput
@@ -272,6 +285,7 @@ export default function App() {
           favoriteBoardsLoading={!isPreview && favoriteBoardsLoading}
           recentBoards={isPreview ? undefined : recentBoards}
           currentUser={currentUser}
+          onLogout={isPreview ? undefined : () => { void submitLogout(); }}
           onEnter={(board) => {
             addRecent(board);
             setView({ type: "board", name: board });
@@ -374,6 +388,7 @@ export default function App() {
             category: payload.category,
             title: payload.title,
             content: payload.body,
+            ...(payload.formatting?.length ? { formatting: payload.formatting } : {}),
           }))}
           submitError={postSubmitError}
           onCancel={() => setView({ type: "board", name: view.board })}
@@ -383,6 +398,7 @@ export default function App() {
               category: payload.category,
               title: payload.title,
               content: payload.body,
+              ...(payload.formatting?.length ? { formatting: payload.formatting } : {}),
             });
             if (postSubmittingRef.current || lockedPostFingerprints.has(fingerprint)) return;
             postSubmittingRef.current = true;
@@ -394,6 +410,7 @@ export default function App() {
                 category: payload.category,
                 title: payload.title,
                 content: payload.body,
+                ...(payload.formatting?.length ? { formatting: payload.formatting } : {}),
               })
               .then((result) => {
                 if (result.ok) {
@@ -431,6 +448,7 @@ export default function App() {
           isSubmitLocked={(payload) => lockedEditFingerprints.has(writeFingerprint("editArticle", {
             article: articleKey(view.board, view.articleIndex),
             content: payload.body,
+            ...(payload.formatting?.length ? { formatting: payload.formatting } : {}),
           }))}
           submitError={editSubmitError}
           onCancel={() =>
@@ -446,6 +464,7 @@ export default function App() {
             const fingerprint = writeFingerprint("editArticle", {
               article: articleKey(view.board, view.articleIndex),
               content: payload.body,
+              ...(payload.formatting?.length ? { formatting: payload.formatting } : {}),
             });
             if (editSubmittingRef.current || lockedEditFingerprints.has(fingerprint)) return;
             editSubmittingRef.current = true;
@@ -455,6 +474,7 @@ export default function App() {
               .editArticle({
                 article: articleKey(view.board, view.articleIndex),
                 content: payload.body,
+                ...(payload.formatting?.length ? { formatting: payload.formatting } : {}),
               })
               .then((result) => {
                 if (!result.ok) {
@@ -499,6 +519,7 @@ export default function App() {
           isSubmitLocked={(payload) => lockedReplyFingerprints.has(writeFingerprint("replyArticleToBoard", {
             article: articleKey(view.board, view.articleIndex, view.articleAid),
             content: payload.body,
+            ...(payload.formatting?.length ? { formatting: payload.formatting } : {}),
           }))}
           submitError={replySubmitError}
           onCancel={() => {
@@ -522,6 +543,7 @@ export default function App() {
             const fingerprint = writeFingerprint("replyArticleToBoard", {
               article: articleKey(view.board, view.articleIndex, view.articleAid),
               content: payload.body,
+              ...(payload.formatting?.length ? { formatting: payload.formatting } : {}),
             });
             if (replySubmittingRef.current || lockedReplyFingerprints.has(fingerprint)) return;
             replySubmittingRef.current = true;
@@ -530,6 +552,7 @@ export default function App() {
             void actions.replyArticleToBoard({
               article: articleKey(view.board, view.articleIndex, view.articleAid),
               content: payload.body,
+              ...(payload.formatting?.length ? { formatting: payload.formatting } : {}),
             }).then((result) => {
               if (!result.ok) {
                 setReplySubmitError(formatWriteError(result.error, "文章回應失敗"));

@@ -1,0 +1,884 @@
+{
+  "cursor": {
+    "x": 1,
+    "y": 3
+  },
+  "lines": [
+    {
+      "str": "【板主:hank2579】         [測試] 每週定期清除本板文章              看板《Test》",
+      "attr": {
+        "0": {
+          "fg": 7,
+          "bg": 4,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "26": {
+          "fg": 3,
+          "bg": 4,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "53": {
+          "fg": 7,
+          "bg": 4,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "79": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "[←]離開 [→]閱讀 [Ctrl-P]發表文章 [d]刪除 [z]精華區 [i]看板資訊/設定 [h]說明",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "   編號    日 期 作  者       文  章  標  題                           人氣:2  ",
+      "attr": {
+        "0": {
+          "fg": 0,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "79": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "●    1 !爆 7/23 mtdas        □ [公告] 每週六清除本板文章 (由新板主決定存廢)",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "9": {
+          "fg": 1,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "12": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "33": {
+          "fg": 7,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "40": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "      2 !18 8/23 mtdas        □ [公告] 批踢踢站規",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "9": {
+          "fg": 3,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "12": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "33": {
+          "fg": 7,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "40": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "      3 !68 2/20 tjackalym    □ [活動] Test !",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "9": {
+          "fg": 3,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "12": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "      4  爆 2/21 TheBright    □ [測試] 早上好",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "9": {
+          "fg": 1,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "12": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "      5  爆 2/22 marco741030  □ [測試] 早安",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "9": {
+          "fg": 1,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "12": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "      6  爆 2/23 A6           □ $:早安",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "9": {
+          "fg": 1,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "12": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "      7 !45 2/24 supermannike □ [轉錄] 鄉民語錄",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "9": {
+          "fg": 3,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "12": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "      8  79 2/25 TheBright    □ [測試] 早安！",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "9": {
+          "fg": 3,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "12": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "      9  33 2/26 ericxinny    □ 袁紹只是龍飛",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "9": {
+          "fg": 3,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "12": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "     10  X3 2/27 justgogogo   □ [測試]",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "9": {
+          "fg": 0,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "12": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "     11  71 2/28 emnklq       □ [測試]新手上路",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "9": {
+          "fg": 3,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "12": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "     12 ! 7 2/29 tjackalym    □ 測試板“M型活動”                 看板《Test》",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "9": {
+          "fg": 2,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "12": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "     13 !   2/29 tjackalym    ˇ 測試板“M型活動”                 看板《Test》",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "     14 !15 2/29 tjackalym    R: 測試板“M型活動”                 看板《Test》",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "9": {
+          "fg": 3,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "12": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "     15 ! 6 2/29 tjackalym    □ 測試板“M型活動”                 看板《Test》",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "10": {
+          "fg": 2,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "12": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "     16  61 3/02 TheJ         □ [簽名] test",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "9": {
+          "fg": 3,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "12": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "     17  21 3/03 idkfa1978    □ [測試]",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "9": {
+          "fg": 3,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "12": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "     18  95 3/04 jerrypotato  □ [簽名]",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "9": {
+          "fg": 3,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "12": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "     19 !46 3/05 capoeiraa    □ [測試] 馬賽克",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "9": {
+          "fg": 3,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "12": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": "     20  61 3/06 dengweishan  □ [測試]",
+      "attr": {
+        "0": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "9": {
+          "fg": 3,
+          "bg": null,
+          "bold": true,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "12": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    },
+    {
+      "str": " 文章選讀  (y)回應(X)推文(^X)轉錄 (=[]<>)相關主題(/?a)找標題/作者 (b)進板畫面  ",
+      "attr": {
+        "0": {
+          "fg": 4,
+          "bg": 6,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "10": {
+          "fg": 0,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "11": {
+          "fg": 1,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "14": {
+          "fg": 0,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "18": {
+          "fg": 1,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "21": {
+          "fg": 0,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "25": {
+          "fg": 1,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "29": {
+          "fg": 0,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "34": {
+          "fg": 1,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "41": {
+          "fg": 0,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "49": {
+          "fg": 1,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "54": {
+          "fg": 0,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "66": {
+          "fg": 1,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "69": {
+          "fg": 0,
+          "bg": 7,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        },
+        "79": {
+          "fg": null,
+          "bg": null,
+          "bold": false,
+          "underline": false,
+          "italic": false,
+          "blink": false,
+          "inverse": false
+        }
+      }
+    }
+  ]
+}

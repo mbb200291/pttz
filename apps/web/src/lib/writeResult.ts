@@ -5,12 +5,10 @@ export function canRetryWrite(error: CoreError): boolean {
 }
 
 export function formatWriteError(error: CoreError, fallback: string): string {
-  if (error.outcome === "sent") {
-    return `已送出但後續確認失敗，請重新載入確認：${error.message || fallback}`;
+  if (error.outcome === "sent" || error.outcome === "uncertain") {
+    return "尚未同步";
   }
-  return error.outcome === "uncertain"
-    ? `可能已送出，請重新載入確認：${error.message || fallback}`
-    : error.message || fallback;
+  return error.message || fallback;
 }
 
 export function writeFingerprint(operation: string, payload: unknown): string {

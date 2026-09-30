@@ -146,15 +146,42 @@ function appendCoreArticles(
   previous: ArticleSummary[],
   incoming: readonly ArticleSummary[],
 ): ArticleSummary[] {
+  if (hasReassignedIndexes(previous, incoming)) return sortCoreArticles(incoming);
   const merged = new Map(previous.map((article) => [articleKeyId(article.key), article]));
   for (const article of incoming) merged.set(articleKeyId(article.key), article);
-  return [...merged.values()];
+  return sortCoreArticles([...merged.values()]);
+}
+
+function hasReassignedIndexes(previous: readonly ArticleSummary[], incoming: readonly ArticleSummary[]): boolean {
+  const old = new Map(previous.map(article => [articleKeyId(article.key), article]));
+  return incoming.some(article => {
+    const before = old.get(articleKeyId(article.key));
+    return before !== undefined && (before.author !== article.author || before.title !== article.title || before.publishedAt !== article.publishedAt);
+  });
+}
+
+function sortCoreArticles(articles: readonly ArticleSummary[]): ArticleSummary[] {
+  return articles
+    .map((article, order) => ({ article, order }))
+    .sort((left, right) => {
+      const leftPinned = Boolean(left.article.pinned);
+      const rightPinned = Boolean(right.article.pinned);
+      if (leftPinned !== rightPinned) return leftPinned ? -1 : 1;
+      const leftIndex = "index" in left.article.key ? left.article.key.index : undefined;
+      const rightIndex = "index" in right.article.key ? right.article.key.index : undefined;
+      if (typeof leftIndex === "number" && typeof rightIndex === "number") {
+        return rightIndex - leftIndex;
+      }
+      return left.order - right.order;
+    })
+    .map(({ article }) => article);
 }
 
 function refreshCoreArticles(
   previous: ArticleSummary[],
   incoming: readonly ArticleSummary[],
 ): ArticleSummary[] {
+  if (hasReassignedIndexes(previous, incoming)) return sortCoreArticles(incoming);
   const incomingIds = new Set(incoming.map((article) => articleKeyId(article.key)));
   const incomingIndexes = incoming.flatMap((article) =>
     !article.pinned && typeof article.key.index === "number" ? [article.key.index] : []
@@ -164,7 +191,7 @@ function refreshCoreArticles(
     !article.pinned && typeof article.key.index === "number" && article.key.index < oldestIncoming &&
     !incomingIds.has(articleKeyId(article.key))
   );
-  return [...incoming, ...provenOlder];
+  return sortCoreArticles([...incoming, ...provenOlder]);
 }
 
 export function useBoard(
@@ -179,6 +206,7 @@ export function useBoard(
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const nextCursorRef = useRef<string | undefined>();
+  const activeRequestRef = useRef<"load" | "refresh" | null>(null);
   const queryGenerationRef = useRef(0);
   const mountedRef = useRef(true);
   const revalidateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -203,7 +231,7 @@ export function useBoard(
         request = client.listArticles({ board: boardName, cursor });
       }
       return request.then((result) => {
-        if (!result.ok) throw new Error(result.error.message);
+        if (!result.ok) throw Object.assign(new Error(result.error.message), { code: result.error.code });
         if (requestGeneration === queryGenerationRef.current) {
           nextCursorRef.current = result.value.nextCursor;
         }
@@ -237,10 +265,12 @@ export function useBoard(
     setArticles(cachedArticles);
     setHasMore(true);
     nextCursorRef.current = undefined;
+    activeRequestRef.current = null;
 
     const runFetch = () => {
       revalidateTimerRef.current = null;
       if (cancelled || requestGeneration !== queryGenerationRef.current) return;
+      activeRequestRef.current = "load";
       if (revalidateDelayMs > 0) setLoading(true);
 
       fetchArticles(false, requestGeneration)
@@ -248,7 +278,7 @@ export function useBoard(
           if (cancelled || requestGeneration !== queryGenerationRef.current) return;
           const merged = cachedArticles.length > 0
             ? refreshCoreArticles(cachedArticles, next)
-            : next;
+            : sortCoreArticles(next);
           setArticles(merged);
           setHasMore(Boolean(nextCursorRef.current));
           if (next.length > 0) {
@@ -274,10 +304,13 @@ export function useBoard(
         .catch((err: unknown) => {
           if (cancelled || requestGeneration !== queryGenerationRef.current) return;
           setError(err instanceof Error ? err.message : "無法載入看板");
-          setHasMore(false);
+          if (cachedArticles.length === 0) setHasMore(false);
         })
         .finally(() => {
-          if (!cancelled && requestGeneration === queryGenerationRef.current) setLoading(false);
+          if (!cancelled && requestGeneration === queryGenerationRef.current) {
+            activeRequestRef.current = null;
+            setLoading(false);
+          }
         });
     };
 
@@ -297,18 +330,28 @@ export function useBoard(
   }, [boardName, client, fetchArticles, filter, pttState]);
 
   const loadMore = useCallback(() => {
-    if (!client || loading || refreshing || articles.length === 0 || !hasMore) return;
+    if (!client || activeRequestRef.current || loading || refreshing || articles.length === 0 || !hasMore) return;
 
     if (!nextCursorRef.current) {
-      setHasMore(false);
       return;
     }
 
+    activeRequestRef.current = "load";
     setLoading(true);
+    setError(null);
     const requestGeneration = queryGenerationRef.current;
     fetchArticles(true, requestGeneration)
-      .then((next) => {
+      .then(async (next) => {
         if (!mountedRef.current || requestGeneration !== queryGenerationRef.current) return;
+        if (hasReassignedIndexes(articles, next)) {
+          const latest = sortCoreArticles(await fetchArticles(false, requestGeneration));
+          if (!mountedRef.current || requestGeneration !== queryGenerationRef.current) return;
+          setArticles(latest);
+          if (filter) writeFilteredBoardCache(boardName, filter, latest);
+          else writeBoardCache(boardName, latest);
+          setHasMore(Boolean(nextCursorRef.current));
+          return;
+        }
         if (next.length === 0) {
           setHasMore(false);
           return;
@@ -324,34 +367,52 @@ export function useBoard(
         });
         setHasMore(Boolean(nextCursorRef.current));
       })
-      .catch((err: unknown) => {
+      .catch(async (err: unknown) => {
         if (!mountedRef.current || requestGeneration !== queryGenerationRef.current) return;
+        if (err instanceof Error && "code" in err && err.code === "STALE_CURSOR") {
+          try {
+            const latest = sortCoreArticles(await fetchArticles(false, requestGeneration));
+            if (!mountedRef.current || requestGeneration !== queryGenerationRef.current) return;
+            setArticles(latest);
+            if (filter) writeFilteredBoardCache(boardName, filter, latest);
+            else writeBoardCache(boardName, latest);
+            setHasMore(Boolean(nextCursorRef.current));
+            return;
+          } catch (reloadError) { err = reloadError; }
+        }
         setError(err instanceof Error ? err.message : "無法載入更多文章");
       })
       .finally(() => {
-        if (mountedRef.current && requestGeneration === queryGenerationRef.current) setLoading(false);
+        if (mountedRef.current && requestGeneration === queryGenerationRef.current) {
+          activeRequestRef.current = null;
+          setLoading(false);
+        }
       });
   }, [articles, boardName, client, fetchArticles, filter, hasMore, loading, refreshing]);
 
   const refresh = useCallback(() => {
-    if (!client || refreshing) return;
+    if (!client || activeRequestRef.current === "refresh" || refreshing) return;
 
     if (revalidateTimerRef.current) {
       clearTimeout(revalidateTimerRef.current);
       revalidateTimerRef.current = null;
     }
+    activeRequestRef.current = "refresh";
     setRefreshing(true);
     setLoading(false);
     setError(null);
     const requestGeneration = ++queryGenerationRef.current;
-    nextCursorRef.current = undefined;
+    const previousCursor = nextCursorRef.current;
     fetchArticles(false, requestGeneration)
       .then((next) => {
         if (!mountedRef.current || requestGeneration !== queryGenerationRef.current) return;
-        if (next.length === 0) return;
+        if (next.length === 0) {
+          nextCursorRef.current = previousCursor;
+          return;
+        }
         setArticles((prev) => {
           const refreshed =
-            prev.length > 0 ? refreshCoreArticles(prev, next) : next;
+            prev.length > 0 ? refreshCoreArticles(prev, next) : sortCoreArticles(next);
           if (filter) {
             writeFilteredBoardCache(boardName, filter, refreshed);
           } else {
@@ -366,7 +427,10 @@ export function useBoard(
         setError(err instanceof Error ? err.message : "無法重新載入文章");
       })
       .finally(() => {
-        if (mountedRef.current && requestGeneration === queryGenerationRef.current) setRefreshing(false);
+        if (mountedRef.current && requestGeneration === queryGenerationRef.current) {
+          activeRequestRef.current = null;
+          setRefreshing(false);
+        }
       });
   }, [boardName, client, fetchArticles, filter, refreshing]);
 

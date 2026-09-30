@@ -1,3 +1,5 @@
+import { articleTextRuns } from "@pttzzz/core";
+import type { GatewayReplyDraftInput, ReplyDelivery, GatewayPrepareReplyDraftInput, ReplyDraftPlanner } from "@pttzzz/core";
 import {
   GatewayError,
   type ActionReceipt,
@@ -95,9 +97,31 @@ type DriverArticleQuery = {
   minimumNativeScore?: number;
   limit?: number;
 };
+type DriverArticleRow = {
+  index: number;
+  title: string;
+  author: string;
+  date: string;
+  pushCount?: string;
+  fixed?: boolean;
+  mark?: string;
+};
+type DriverArticleBatch = {
+  items: readonly DriverArticleRow[];
+  exhausted: boolean;
+};
+
+function isDriverArticleBatch(
+  value: readonly DriverArticleRow[] | DriverArticleBatch,
+): value is DriverArticleBatch {
+  return "exhausted" in value;
+}
 
 /** Package-private transport seam. Exported from this module only for tests. */
 export interface BrowserGatewayDriver {
+  captureArticleAnchor?(input: DriverArticleQuery, index: number): Promise<string | undefined>;
+  sendReplyDraft?(input: GatewayReplyDraftInput, onProgress?: (progress: ReplyDelivery) => void): Promise<ReplyDelivery>;
+  prepareReplyDraft?(input: GatewayPrepareReplyDraftInput): Promise<ReplyDraftPlanner>;
   connect(): Promise<void>;
   login(username: string, password: string, disconnectExisting: boolean): Promise<{ ok: true } | { ok: false; reason: string }>;
   disconnect(): Promise<void>;
@@ -109,21 +133,13 @@ export interface BrowserGatewayDriver {
   ): Promise<void>;
   listBoards(source: { kind: "hot" | "favorite" | "category"; route?: readonly number[] }): Promise<readonly DriverBoardEntry[]>;
   searchBoards(prefix: string): Promise<readonly Board[]>;
-  listArticles?(input: DriverArticleQuery): Promise<readonly {
-    index: number;
-    title: string;
-    author: string;
-    date: string;
-    pushCount?: string;
-    fixed?: boolean;
-    mark?: string;
-  }[]>;
+  listArticles?(input: DriverArticleQuery): Promise<readonly DriverArticleRow[] | DriverArticleBatch>;
   execute(command: PttCommand): Promise<DriverWriteResult>;
 }
 
 type CursorValue =
   | { kind: "page"; signature: string; remaining: readonly unknown[]; layout?: "directory" }
-  | { kind: "article-page"; signature: string; beforeIndex: number }
+  | { kind: "article-page"; signature: string; beforeIndex: number; anchor?: string }
   | { kind: "category"; route: readonly number[] };
 
 const positiveLimit = (limit?: number): number => {
@@ -137,9 +153,15 @@ const positiveLimit = (limit?: number): number => {
 const normalizedPttId = (value: string): string => value.trim().toLowerCase();
 
 function gatewayFailure(error: unknown): GatewayError {
-  return error instanceof GatewayError
-    ? error
-    : new GatewayError("GATEWAY_FAILURE", "PTT gateway 操作失敗", true, error);
+  if (error instanceof GatewayError) return error;
+  if (
+    error instanceof Error &&
+    "code" in error &&
+    error.code === "ARTICLE_PAGE_STALLED"
+  ) {
+    return new GatewayError("GATEWAY_FAILURE", error.message, true, error);
+  }
+  return new GatewayError("GATEWAY_FAILURE", "PTT gateway 操作失敗", true, error);
 }
 
 async function gatewayCall<T>(call: () => Promise<T>): Promise<T> {
@@ -326,7 +348,23 @@ export class BrowserPttGateway implements PttGateway {
     }
   }
 
+  async prepareReplyDraft(input: GatewayPrepareReplyDraftInput): Promise<ReplyDraftPlanner> {
+    if (!this.driver.prepareReplyDraft) throw new GatewayError("UNSUPPORTED", "此連線不支援回文計數", false);
+    return this.driver.prepareReplyDraft(input);
+  }
+
+  async sendReplyDraft(input: GatewayReplyDraftInput, onProgress?: (progress: ReplyDelivery) => void): Promise<ReplyDelivery> {
+    if (!this.driver.sendReplyDraft) throw new GatewayError("REPLY_DRAFT_NOT_SENT", "此連線不支援自動分段", false);
+    return this.driver.sendReplyDraft(input, onProgress);
+  }
+
   async execute(command: PttCommand): Promise<ActionReceipt> {
+    if (command.type === "create-article" || command.type === "edit-article" || command.type === "reply-article-to-board") {
+      try { articleTextRuns(command.content, command.formatting); }
+      catch (error) {
+        return { ok: false, code: "INVALID_INPUT", message: error instanceof Error ? error.message : "文章格式無效", outcome: "not-sent", retryable: false };
+      }
+    }
     if (command.type === "edit-floor" && (!Number.isInteger(command.floor) || command.floor <= 0)) {
       return {
         ok: false,
@@ -503,14 +541,25 @@ export class BrowserPttGateway implements PttGateway {
       "articles", mode, input.board, normalizedAuthor ?? null, keyword ?? null, minimumNativeScore ?? null, limit,
     ]);
     let beforeIndex: number | undefined;
+    const query = { board: input.board, ...(author ? { author } : {}), ...(keyword ? { keyword } : {}),
+      ...(minimumNativeScore === undefined ? {} : { minimumNativeScore }) };
     if (input.cursor) {
       const value = this.cursor(input.cursor);
       if (value.kind !== "article-page" || value.signature !== signature) {
         throw new GatewayError("INVALID_CURSOR", "cursor 與此次文章查詢不相容", false);
       }
       beforeIndex = value.beforeIndex;
+      if (value.anchor !== undefined) {
+        let current: string | undefined;
+        try { current = await this.driver.captureArticleAnchor?.(query, beforeIndex); }
+        catch { /* A missing or unverifiable anchor cannot authorize old offsets. */ }
+        if (current !== value.anchor) {
+          this.cursors.delete(input.cursor);
+          throw new GatewayError("STALE_CURSOR", "文章列表已變更", true);
+        }
+      }
     }
-    const rows = await gatewayCall(() => this.driver.listArticles!({
+    const result = await gatewayCall(() => this.driver.listArticles!({
       board: input.board,
       ...(beforeIndex ? { beforeIndex } : {}),
       ...(author ? { author } : {}),
@@ -518,8 +567,21 @@ export class BrowserPttGateway implements PttGateway {
       ...(minimumNativeScore === undefined ? {} : { minimumNativeScore }),
       limit: limit + 1,
     }));
+    let rows: readonly DriverArticleRow[];
+    let exhausted: boolean;
+    if (isDriverArticleBatch(result)) {
+      rows = result.items;
+      exhausted = result.exhausted && rows.length <= limit;
+    } else {
+      rows = result;
+      exhausted = rows.length <= limit;
+    }
+    // Legacy test/custom drivers return only an array and retain the previous
+    // lookahead convention. The real browser transport reports exhaustion
+    // explicitly so a short terminal window is not mistaken for EOF.
     const selected = rows.slice(0, limit);
     const last = selected[selected.length - 1];
+    const anchor = last && !exhausted ? await this.driver.captureArticleAnchor?.(query, last.index) : undefined;
     return {
       items: selected.map((row) => ({
         key: { board: input.board, index: row.index },
@@ -530,8 +592,8 @@ export class BrowserPttGateway implements PttGateway {
         ...(row.fixed === undefined ? {} : { pinned: row.fixed }),
         ...(row.mark === undefined ? {} : { mark: row.mark }),
       })),
-      ...(last && rows.length > selected.length
-        ? { nextCursor: this.issue({ kind: "article-page", signature, beforeIndex: last.index }) }
+      ...(last && !exhausted
+        ? { nextCursor: this.issue({ kind: "article-page", signature, beforeIndex: last.index, ...(anchor !== undefined ? { anchor } : {}) }) }
         : {}),
     };
   }
@@ -549,7 +611,13 @@ function normalizeWrite(result: ActionResult): DriverWriteResult {
 }
 
 function terminalGatewayDriver(driver: GatewayTerminalDriver): BrowserGatewayDriver {
-  return {
+  const transport: BrowserGatewayDriver = {
+    captureArticleAnchor: async (input, index) => {
+      if (!driver.readArticleAidAtIndex || driver.usesMutableArticleIndexes === false) return undefined;
+      // Re-establish this query's list before interpreting a positional index.
+      await transport.listArticles!({ ...input, beforeIndex: index + 1, limit: 1 });
+      return driver.readArticleAidAtIndex(input.board, index);
+    },
     connect: async () => {
       const current = driver.getStatus();
       if (current === "connected") return;
@@ -585,6 +653,7 @@ function terminalGatewayDriver(driver: GatewayTerminalDriver): BrowserGatewayDri
       const rows: Awaited<ReturnType<TerminalDriver["listArticles"]>> = [];
       let beforeIndex = input.beforeIndex;
       const target = input.limit ?? 20;
+      let exhausted = false;
       while (rows.length < target) {
         const batch = input.minimumNativeScore !== undefined && input.keyword
           ? await driver.filterArticlesByTitleAndPush(
@@ -604,16 +673,40 @@ function terminalGatewayDriver(driver: GatewayTerminalDriver): BrowserGatewayDri
               ? await driver.searchArticles(input.board, input.keyword, beforeIndex)
               : await driver.listArticles(input.board, beforeIndex);
         const fresh = batch.filter((row) =>
+          (beforeIndex === undefined || (!row.fixed && row.index < beforeIndex)) &&
           (!input.author || normalizedPttId(row.author) === normalizedPttId(input.author)) &&
           !rows.some((seen) => seen.index === row.index)
         );
         rows.push(...fresh);
-        const last = batch[batch.length - 1];
-        if (!last) break;
-        if (beforeIndex !== undefined && last.index >= beforeIndex) break;
-        beforeIndex = last.index;
+        // Terminal windows overlap and pins are not chronological cursors.
+        const normalIndexes = batch.filter((row) => !row.fixed).map((row) => row.index);
+        if (!normalIndexes.length) {
+          exhausted = true;
+          break;
+        }
+        const oldestIndex = Math.min(...normalIndexes);
+        if (oldestIndex <= 1) {
+          exhausted = true;
+          break;
+        }
+        if (beforeIndex !== undefined && oldestIndex >= beforeIndex) {
+          throw new GatewayError(
+            "GATEWAY_FAILURE",
+            "文章列表尚未更新，請再試一次",
+            true,
+          );
+        }
+        beforeIndex = oldestIndex;
       }
-      return rows;
+      return { items: rows, exhausted };
+    },
+    prepareReplyDraft: (input) => {
+      if (!driver.prepareReplyDraft) throw new GatewayError("UNSUPPORTED", "此連線不支援回文計數", false);
+      return driver.prepareReplyDraft(input);
+    },
+    sendReplyDraft: (input, onProgress) => {
+      if (!driver.sendReplyDraft) throw new GatewayError("REPLY_DRAFT_NOT_SENT", "此連線不支援自動分段", false);
+      return driver.sendReplyDraft(input, onProgress);
     },
     execute: async (command) => {
       let result: ActionResult;
@@ -624,6 +717,7 @@ function terminalGatewayDriver(driver: GatewayTerminalDriver): BrowserGatewayDri
             command.category ?? "",
             command.title,
             command.content,
+            command.formatting,
           ));
         case "withdraw-floor": {
           if (!command.ranges.length || command.ranges.some(({ start, end }) =>
@@ -639,13 +733,14 @@ function terminalGatewayDriver(driver: GatewayTerminalDriver): BrowserGatewayDri
       return normalizeWrite(result);
     },
   };
+  return transport;
 }
 
 /** @internal Test seam; not exported from the package root. */
 export const createTerminalGatewayDriverForTesting = terminalGatewayDriver;
 
-export function createBrowserGateway(): PttGateway {
+export function createBrowserGateway(options: { pushFormat?: "local" | "ptt"; terminalProtocol?: "local" | "ptt" } = {}): PttGateway {
   return new BrowserPttGateway(
-    terminalGatewayDriver(createTerminalDriver() as GatewayTerminalDriver),
+    terminalGatewayDriver(createTerminalDriver(options.pushFormat, options.terminalProtocol) as GatewayTerminalDriver),
   );
 }

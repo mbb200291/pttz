@@ -1,4 +1,7 @@
+import { useCallback } from "react";
 import type {
+  PrepareReplyDraftInput,
+  ReplyDraftPlanner,
   CreateArticleInput,
   DeleteArticleInput,
   EditArticleInput,
@@ -8,6 +11,8 @@ import type {
   ReplyToArticleInput,
   ReplyToReplyInput,
   Result,
+  ReplyDelivery,
+  ReplyDraftInput,
   VoteArticleInput,
   VoteReplyInput,
   WithdrawArticleVoteInput,
@@ -27,7 +32,9 @@ const unavailable = async (): Promise<Result<void>> => ({
 });
 
 export interface PttActionsResult {
+  prepareReplyDraft?(input: PrepareReplyDraftInput): Promise<Result<ReplyDraftPlanner>>;
   isLoggedIn: boolean;
+  sendReplyDraft?(input: ReplyDraftInput, onProgress?: (progress: ReplyDelivery) => void): Promise<Result<ReplyDelivery>>;
   createArticle(input: CreateArticleInput): Promise<Result<void>>;
   editArticle(input: EditArticleInput): Promise<Result<void>>;
   deleteArticle(input: DeleteArticleInput): Promise<Result<void>>;
@@ -44,6 +51,7 @@ export interface PttActionsResult {
 
 export function usePttActions(): PttActionsResult {
   const client = usePttSocketStore((state) => state.client);
+  const credentials = usePttSocketStore((state) => state.credentials);
   const isLoggedIn = usePttSocketStore((state) =>
     state.pttState === "ready" && Boolean(state.credentials?.username)
   );
@@ -52,8 +60,15 @@ export function usePttActions(): PttActionsResult {
     input: T,
   ) => client ? method(client, input) : unavailable();
 
+  const prepareReplyDraft = useCallback(async (input: PrepareReplyDraftInput): Promise<Result<ReplyDraftPlanner>> =>
+    client && isLoggedIn && credentials ? client.prepareReplyDraft(input)
+      : { ok: false, error: { code: "CLIENT_UNAVAILABLE", message: "尚未連線 PTT", retryable: true } }, [client, isLoggedIn, credentials]);
   return {
+    prepareReplyDraft,
     isLoggedIn,
+    sendReplyDraft: async (input, onProgress) => client
+      ? client.sendReplyDraft(input, onProgress)
+      : { ok: false, error: { code: "CLIENT_UNAVAILABLE", message: "尚未連線 PTT", retryable: true, outcome: "not-sent" } },
     createArticle: (input) => call((current, value) => current.createArticle(value), input),
     editArticle: (input) => call((current, value) => current.editArticle(value), input),
     deleteArticle: (input) => call((current, value) => current.deleteArticle(value), input),

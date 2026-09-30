@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { GatewayError, type ArticleKey, type PttCommand } from "@pttzzz/core";
+import { GatewayError, PttzzzClient, type ArticleKey, type PttCommand } from "@pttzzz/core";
+import { ReplyDraftQueue, replyPreparationError } from "./internal/multipartReply.js";
 import {
   BrowserPttGateway,
   createTerminalGatewayDriverForTesting,
@@ -32,6 +33,67 @@ function driver(overrides: Partial<BrowserGatewayDriver> = {}): BrowserGatewayDr
 }
 
 describe("BrowserPttGateway", () => {
+  it("does not guess a planner when the transport lacks preparation", async () => {
+    const client = new PttzzzClient(new BrowserPttGateway(driver()));
+    expect(await client.prepareReplyDraft({ article: articleByIndex })).toMatchObject({ ok: false, error: { code: "UNSUPPORTED", retryable: false } });
+  });
+  it("passes the caller fragment budget through core and gateway", async () => {
+    const send = vi.fn();
+    const queue = new ReplyDraftQueue();
+    const client = new PttzzzClient(new BrowserPttGateway(driver({ sendReplyDraft: input => queue.run(input,
+      async () => ({ author: "alice", capacity: 55 }), send) })));
+    expect(await client.sendReplyDraft({ operationId: "budget", article: articleByIndex,
+      content: Array(31).fill("短句。").join("\n"), pushType: "neutral", maxFragments: 30 }))
+      .toMatchObject({ ok: false, error: { replyIssue: { kind: "too-many-fragments", total: 31 } } });
+    expect(send).not.toHaveBeenCalled();
+  });
+  it.each([
+    { content: "😀", failure: undefined, issue: { kind: "unsupported-characters", characters: ["😀"] } },
+    { content: "第一行\n 第二行", failure: undefined, issue: { kind: "content-layout", reason: "leading-space" } },
+    { content: "abc\tdef", failure: undefined, issue: { kind: "content-layout", reason: "control-characters" } },
+    { content: "測試", failure: "connection" as const, issue: { kind: "connection" } },
+    { content: "測試", failure: "article-unavailable" as const, issue: { kind: "article-unavailable" } },
+  ])("retains preparation guidance across queue, gateway and core: $issue.kind", async ({ content, failure, issue }) => {
+    const queue = new ReplyDraftQueue();
+    const send = vi.fn();
+    const gateway = new BrowserPttGateway(driver({ sendReplyDraft: input => queue.run(input, async () => {
+      if (failure) throw replyPreparationError({ kind: failure }, "private diagnostic");
+      return { author: "alice", capacity: 55 };
+    }, send) }));
+    const result = await new PttzzzClient(gateway).sendReplyDraft({ operationId: "guidance", article: articleByIndex, content, pushType: "neutral" });
+    expect(result).toMatchObject({ ok: false, error: { outcome: "not-sent", replyIssue: issue } });
+    expect(send).not.toHaveBeenCalled();
+  });
+  it("keeps a cursor for unread rows even when the terminal window reaches the bottom", async () => {
+    const gateway = new BrowserPttGateway(driver({ listArticles: async () => ({ items: [
+      { index: 2, author: "alice", title: "two", date: "9/21" },
+      { index: 1, author: "alice", title: "one", date: "9/21" },
+    ], exhausted: true }) }));
+    expect((await gateway.listArticles({ board: "Test", limit: 1 })).nextCursor).toBeDefined();
+  });
+  it("rejects a cursor whose terminal AID anchor moved even when titles match", async () => {
+    let moved = false;
+    const terminal = {
+      listArticles: async () => [
+        { index: 5, author: "alice", title: "same", date: "9/21", pushCount: "", mark: "" },
+        { index: 4, author: "alice", title: "same", date: "9/21", pushCount: "", mark: "" },
+        { index: 3, author: "alice", title: "same", date: "9/21", pushCount: "", mark: "" },
+      ],
+      readArticleAidAtIndex: async () => moved ? "nextArticle" : "originalArticle",
+    } as unknown as GatewayTerminalDriver;
+    const gateway = new BrowserPttGateway(createTerminalGatewayDriverForTesting(terminal));
+    const first = await gateway.listArticles({ board: "Test", limit: 1 });
+    moved = true;
+    await expect(gateway.listArticles({ board: "Test", limit: 1, cursor: first.nextCursor })).rejects.toMatchObject({ code: "STALE_CURSOR" });
+  });
+  it.each(["create-article", "edit-article", "reply-article-to-board"] as const)("rejects malformed %s formatting before terminal dispatch", async (type) => {
+    const transport = driver();
+    const gateway = new BrowserPttGateway(transport);
+    const input = { content: "abc", formatting: [{ start: 0, end: 20, bold: true }] };
+    const command: PttCommand = type === "create-article" ? { type, board: "Test", title: "title", ...input } : { type, article: articleByIndex, ...input };
+    await expect(gateway.execute(command)).resolves.toMatchObject({ ok: false, code: "INVALID_INPUT", outcome: "not-sent" });
+    expect(transport.execute).not.toHaveBeenCalled();
+  });
   it("translates object login input and status events, and unsubscribes", async () => {
     let statusListener: ((status: "connected") => void) | undefined;
     const unsubscribe = vi.fn();
@@ -106,6 +168,51 @@ describe("BrowserPttGateway", () => {
       floor: 12,
       content: "  同意  ",
       pushType: "neutral",
+    });
+  });
+
+  it("keeps a cursor for an explicitly non-terminal underfilled article batch", async () => {
+    const listArticles = vi.fn(async () => ({
+      items: [{ index: 10, title: "ten", author: "a", date: "9/06" }],
+      exhausted: false,
+    }));
+    const gateway = new BrowserPttGateway(driver({
+      listArticles: listArticles as unknown as BrowserGatewayDriver["listArticles"],
+    }));
+
+    const page = await gateway.listArticles({ board: "Test", limit: 20 });
+
+    expect(page.items.map((item) => item.key.index)).toEqual([10]);
+    expect(page.nextCursor).toEqual(expect.any(String));
+  });
+
+  it("omits the cursor only for an explicitly exhausted article batch", async () => {
+    const listArticles = vi.fn(async () => ({
+      items: [{ index: 1, title: "oldest", author: "a", date: "1/01" }],
+      exhausted: true,
+    }));
+    const gateway = new BrowserPttGateway(driver({
+      listArticles: listArticles as unknown as BrowserGatewayDriver["listArticles"],
+    }));
+
+    const page = await gateway.listArticles({ board: "Test", limit: 20 });
+
+    expect(page.items.map((item) => item.key.index)).toEqual([1]);
+    expect(page.nextCursor).toBeUndefined();
+  });
+
+  it("preserves a retryable terminal-stall explanation under the stable gateway error code", async () => {
+    const stalled = Object.assign(new Error("文章列表尚未更新，請再試一次"), {
+      code: "ARTICLE_PAGE_STALLED",
+    });
+    const gateway = new BrowserPttGateway(driver({
+      listArticles: vi.fn(async () => { throw stalled; }),
+    }));
+
+    await expect(gateway.listArticles({ board: "Test" })).rejects.toMatchObject({
+      code: "GATEWAY_FAILURE",
+      message: "文章列表尚未更新，請再試一次",
+      retryable: true,
     });
   });
 

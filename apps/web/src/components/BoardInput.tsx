@@ -3,6 +3,8 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { canUseShortcut, leaveSearchInput, type NavigationKeyEvent } from "../lib/keyboardNavigation";
+import { useBodyNavigation } from "../hooks/useBodyNavigation";
 
 export interface PopularBoard {
   name: string;
@@ -53,10 +55,12 @@ interface BoardInputProps {
   favoriteBoardsLoading?: boolean;
   recentBoards?: string[];
   currentUser?: string;
+  onLogout?: () => void;
 }
 
 export function BoardInput({
   onEnter,
+  onLogout,
   pttState,
   wsStatus,
   popularBoards,
@@ -76,6 +80,16 @@ export function BoardInput({
   const [favoriteExpanded, setFavoriteExpanded] = useState(false);
   const [favoriteOverrides, setFavoriteOverrides] = useState<Record<string, boolean>>({});
   const popularGridRef = useRef<HTMLDivElement>(null);
+  const navigationRef = useRef<HTMLDivElement>(null);
+  const boardInputRef = useRef<HTMLInputElement>(null);
+  const handleNavigation = (event: NavigationKeyEvent, scope?: HTMLElement) => {
+    if (event.key.toLowerCase() === "s" && canUseShortcut(event, false, scope) && !boardInputRef.current?.disabled) {
+      event.preventDefault();
+      boardInputRef.current?.focus();
+      return;
+    }
+  };
+  useBodyNavigation(navigationRef, handleNavigation);
 
   const isConnected = pttState === "ready";
   const hasLivePopularBoards = Boolean(popularBoards?.length);
@@ -216,6 +230,9 @@ export function BoardInput({
 
   return (
     <div
+      ref={navigationRef}
+      tabIndex={-1}
+      onKeyDown={handleNavigation}
       style={{
         minHeight: "100vh",
         background: "var(--bg)",
@@ -300,6 +317,7 @@ export function BoardInput({
                 : wsStatus === "connecting"
                   ? "連線中..."
                   : `狀態:${pttState}`}
+            {isConnected && onLogout && <button type="button" onClick={onLogout} title="只登出本次 Pttzzz 連線" style={{ color: "var(--text)", border: "1px solid var(--border)", borderRadius: 8, padding: "5px 10px", cursor: "pointer" }}>登出</button>}
           </div>
         </div>
       </div>
@@ -329,7 +347,7 @@ export function BoardInput({
                 background: "oklch(0.72 0.16 155)",
               }}
             />
-            wss://ws.ptt.cc/bbs
+            {import.meta.env.VITE_PTT_CONNECTION_LABEL ?? '正式 PTT（ws.ptt.cc）'}
           </div>
           <h1
             style={{
@@ -388,9 +406,12 @@ export function BoardInput({
             <SearchIcon />
           </span>
           <input
+            ref={boardInputRef}
+            aria-keyshortcuts="s"
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(event) => leaveSearchInput(event, navigationRef.current)}
             placeholder="輸入看板名稱  例如  Gossiping"
             disabled={!isConnected}
             style={{
@@ -426,6 +447,73 @@ export function BoardInput({
             進入看板
           </button>
         </form>
+
+        {(recentBoards?.length ?? 0) > 0 && !isSearching && (
+          <section style={{ marginBottom: 40 }}>
+            <SectionHead icon={<ClockIcon />} title="最近瀏覽" />
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {(recentBoards ?? []).map((name) => {
+                const isFavorite = favoriteNames.some(
+                  (favoriteName) => favoriteName.toLowerCase() === name.toLowerCase(),
+                );
+                return (
+                  <div
+                    key={name}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "stretch",
+                      overflow: "hidden",
+                      borderRadius: 10,
+                      border: "1px solid var(--border)",
+                      background: "var(--surface)",
+                      opacity: isConnected ? 1 : 0.45,
+                    }}
+                  >
+                    <button
+                      type="button"
+                      data-navigation-item
+                      className="focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sky-400"
+                      onClick={() => submitBoard(name)}
+                      disabled={!isConnected}
+                      style={{
+                        padding: "8px 12px",
+                        border: 0,
+                        background: "transparent",
+                        color: "var(--text)",
+                        fontWeight: 600,
+                        fontSize: 13.5,
+                        letterSpacing: "-0.01em",
+                        cursor: isConnected ? "pointer" : "not-allowed",
+                        fontFamily: "var(--font-mono)",
+                      }}
+                    >
+                      {name}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleFavorite(name)}
+                      title={isFavorite ? "從最愛移除" : "加入最愛"}
+                      disabled={!isConnected}
+                      style={{
+                        width: 34,
+                        border: 0,
+                        borderLeft: "1px solid var(--border)",
+                        background: "transparent",
+                        color: isFavorite ? "var(--accent-ink)" : "var(--text-dim)",
+                        cursor: isConnected ? "pointer" : "not-allowed",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <StarIcon filled={isFavorite} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {favoriteCards.length > 0 && !isSearching && (
           <section style={{ marginBottom: 40 }}>
@@ -488,70 +576,6 @@ export function BoardInput({
           </section>
         )}
 
-        {(recentBoards?.length ?? 0) > 0 && !isSearching && (
-          <section style={{ marginBottom: 40 }}>
-            <SectionHead icon={<ClockIcon />} title="最近瀏覽" />
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {(recentBoards ?? []).map((name) => {
-                const isFavorite = favoriteNames.some(
-                  (favoriteName) => favoriteName.toLowerCase() === name.toLowerCase(),
-                );
-                return (
-                  <div
-                    key={name}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "stretch",
-                      overflow: "hidden",
-                      borderRadius: 10,
-                      border: "1px solid var(--border)",
-                      background: "var(--surface)",
-                      opacity: isConnected ? 1 : 0.45,
-                    }}
-                  >
-                    <button
-                      onClick={() => submitBoard(name)}
-                      disabled={!isConnected}
-                      style={{
-                        padding: "8px 12px",
-                        border: 0,
-                        background: "transparent",
-                        color: "var(--text)",
-                        fontWeight: 600,
-                        fontSize: 13.5,
-                        letterSpacing: "-0.01em",
-                        cursor: isConnected ? "pointer" : "not-allowed",
-                        fontFamily: "var(--font-mono)",
-                      }}
-                    >
-                      {name}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => toggleFavorite(name)}
-                      title={isFavorite ? "從最愛移除" : "加入最愛"}
-                      disabled={!isConnected}
-                      style={{
-                        width: 34,
-                        border: 0,
-                        borderLeft: "1px solid var(--border)",
-                        background: "transparent",
-                        color: isFavorite ? "var(--accent-ink)" : "var(--text-dim)",
-                        cursor: isConnected ? "pointer" : "not-allowed",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <StarIcon filled={isFavorite} />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        )}
-
         <section>
           <SectionHead
             icon={<FlameIcon />}
@@ -607,9 +631,12 @@ export function BoardInput({
                       marginBottom: 4,
                     }}
                   >
-                    <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700 }}>
+                    <button type="button" data-navigation-item disabled={!isConnected}
+                      onClick={(event) => { event.stopPropagation(); submitBoard(board.name); }}
+                      className="focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sky-400"
+                      style={{ fontFamily: "var(--font-mono)", fontWeight: 700, background: "transparent", color: "inherit", border: 0, padding: 0, textAlign: "left", cursor: "pointer" }}>
                       {board.name}
-                    </span>
+                    </button>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                       {hasLivePopularBoards && !isSearching && (
                         <span
@@ -815,9 +842,12 @@ function FavoriteCard({
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
         <Monogram name={board.name} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 14 }}>
+          <button type="button" data-navigation-item disabled={disabled}
+            onClick={(event) => { event.stopPropagation(); onOpen(); }}
+            className="focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sky-400"
+            style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 14, background: "transparent", color: "inherit", border: 0, padding: 0, textAlign: "left", cursor: "pointer" }}>
             {board.name}
-          </div>
+          </button>
           <div style={{ color: "var(--text-muted)", fontSize: 12, marginTop: 1 }}>
             {board.zh || "我的最愛看板"}
           </div>

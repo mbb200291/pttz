@@ -16,6 +16,8 @@ import type {
   WheelEvent,
 } from "react";
 import { useRef, useEffect, useMemo, useState } from "react";
+import { canUseShortcut, leaveSearchInput, type NavigationKeyEvent } from "../lib/keyboardNavigation";
+import { useBodyNavigation } from "../hooks/useBodyNavigation";
 import { useBoard } from "../hooks/useBoard";
 import type { BoardFilter } from "../lib/ptt/viewState";
 import type { ArticleSummary } from "../lib/ptt/uiArticle";
@@ -163,12 +165,14 @@ export function extractCategoryOptionsFromArticles(
 function ArticleRow({
   article,
   onClick,
+  selected,
 }: {
   article: DisplayArticleSummary;
   onClick: (index: number, element: HTMLButtonElement) => void;
+  selected: boolean;
 }) {
   const normalized = legacySummary(article);
-  const isDeleted = article.title.includes("(已被刪除)");
+  const isDeleted = /[（(](?:本文)?已被刪除[）)]/.test(article.title);
   const isFixed = Boolean(normalized.fixed);
   const { category, displayTitle, isRe } = parseTitle(article.title);
 
@@ -186,6 +190,9 @@ function ArticleRow({
     <button
       type="button"
       data-article-index={normalized.index}
+      data-navigation-item
+      aria-current={selected ? "true" : undefined}
+      className="focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-400"
       data-fixed-article={isFixed ? "true" : undefined}
       onClick={handleClick}
       disabled={isDeleted}
@@ -194,7 +201,8 @@ function ArticleRow({
         gridTemplateColumns: "44px 56px 1fr auto",
         gap: 14,
         padding: "10px 20px",
-        background: isFixed ? "var(--accent-soft)" : "transparent",
+        background: selected ? "var(--accent-dim)" : isFixed ? "var(--accent-soft)" : "transparent",
+        boxShadow: selected ? "inset 3px 0 var(--accent)" : undefined,
         borderBottom: "1px solid var(--border)",
         width: "100%",
         textAlign: "left",
@@ -204,13 +212,13 @@ function ArticleRow({
         transition: "background 0.15s",
       }}
       onMouseEnter={(e) => {
-        if (!isFixed && !isDeleted) {
+        if (!selected && !isFixed && !isDeleted) {
           (e.currentTarget as HTMLButtonElement).style.background =
             "var(--surface)";
         }
       }}
       onMouseLeave={(e) => {
-        if (!isFixed && !isDeleted) {
+        if (!selected && !isFixed && !isDeleted) {
           (e.currentTarget as HTMLButtonElement).style.background =
             "transparent";
         }
@@ -261,7 +269,7 @@ function ArticleRow({
         )}
       </div>
 
-      {/* Column 2: Date + index stacked */}
+      {/* Column 2: index + PTT's yearless month/day label */}
       <div
         style={{
           fontFamily: "var(--font-mono)",
@@ -270,8 +278,8 @@ function ArticleRow({
           lineHeight: 1.4,
         }}
       >
-        <div>{normalized.date}</div>
-        <div style={{ fontSize: 10, opacity: 0.7 }}>#{normalized.index}</div>
+        <div>#{normalized.index}</div>
+        <div style={{ fontSize: 10, opacity: 0.7 }}>{normalized.date}</div>
       </div>
 
       {/* Column 3: Title + meta */}
@@ -717,6 +725,11 @@ export function ArticleList({
   );
   const [customPushFilterOpen, setCustomPushFilterOpen] = useState(false);
   const pushFilterRef = useRef<HTMLDivElement>(null);
+  const navigationRef = useRef<HTMLDivElement>(null);
+  const [articleSelection, setArticleSelection] = useState(() => ({ board: boardName, index: readBoardAnchorCache(boardName)?.articleIndex ?? null as number | null }));
+  const selectedIndex = articleSelection.board === boardName ? articleSelection.index : null;
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  useBodyNavigation(navigationRef, handleNavigation);
 
   const {
     articles: liveArticles,
@@ -880,6 +893,8 @@ export function ArticleList({
   }
 
   function handleSearchKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.nativeEvent.isComposing) return;
+    leaveSearchInput(e, navigationRef.current);
     if (e.key === "Enter") handleSearchCommit();
   }
 
@@ -1042,9 +1057,47 @@ export function ArticleList({
   const isCustomPushFilter =
     activePushThreshold !== null && !PUSH_FILTER_PRESETS.has(activePushThreshold);
 
+  function handleNavigation(event: NavigationKeyEvent, scope?: HTMLElement) {
+    if (["ArrowUp", "ArrowDown", "ArrowRight"].includes(event.key) && canUseShortcut(event, false, scope)) {
+      event.preventDefault();
+      const rows = Array.from(navigationRef.current?.querySelectorAll<HTMLButtonElement>("button[data-article-index]:not(:disabled)") ?? []);
+      const current = rows.findIndex(row => Number(row.dataset.articleIndex) === selectedIndex);
+      const next = current < 0 ? 0 : event.key === "ArrowUp" ? Math.max(0, current - 1)
+        : event.key === "ArrowDown" ? Math.min(rows.length - 1, current + 1) : current;
+      const row = rows[next];
+      if (!row) return;
+      setArticleSelection({ board: boardName, index: Number(row.dataset.articleIndex) });
+      if (event.key === "ArrowRight") row.click();
+      else row.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+      return;
+    }
+    if ((event.key.toLowerCase() === "s" || event.key === "/") && canUseShortcut(event, false, scope)) {
+      event.preventDefault();
+      searchInputRef.current?.focus();
+      return;
+    }
+    if (event.key.toLowerCase() === "z" && canUseShortcut(event, false, scope)) {
+      event.preventDefault();
+      setCustomPushFilterOpen(true);
+      return;
+    }
+    if (event.key.toLowerCase() === "p" && onCompose && canUseShortcut(event, true, scope)) {
+      event.preventDefault();
+      onCompose(observedCategoryOptions);
+      return;
+    }
+    if (event.key === "ArrowLeft" && canUseShortcut(event, false, scope)) {
+      event.preventDefault();
+      onBack();
+    }
+  }
+
   return (
     <div
+      ref={navigationRef}
+      tabIndex={-1}
       onTouchStart={handleTouchStart}
+      onKeyDown={handleNavigation}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
@@ -1177,6 +1230,8 @@ export function ArticleList({
             <button
               type="button"
               onClick={() => onCompose(observedCategoryOptions)}
+              aria-keyshortcuts="Control+p"
+              title="發文（Ctrl+P）"
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -1232,6 +1287,8 @@ export function ArticleList({
             <input
               type="text"
               value={searchInput}
+              ref={searchInputRef}
+              aria-keyshortcuts="s /"
               onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={handleSearchKeyDown}
               placeholder="搜尋標題  或  #AID"
@@ -1519,7 +1576,9 @@ export function ArticleList({
           <ArticleRow
             key={displayIndex(a)}
             article={a}
+            selected={selectedIndex === displayIndex(a)}
             onClick={(index, element) => {
+              setArticleSelection({ board: boardName, index });
               lastSelectionRef.current = {
                 boardName,
                 index,
@@ -1557,6 +1616,25 @@ export function ArticleList({
           <span style={{ color: "oklch(0.86 0.16 75)", fontSize: 13 }}>{error}</span>
         ) : articles.length === 0 ? (
           <span style={{ color: "var(--text-dim)", fontSize: 13 }}>正在連線至 PTT…</span>
+        ) : error ? (
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+            <span style={{ color: "var(--text-muted)", fontSize: 13 }}>暫時無法載入</span>
+            <button
+              type="button"
+              onClick={handleLoadMore}
+              style={{
+                background: "transparent",
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+                color: "var(--text)",
+                cursor: "pointer",
+                fontSize: 13,
+                padding: "6px 10px",
+              }}
+            >
+              再試一次
+            </button>
+          </div>
         ) : !hasMore ? (
           <span style={{ color: "var(--text-dim)", fontSize: 12 }}>已到最舊文章</span>
         ) : supportsObserver ? (
