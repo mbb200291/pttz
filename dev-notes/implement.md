@@ -100,6 +100,12 @@ npm run verify    # tests + helper tests + build + lint + pack/example smoke
 - 可發布 `@pttzzz/core@0.1.0` 與 `@pttzzz/browser@0.1.0`，以及 isolated `npm pack` consumer smoke。
 - 人類／AI API 文件與可執行 minimal browser alternate UI。
 
+## Goal 12：Threads 風格唯讀介面
+
+串流依可視範圍依序讀取正文，預設五行，點文章區塊原位展開全文與回覆；預覽、展開與明確重試共用去重 FIFO 單筆讀取及快取。刷新等待目前讀取結束，成功後才替換串流與清除快取；全部失敗保留舊正文及展開狀態，部分成功仍可閱讀，連線結束則清除。圖片與 YouTube 直接呈現為原生橫向媒體列；緊湊版面及媒體網址識別不改動核心解析規則。Threads 使用 core/browser 0.2.0 與 rules 0.2.x。
+
+`apps/threads` 為獨立的原生 TypeScript/Vite 介面，透過公開 core/browser 契約取得近期看板精選、逐步讀取文章、呈現巢狀回覆與編輯歷程。目前讀取前五個熱門看板、每板最多兩個 20 筆 API 頁，保留今天與前兩天的候選，依原生熱度排序取前 30 篇，不設最低分。保留原 Web UI，入口為 `npm run dev:threads`。詳見 [plan](goal-12-implementation-plan.md)、[notes](goal-12-implementation-notes.md)、[UI README](../apps/threads/README.md) 及 [選文取捨](../apps/threads/docs/development.md)。
+
 ## 目前限制
 
 - 推文聚合仍是依時間、終止符、`||` 與 PTT 右側資訊欄剩餘空間判斷的 deterministic heuristic；原始欄距不可用時保守換行。
@@ -115,6 +121,8 @@ npm run verify    # tests + helper tests + build + lint + pack/example smoke
 2026-08-29：684 tests 通過（core 321、browser 155、web 197、pack helper 11）；build、lint（0 errors、3 個既有 Fast Refresh warnings）、package pack、isolated install、ESM/types、deep-import boundary 與 minimal UI execution smoke 通過。
 
 ## 細節文件
+
+Goal 12 新版核心適配：Threads 支援 ANSI 文字樣式、撤回占位與完整編輯版本；Web／Threads 共用開發代理並可切換本機目標。新分享只產生 AID 連結，無 AID 時停用，舊 index 入口保留。驗證及後續限制見 [適配紀錄](goal-12-compatibility-implementation-notes.md)。
 
 Goal 11 首頁與看板支援任意方向鍵啟用選取、Z 自訂推文門檻，body 與區域鍵盤事件分工避免雙觸發；首頁登出呼叫目前 client.disconnect，清除登入記憶體並使用明確已登出畫面。
 
@@ -141,3 +149,10 @@ Goal 14 長回文預算：規則尾標同步為反斜線（規則 0.4.0），與
 - [Public contracts](../packages/core/docs/contracts.md)
 - [Core development guide](../packages/core/docs/DEVELOPMENT_GUIDE.md)
 - [Core whitepaper](../docs/whitepaper/pttzzz-core.md)
+
+
+## Goal 12 串流互動修訂（2026-09-16）
+
+Threads UI 的文章列固定顯示核心文章推噓、可見回覆樹節點數與討論／分享入口。分享 URL 使用公開 board + aid/index，登入後直接載入目標文章，返回串流同步清除定位參數。頂部下拉和按鈕共用刷新操作與既有讀取佇列，等待期間保留舊畫面、成功後替換。外觀維持單欄深色並加入可停用的動態回饋；完整資料流程與限制集中於 apps/threads/README.md。真實登入後留言問題依使用者指示另行追查。
+
+Goal 12 介面修訂：串流移除宣傳標語與英文副標；討論區加入獨立底色、細線及子回覆引導，回文上下 padding 調整為 9px。展開／收合與箭頭使用短過渡，收合時即時設定 inert／aria-hidden。 詳見 [修訂紀錄](goal-12-ui-refinement-implementation-notes.md)。

@@ -1,0 +1,22 @@
+{
+  "name": "@pttzzz/threads-example",
+  "private": true,
+  "version": "0.1.0",
+  "pttzzz": {
+    "core": "^0.3.0",
+    "browser": "^0.3.0",
+    "rules": "0.4.x"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:local": "vite --mode ptt-local",
+    "dev:ptt": "vite --mode ptt-live",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@pttzzz/core": "0.3.0",
+    "@pttzzz/browser": "0.3.0"
+  }
+}

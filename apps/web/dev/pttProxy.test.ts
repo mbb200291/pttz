@@ -4,7 +4,7 @@ import { createServer as tcpServer, type Socket } from 'node:net'
 import { once } from 'node:events'
 import type { AddressInfo } from 'node:net'
 import { WebSocket, WebSocketServer } from 'ws'
-import { attachPttProxy } from './pttProxy'
+import { attachPttProxy } from '../../../dev/pttProxy'
 
 const cleanups: (() => void | Promise<void>)[] = []
 afterEach(async () => { for (const cleanup of cleanups.reverse()) await cleanup(); cleanups.length = 0 })
