@@ -34,6 +34,23 @@ function checkTranscript(lines: string[]) {
 }
 
 describe("article screen overlap", () => {
+  it("does not page past a complete first page and lose its header", async () => {
+    const rows = ["作者 author 看板 Test", "標題 [測試] 完整短文", "時間 Thu Sep 24 20:59:00 2026", "────────────────────", "正文", "推 alice: 回覆 09/24 21:00"];
+    let current = screen(rows, 1);
+    current[23] = "瀏覽 第 1/1 頁 (100%) 目前顯示: 第 01~06 行";
+    const commands: string[] = [];
+    const article = await fetchArticleFromBotManually({
+      async enterBoardByName() { return true; },
+      async send(key: string) {
+        commands.push(key);
+        if (key === "\x1b[6~") current = screen(rows.slice(4), 1);
+        return true;
+      },
+      getLine(index: number) { return { str: current[index] ?? "" }; },
+    }, "Test", 1, undefined, () => {});
+    expect(article?.title).toBe("[測試] 完整短文");
+    expect(commands).not.toContain("\x1b[6~");
+  });
   it("reads the repainted Baseball overlap through the actual progressive reader", async () => {
     const prefix = ["作者 author 看板 Baseball", "標題 [測試] 翻頁", "時間 Mon Sep 14 21:25:00 2026", "────────────────────", ...Array(12).fill("正文")];
     let current = screen([...prefix, ...pushes.slice(0, 7)], 1);

@@ -120,7 +120,15 @@ npm run verify    # tests + helper tests + build + lint + pack/example smoke
 
 2026-08-29：684 tests 通過（core 321、browser 155、web 197、pack helper 11）；build、lint（0 errors、3 個既有 Fast Refresh warnings）、package pack、isolated install、ESM/types、deep-import boundary 與 minimal UI execution smoke 通過。
 
-## 細節文件
+## Goal 13：獨立極簡閱讀器
+
+- `apps/minimal` 使用 vanilla TypeScript／Vite 與 core/browser 0.2.0 公開 API，提供 ASCII-like 等寬字、語意 HTML、看板分頁及漸進文章／聚合回覆／校正投票統計／編輯紀錄；不提供任何 PTT 寫入控制。
+- `npm run dev:minimal` 開啟 5183；`?preview=1` 只用公開 fake gateway。根目錄 build/test/verify 包含 minimal，原本 dev 預設不變。
+- 導覽／登出／session generation 防護阻擋晚到資料；client 延至登入才建立，duplicate prompt 明確保留／中斷，連線結束後要求重新載入，配合現有 singleton transport 限制。
+- 文章返回採獨立 controller transition，保留目前列表及 opaque cursor，終止舊文章結果；renderer 僅於返回同一列表時恢復原文章焦點與 viewport 捲動，不建立跨看板或文章快取。
+- 正文保留空白與焦點，水平捲動限制在文字區塊；視覺縮排最多三級，不改寫核心回覆關係。詳見 [Goal 13 plan](goal-13-implementation-plan.md) 與 [Goal 13 notes](goal-13-implementation-notes.md)。
+
+## 架構細節文件
 
 Goal 12 新版核心適配：Threads 支援 ANSI 文字樣式、撤回占位與完整編輯版本；Web／Threads 共用開發代理並可切換本機目標。新分享只產生 AID 連結，無 AID 時停用，舊 index 入口保留。驗證及後續限制見 [適配紀錄](goal-12-compatibility-implementation-notes.md)。
 
@@ -142,6 +150,10 @@ Goal 14 全形縮排修正：長回文分段、終端送出與讀回保留內部
 
 Goal 14 長回文預算：規則尾標同步為反斜線（規則 0.4.0），與網頁版最多 30 則實體推文分開提交。輸入時依實測容量及共用規劃器顯示剩餘則數；末端連續空白不計入，送出前重新測量並阻擋超限。白皮書不設定產品上限。完整 verify 通過：core 448、browser 467、web 382、代理 21、smoke helpers 11；lint 0 errors／9 既有 warnings。本輪未 PTT 實測；細節見 [Goal 14 實作筆記](goal-14-implementation-notes.md)。
 
+Goal 13 接軌目前 dev：極簡唯讀介面升級至 core/browser 0.3.0、rules 0.4.x，呈現撤回占位、原始與完整編輯版本、安全 ANSI 色彩，並禁止開啟已刪除列表項目。開發代理抽至根 dev/，ANSI 投影抽至 apps/shared，提供 local／正式站切換。規則與傳送流程仍由 core/browser 負責；極簡介面未新增寫入功能。詳見 [Goal 13 實作紀錄](goal-13-implementation-notes.md)。
+
+Goal 13 不完整閱讀修正：browser 確認單頁 100% 後不再翻頁，避免標頭被正文重繪覆蓋。minimal 保留 partial 已知資訊與重試期間正文，提供重新載入文章；回文評分移至作者資訊同列。離線回歸與完整驗證通過，未實站確認原案例；多頁時序風險另列 Goal 13 實作筆記。
+
 - [Goal 9 architecture design](goal-9-core-architecture-design.md)
 - [Goal 9 implementation plan](goal-9-implementation-plan.md)
 - [Goal 9 implementation notes](goal-9-implementation-notes.md)
@@ -156,3 +168,4 @@ Goal 14 長回文預算：規則尾標同步為反斜線（規則 0.4.0），與
 Threads UI 的文章列固定顯示核心文章推噓、可見回覆樹節點數與討論／分享入口。分享 URL 使用公開 board + aid/index，登入後直接載入目標文章，返回串流同步清除定位參數。頂部下拉和按鈕共用刷新操作與既有讀取佇列，等待期間保留舊畫面、成功後替換。外觀維持單欄深色並加入可停用的動態回饋；完整資料流程與限制集中於 apps/threads/README.md。真實登入後留言問題依使用者指示另行追查。
 
 Goal 12 介面修訂：串流移除宣傳標語與英文副標；討論區加入獨立底色、細線及子回覆引導，回文上下 padding 調整為 9px。展開／收合與箭頭使用短過渡，收合時即時設定 inert／aria-hidden。 詳見 [修訂紀錄](goal-12-ui-refinement-implementation-notes.md)。
+Goal 13 介面修訂：極簡版移除重複功能說明、英文副標及按鈕括號，保留等寬字與暖白底色；統一細實線、列表與回文間距，沿用正文與回文閱讀行為。 詳見 [修訂紀錄](goal-13-ui-refinement-implementation-notes.md)。

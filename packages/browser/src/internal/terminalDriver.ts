@@ -4549,11 +4549,10 @@ async function readArticleLinesProgressively(
     // End-of-article: page added nothing new — no need to navigate further.
     if (page >= 1 && appended === 0) break;
 
-    // Stop at 100% after the first page: pressing PgDown at 100% would either
-    // do nothing (causing a 1200ms waitForScreenChange timeout) or exit the article.
-    // At page=0 we allow one PgDown in case PTT opened at the last page and more
-    // content is visible after navigating. Mirrors ptt-client getLines() semantics.
-    if (page >= 1 && stripAnsi(screen[23] ?? "").includes("100%")) break;
+    // A confirmed single-page article is already complete. Paging it again can
+    // repaint the body over its header without advancing the displayed range.
+    const footer = stripAnsi(screen[23] ?? "");
+    if (footer.includes("100%") && (page >= 1 || /瀏覽\s+第\s*1\s*\/\s*1\s*頁/u.test(footer))) break;
 
     await bot.send(PTT_KEY_PGDOWN);
     const nextScreen = await waitForScreenChange(bot, screen, 400, signal);

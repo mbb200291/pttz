@@ -1,0 +1,248 @@
+import { articleKeyId, type Article, type PartialArticle, type Reply, type VoteSummary } from "@pttzzz/core";
+import type { Reader } from "./controller";
+import { parseAnsiText } from "../../shared/ansiText";
+
+function node<K extends keyof HTMLElementTagNameMap>(tag: K, text = "", className = ""): HTMLElementTagNameMap[K] {
+  const element = document.createElement(tag);
+  element.textContent = text;
+  element.className = className;
+  return element;
+}
+function button(text: string, action: () => void): HTMLButtonElement {
+  const element = node("button", text);
+  element.type = "button";
+  element.addEventListener("click", action);
+  return element;
+}
+function votes(label: string, value?: VoteSummary): string {
+  return value ? `${label}：推 ${value.pushCount} / 噓 ${value.booCount} / 分數 ${value.score}` : `${label}：整理中…`;
+}
+function pre(text: string, className = ""): HTMLPreElement {
+  const element = node("pre", "", className);
+  for (const run of parseAnsiText(text).runs) {
+    const span = node("span", run.text);
+    Object.assign(span.style, run.authoredStyle);
+    element.append(span);
+  }
+  element.tabIndex = 0;
+  return element;
+}
+function replyList(replies: readonly Reply[], parentAuthor = "", complete = true): HTMLUListElement {
+  const list = node("ul", "", "replies");
+  for (const reply of replies) {
+    const item = node("li", "", "reply");
+    item.dataset.replyId = reply.replyId;
+    item.append(node("p", `+ ${reply.author}${reply.isOp ? " [原作者]" : ""}${parentAuthor ? ` / 回覆 ${parentAuthor}` : ""} / ${reply.pushType === "push" ? "推" : reply.pushType === "boo" ? "噓" : "→"}${reply.createdAt ? ` / ${reply.createdAt}` : ""}`, "reply-meta"),
+      reply.visible ? pre(reply.content, "reply-content") : node("p", "此回文已撤回", "withdrawn muted"));
+    if (reply.visible) item.querySelector(".reply-meta")!.append(node("span", `推 ${reply.votes.pushCount} / 噓 ${reply.votes.booCount} / -> ${reply.votes.score}`, "reply-votes muted"));
+    if (reply.visible && complete && reply.edits.length) {
+      const details = node("details");
+      details.append(node("summary", "回覆編輯紀錄"));
+      if (reply.originalVersion) details.append(pre(`原始版本${reply.originalVersion.createdAt ? ` / ${reply.originalVersion.createdAt}` : ""}\n${reply.originalVersion.content}`));
+      for (const edit of reply.edits) details.append(pre(`${edit.author} / ${edit.kind === "append" ? "補充" : edit.kind === "withdraw" ? "撤回" : "更正"}${edit.createdAt ? ` / ${edit.createdAt}` : ""}\n${edit.resultContent}`));
+      item.append(details);
+    }
+    if (reply.children.length) item.append(replyList(reply.children, reply.author, complete));
+    list.append(item);
+  }
+  return list;
+}
+
+export function renderArticle(article: Article | PartialArticle): HTMLElement {
+  const element = node("article");
+  element.append(node("h2", article.title || "文章"), node("p", `${article.author ?? ""} / ${article.key.board}`, "byline"));
+  const body = pre(article.body ?? "", "article-body");
+  body.setAttribute("aria-label", "文章正文，可水平捲動");
+  element.append(body, node("p", votes("文章評分", article.articleVotes), "article-votes"));
+  const history = node("details", "", "article-history");
+  history.hidden = article.completeness !== "final";
+  history.append(node("summary", "文章編輯紀錄"));
+  for (const edit of article.articleEdits ?? []) history.append(pre(`${edit.marker}\n${edit.content}`));
+  for (const revision of article.revisions ?? []) history.append(pre(revision.summary));
+  if (!(article.articleEdits?.length || article.revisions?.length)) history.append(node("p", "無編輯紀錄"));
+  element.append(history, node("h3", "回覆"), replyList(article.replies, "", article.completeness === "final"));
+  return element;
+}
+
+export function mount(root: HTMLElement, reader: Reader, preview: boolean, connectionLabel = "正式 PTT（ws.ptt.cc）"): () => void {
+  const header = node("header");
+  const identity = node("div");
+  identity.append(node("h1", "pttzzz / minimal"), node("p", preview ? "離線預覽" : `唯讀 · ${connectionLabel}`, "muted"));
+  const account = node("span", "尚未登入");
+  const logout = button("登出", () => run(reader.logout()));
+  header.append(identity, account, logout);
+  const status = node("p", "", "status");
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
+  const login = node("form", "", "login");
+  const username = node("input"); username.name = "username"; username.autocomplete = "username"; username.required = true;
+  const password = node("input"); password.name = "password"; password.type = "password"; password.autocomplete = "current-password"; password.required = true;
+  const usernameLabel = node("label", "PTT 帳號 "); usernameLabel.append(username);
+  const passwordLabel = node("label", "密碼 "); passwordLabel.append(password);
+  const choice = node("fieldset"); choice.append(node("legend", "PTT 偵測到其他連線"));
+  choice.append(button("保留其他連線並繼續", () => continueLogin(false)), button("中斷其他連線並繼續", () => continueLogin(true)));
+  const submit = node("button", "登入"); submit.type = "submit";
+  login.append(node("h2", "登入"), usernameLabel, passwordLabel, choice, submit, node("p", "密碼只用於本次登入，不會儲存。", "muted"));
+  login.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const secret = password.value;
+    password.value = "";
+    run(reader.login(username.value, secret).then(async () => {
+      if (reader.state.user) await reader.hotBoards();
+    }));
+  });
+  function continueLogin(kick: boolean): void {
+    run(reader.login(username.value, "", kick).then(async () => { if (reader.state.user) await reader.hotBoards(); }));
+  }
+  const nav = node("nav"); nav.setAttribute("aria-label", "看板導覽");
+  const boardForm = node("form");
+  const boardInput = node("input"); boardInput.name = "board"; boardInput.placeholder = "例如 Test"; boardInput.required = true; boardInput.pattern = "[A-Za-z0-9_\\-]+";
+  const boardLabel = node("label", "看板 "); boardLabel.append(boardInput);
+  const go = node("button", "前往"); go.type = "submit";
+  boardForm.append(boardLabel, go);
+  boardForm.addEventListener("submit", (event) => { event.preventDefault(); run(reader.openBoard(boardInput.value)); });
+  nav.append(button("熱門看板", () => run(reader.hotBoards())), boardForm);
+  const workspace = node("section", "", "workspace");
+  const restart = button("重新登入", () => location.reload());
+  const main = node("main"); main.id = "main"; main.append(status, restart, login, nav, workspace);
+  const skip = node("a", "跳至內容", "skip"); skip.href = "#main";
+  root.replaceChildren(skip, header, main);
+  let lastView = "";
+  let lastArticle: Article | PartialArticle | null = null;
+  let lastList: unknown = null;
+  let articleElement: HTMLElement | null = null;
+  let wrap = false;
+  let boardPosition: { items: Reader["state"]["articles"]; articleId: string; left: number; top: number } | null = null;
+
+  function run(operation: Promise<void>): void {
+    void operation.catch((error: unknown) => {
+      status.textContent = `操作失敗：${error instanceof Error ? error.message : "請重新登入後再試"}`;
+      status.dataset.error = "true";
+    });
+  }
+  function render(): void {
+    const state = reader.state;
+    status.textContent = state.message;
+    status.dataset.error = String(state.error);
+    account.textContent = state.user ? `${state.user}` : "尚未登入";
+    logout.hidden = !state.user;
+    logout.disabled = state.authenticating;
+    login.hidden = state.user !== null || state.ended;
+    restart.hidden = !state.ended;
+    restart.disabled = state.authenticating;
+    submit.disabled = state.authenticating;
+    submit.hidden = state.duplicate;
+    usernameLabel.hidden = state.duplicate;
+    passwordLabel.hidden = state.duplicate;
+    password.required = !state.duplicate;
+    choice.hidden = !state.duplicate;
+    choice.disabled = state.authenticating;
+    nav.hidden = state.user === null;
+    workspace.hidden = state.user === null;
+    workspace.setAttribute("aria-busy", String(state.busy));
+    if (state.view === "login") { workspace.replaceChildren(); lastView = "login"; lastArticle = null; lastList = null; boardPosition = null; return; }
+    if (state.view === "article") {
+      const id = `article:${state.board}`;
+      if (lastView !== id || (!state.article && lastArticle)) {
+        const toolbar = node("div", "", "toolbar");
+        const wrapLabel = node("label");
+        const toggle = node("input"); toggle.type = "checkbox"; toggle.checked = wrap;
+        wrapLabel.title = "折行可能影響表格對齊";
+        wrapLabel.append(toggle, " 自動折行");
+        toggle.addEventListener("change", () => { wrap = toggle.checked; workspace.classList.toggle("wrap", wrap); });
+        const retry = button("重新載入文章", () => {
+          const key = reader.state.article?.key ?? reader.state.requestedArticle;
+          if (key) run(reader.openArticle(key));
+        });
+        retry.className = "retry-article";
+        toolbar.append(button("回看板", () => reader.returnToBoard()), retry, wrapLabel);
+        const heading = node("h2", "文章載入中…"); heading.tabIndex = -1;
+        workspace.replaceChildren(toolbar, heading);
+        articleElement = null; lastArticle = null; lastView = id;
+        heading.focus({ preventScroll: true });
+      }
+      const retry = workspace.querySelector<HTMLButtonElement>(".retry-article");
+      if (retry) { retry.hidden = !state.error || !(state.article || state.requestedArticle); retry.disabled = state.busy; }
+      if (state.error && !state.busy) {
+        const loadingHeading = workspace.querySelector(":scope > h2");
+        if (loadingHeading) loadingHeading.textContent = "文章未載入";
+      }
+      if (state.article && state.article !== lastArticle) {
+        const next = renderArticle(state.article);
+        if (articleElement) {
+          // Keep the reading surface, keyboard focus and selection stable across partials.
+          for (const selector of ["h2", ".byline", ".article-votes"]) {
+            const current = articleElement.querySelector(selector)!;
+            const content = next.querySelector(selector)!.textContent;
+            if (current.textContent !== content) current.textContent = content;
+          }
+          if (state.article.body !== lastArticle?.body) {
+            articleElement.querySelector(".article-body")!.replaceChildren(...next.querySelector(".article-body")!.childNodes);
+          }
+          if (state.article.completeness === "final") {
+            articleElement.querySelector(".article-history")!.replaceWith(next.querySelector(".article-history")!);
+          }
+          const focused = document.activeElement;
+          const focusedReply = focused?.classList.contains("reply-content") ? focused.closest<HTMLElement>(".reply")?.dataset.replyId : undefined;
+          articleElement.querySelector(":scope > .replies")!.replaceWith(next.querySelector(":scope > .replies")!);
+          if (focusedReply) {
+            [...articleElement.querySelectorAll<HTMLElement>(".reply")].find((item) => item.dataset.replyId === focusedReply)?.querySelector<HTMLElement>(".reply-content")?.focus({ preventScroll: true });
+          }
+        } else {
+          workspace.querySelector(":scope > h2")?.remove();
+          articleElement = next;
+          workspace.append(next);
+        }
+        lastArticle = state.article;
+      }
+      workspace.classList.toggle("wrap", wrap);
+      return;
+    }
+    const items = state.view === "home" ? state.boards : state.articles;
+    const emptyText = state.busy ? "讀取中…" : state.view === "home" ? "尚無看板" : "尚無文章";
+    if (lastView === state.view && lastList === items) {
+      workspace.querySelector<HTMLButtonElement>(".more")?.toggleAttribute("disabled", state.busy);
+      const empty = workspace.querySelector(".empty");
+      if (empty) empty.textContent = emptyText;
+      return;
+    }
+    const restore = state.view === "board" && lastView.startsWith("article:") && boardPosition?.items === items ? boardPosition : null;
+    boardPosition = null;
+    lastView = state.view; lastList = items; lastArticle = null;
+    const title = node("h2", state.view === "home" ? "熱門看板" : state.board);
+    const list = node("ul", "", "index-list");
+    if (state.view === "home") {
+      for (const board of state.boards) {
+        const item = node("li");
+        const link = button("", () => run(reader.openBoard(board.name)));
+        link.append(node("span", board.name, "board-name"), node("span", board.title), node("span", String(board.onlineUsers ?? board.popularityLabel ?? ""), "muted"));
+        item.append(link); list.append(item);
+      }
+    } else {
+      for (const article of state.articles) {
+        const item = node("li");
+        const link = button("", () => {
+          boardPosition = { items: state.articles, articleId: articleKeyId(article.key), left: window.scrollX, top: window.scrollY };
+          run(reader.openArticle(article.key));
+        });
+        link.dataset.articleId = articleKeyId(article.key);
+        link.disabled = article.author.trim() === "-";
+        link.append(node("span", article.nativeScoreLabel ?? String(article.nativeScore ?? "-"), "score"), node("span", article.title, "title"), node("span", `${article.author} / ${article.publishedAt ?? ""}`, "muted byline"));
+        item.append(link); list.append(item);
+      }
+    }
+    workspace.replaceChildren(title, list);
+    if (!items.length) workspace.append(node("p", emptyText, "empty muted"));
+    const cursor = state.view === "home" ? state.boardCursor : state.articleCursor;
+    if (cursor) {
+      const more = button("載入更多", () => run(state.view === "home" ? reader.hotBoards(true) : reader.moreArticles()));
+      more.className = "more"; more.disabled = state.busy; workspace.append(more);
+    }
+    if (restore) {
+      [...list.querySelectorAll<HTMLButtonElement>("[data-article-id]")].find((link) => link.dataset.articleId === restore.articleId)?.focus({ preventScroll: true });
+      window.scrollTo({ left: restore.left, top: restore.top, behavior: "instant" });
+    }
+  }
+  render();
+  return render;
+}
