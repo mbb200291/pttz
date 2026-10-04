@@ -1,4 +1,4 @@
-# pttzzz
+# pttz
 
 <p align="center">
   <strong>一起推進PTTZ計畫。</strong>
@@ -15,11 +15,11 @@
 
 ## 關於
 
-pttzzz 是一個實作 PTT 客戶端介面的提案，核心訴求在於提供一套對回文的解析規則，讓現有 PTT 的文章、推文與操作紀錄能夠被重新解析、排版成現代論壇。
+pttz 是一個實作 PTT 客戶端介面的提案，核心訴求在於提供一套對回文的解析規則，讓現有 PTT 的文章、推文與操作紀錄能夠被重新解析、排版成現代論壇。
 
 這個提案，也包含對規則集的客戶端核心層的實作，與以此核心層為底的網頁介面層實作。
 
-我相信在AI coding的時代，任何人能都能基於這套規則集，來做出符合自己喜好的 PTT 客戶端。
+我相信在AI coding的時代，任何人能都能基於這套規則集，來做出符合自己喜好的、現代化的 PTT 客戶端。
 
 ## 核心提案
 
@@ -66,42 +66,32 @@ bob
 我倒是沒什麼感覺
 ```
 
-| 原始 PTT | pttzzz |
-| --- | --- |
-| 線性推文序列 | 嵌套討論結構 |
-| 因單行限制而拆散的發言 | 聚合成完整回文 |
-| `回1樓` | 明確的回覆關係 |
-| `推1樓` | 對特定回文表達贊同 |
-| 回文送出後無法修改 | 可補充、更正或撤回 |
-
 完整的原始事件與介面對照請見[核心規則案例集](docs/whitepaper/core-rules-examples.html)。
 
 ## 三層提案與目前實作
 
-pttzzz 將規則、核心解析邏輯與使用者介面分離，使這一套解析規則可以支援不同平台與 UI。
+pttz 將規則、核心解析邏輯與使用者介面分離，使這一套解析規則可以支援不同平台與 UI。
 
 ```mermaid
 flowchart TD
-    A["規則層<br/>白皮書與核心語意"] --> B["核心實作層<br/>@pttzzz/core"]
-    B --> C["瀏覽器接入<br/>@pttzzz/browser"]
+    A["規則層<br/>白皮書與核心語意"] --> B["核心實作層<br/>@pttz/core"]
+    B --> C["瀏覽器接入<br/>@pttz/browser"]
     B --> D["其他平台或 Client"]
     C --> E["介面層<br/>Web UI"]
 ```
 
 目前專案庫的對應如下：
 
-| 層級 | 目前版本 | 位置 | 用途 |
+| 層級 | 套件 | 位置 | 用途 |
 | --- | --- | --- | --- |
-| 規則層 | 規則 `0.4.0` | [`docs/whitepaper/`](docs/whitepaper/) | 白皮書與完整畫面案例 |
-| 核心實作層 | `@pttzzz/core` `0.3.0` | [`packages/core/`](packages/core/) | 平台無關的資料契約、解析規則與 `PttzzzClient` |
-| 核心實作層的瀏覽器接入 | `@pttzzz/browser` `0.3.0` | [`packages/browser/`](packages/browser/) | 透過 `ptt-client` 與 PTT WebSocket 連線，實作瀏覽器閘道器 |
-| 介面層範例 | `@pttzzz/web-example` `0.3.0` | [`apps/web/`](apps/web/) | React 網頁介面，示範如何使用核心實作 |
+| 規則層 | — | [`docs/whitepaper/`](docs/whitepaper/) | 白皮書與完整畫面案例 |
+| 核心實作層 | `@pttz/core` | [`packages/core/`](packages/core/) | 平台無關的資料契約、解析規則與 `pttzClient` |
+| 核心實作層的瀏覽器接入 | `@pttz/browser` | [`packages/browser/`](packages/browser/) | 透過 `ptt-client` 與 PTT WebSocket 連線，實作瀏覽器閘道器 |
+| 介面層範例 | `@pttz/web-example` | [`apps/web/`](apps/web/) | React 網頁介面，示範如何使用核心實作 |
 
-`@pttzzz/core` 不依賴 React、瀏覽器或 `ptt-client`；其他介面可以直接依照公開契約建立自己的呈現方式。更完整的套件邊界請見[核心架構](packages/core/docs/README.md)與 [UI 開發指南](packages/core/docs/DEVELOPMENT_GUIDE.md)。
+`@pttz/core` 不依賴 React、瀏覽器或 `ptt-client`；其他介面可以直接依照公開契約建立自己的呈現方式。更完整的套件邊界請見[核心架構](packages/core/docs/README.md)與 [UI 開發指南](packages/core/docs/DEVELOPMENT_GUIDE.md)。
 
-規則、核心套件與介面各自採語意化版本。實作會在 package metadata 的 `pttzzz` 欄位宣告所支援的 core、browser 與規則版本；目前三層相容於規則 `0.4.x`。
-
-## 使用基於 pttzzz 規則實作的客戶端
+## 使用基於 pttz 規則實作的客戶端
 
 需求：Node.js 20 以上版本。
 
@@ -120,12 +110,12 @@ npm run dev:ptt
 - **從核心層實作**：請參閱[提案白皮書](docs/whitepaper/pttzzz-core.md)，再使用[規則案例契約](docs/fixtures/thread-events/README.md)與 `manifest.json`。每個 fixture 都是與語言及框架無關的輸入／預期結果；實作方應先驗證 JSON 契約與 Rule ID，再逐欄比較解析結果。現有核心的驗證命令如下：
 
   ```bash
-  npm test -w @pttzzz/core -- --run src/whitepaperFixtures.test.ts
+  npm test -w @pttz/core -- --run src/whitepaperFixtures.test.ts
   ```
 
   自行實作其他核心時，請使用 fixture 驗證，將 `rawPushes`、`articleBody` 與其他輸入轉成自己的模型，再把輸出轉成 fixture 定義的比較格式；不要先替 fixture 套用規則，也不要為了符合既有程式而修改 `expected`。
 
-- **從介面層實作**：使用 `@pttzzz/core` 與適合的 gateway（目前瀏覽器版本為 `@pttzzz/browser`），只消費公開 DTO 與事件，不自行解析 PTT 終端文字、不自行產生控制格式。請先閱讀[核心套件契約](packages/core/docs/contracts.md)與[UI 開發指南](packages/core/docs/DEVELOPMENT_GUIDE.md)；後者包含連線、訂閱、文章讀取、寫入、錯誤處理與 cleanup 的最小整合方式。
+- **從介面層實作**：使用 `@pttz/core` 與適合的 gateway（目前瀏覽器版本為 `@pttz/browser`），只消費公開 DTO 與事件，不自行解析 PTT 終端文字、不自行產生控制格式。請先閱讀[核心套件契約](packages/core/docs/contracts.md)與[UI 開發指南](packages/core/docs/DEVELOPMENT_GUIDE.md)；後者包含連線、訂閱、文章讀取、寫入、錯誤處理與 cleanup 的最小整合方式。
 
 - **目前 Web 介面範例**：呈現深度、UI 取捨與開發預覽工具集中在[Web 介面層實作說明](apps/web/docs/README.md)。這些內容只約束此 Web 範例，不會改變白皮書或核心資料語意。
 
@@ -160,6 +150,6 @@ npm run verify    # 測試、建置、lint 與套件 smoke test
 
 ## 專案狀態
 
-pttzzz 目前仍在積極開發，解析規則、公開套件介面與參考 UI 會持續調整。它不是 PTT 官方專案；實際連線與操作仍受 PTT 本身的看板規則、連線狀態與終端介面變更影響。
+pttz 目前仍在積極開發，解析規則、公開套件介面與參考 UI 會持續調整。它不是 PTT 官方專案；實際連線與操作仍受 PTT 本身的看板規則、連線狀態與終端介面變更影響。
 
 這場改造，沒有終點。
