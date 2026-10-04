@@ -82,16 +82,14 @@ flowchart TD
 
 目前專案庫的對應如下：
 
-| 層級 | 目前版本 | 位置 | 用途 |
+| 層級 | 套件 | 位置 | 用途 |
 | --- | --- | --- | --- |
-| 規則層 | 規則 `0.4.0` | [`docs/whitepaper/`](docs/whitepaper/) | 白皮書與完整畫面案例 |
-| 核心實作層 | `@pttz/core` `0.3.0` | [`packages/core/`](packages/core/) | 平台無關的資料契約、解析規則與 `pttzClient` |
-| 核心實作層的瀏覽器接入 | `@pttz/browser` `0.3.0` | [`packages/browser/`](packages/browser/) | 透過 `ptt-client` 與 PTT WebSocket 連線，實作瀏覽器閘道器 |
-| 介面層範例 | `@pttz/web-example` `0.3.0` | [`apps/web/`](apps/web/) | React 網頁介面，示範如何使用核心實作 |
+| 規則層 | — | [`docs/whitepaper/`](docs/whitepaper/) | 白皮書與完整畫面案例 |
+| 核心實作層 | `@pttz/core` | [`packages/core/`](packages/core/) | 平台無關的資料契約、解析規則與 `pttzClient` |
+| 核心實作層的瀏覽器接入 | `@pttz/browser` | [`packages/browser/`](packages/browser/) | 透過 `ptt-client` 與 PTT WebSocket 連線，實作瀏覽器閘道器 |
+| 介面層範例 | `@pttz/web-example` | [`apps/web/`](apps/web/) | React 網頁介面，示範如何使用核心實作 |
 
 `@pttz/core` 不依賴 React、瀏覽器或 `ptt-client`；其他介面可以直接依照公開契約建立自己的呈現方式。更完整的套件邊界請見[核心架構](packages/core/docs/README.md)與 [UI 開發指南](packages/core/docs/DEVELOPMENT_GUIDE.md)。
-
-規則、核心套件與介面各自採語意化版本。實作會在 package metadata 的 `pttz` 欄位宣告所支援的 core、browser 與規則版本；目前三層相容於規則 `0.4.x`。
 
 ## 使用基於 pttz 規則實作的客戶端
 
@@ -109,7 +107,7 @@ npm run dev:ptt
 
 可依照三層責任選擇需參閱之文件：
 
-- **從核心層實作**：請參閱[提案白皮書](docs/whitepaper/pttz-core.md)，再使用[規則案例契約](docs/fixtures/thread-events/README.md)與 `manifest.json`。每個 fixture 都是與語言及框架無關的輸入／預期結果；實作方應先驗證 JSON 契約與 Rule ID，再逐欄比較解析結果。現有核心的驗證命令如下：
+- **從核心層實作**：請參閱[提案白皮書](docs/whitepaper/pttzzz-core.md)，再使用[規則案例契約](docs/fixtures/thread-events/README.md)與 `manifest.json`。每個 fixture 都是與語言及框架無關的輸入／預期結果；實作方應先驗證 JSON 契約與 Rule ID，再逐欄比較解析結果。現有核心的驗證命令如下：
 
   ```bash
   npm test -w @pttz/core -- --run src/whitepaperFixtures.test.ts
@@ -141,7 +139,7 @@ npm run verify    # 測試、建置、lint 與套件 smoke test
 
 ## 文件導覽
 
-- [提案白皮書](docs/whitepaper/pttz-core.md)：規範核心語意、Rule ID 與系統風險。
+- [提案白皮書](docs/whitepaper/pttzzz-core.md)：規範核心語意、Rule ID 與系統風險。
 - [核心規則案例集](docs/whitepaper/core-rules-examples.html)：原始 PTT 事件與解析結果的視覺對照。
 - [規則案例契約](docs/fixtures/thread-events/README.md)：可供不同核心實作驗證的 fixtures。
 - [核心套件契約](packages/core/docs/contracts.md)：公開資料與操作介面。
